@@ -62,7 +62,7 @@ def write_workbook(plan: InspectionPlan, record: ProvenanceRecord, out_xlsx: str
             r.provenance, r.status, "yes" if r.blocking else "",
             "; ".join(r.issues), r.method, r.method_basis,
             r.source_document, r.entity_type, r.entity_handle, r.layer, r.page,
-            r.source_sha256,
+            r.zone, r.source_sha256,
         ])
         fills.append("block" if r.blocking else ("edit" if r.provenance in
                    ("user_specified", "human_approved") else None))
@@ -71,17 +71,17 @@ def write_workbook(plan: InspectionPlan, record: ProvenanceRecord, out_xlsx: str
         "Unit", "Nominal", "Tolerance (as interpreted)", "Min limit", "Max limit",
         "Tolerance band", "Provenance state", "Review status", "Blocking", "Findings",
         "Measurement method", "Method basis", "Source document", "Source entity",
-        "Entity handle", "Layer", "Page", "Source SHA-256",
+        "Entity handle", "Layer", "Page", "Zone", "Source SHA-256",
     ], rows, [8, 9, 10, 22, 20, 5, 6, 10, 20, 10, 10, 12, 14, 13, 9, 30, 22, 34, 26, 12, 11,
-              8, 6, 22], name="Inspection table", fills=fills)
+              8, 6, 8, 22], name="Inspection table", fills=fills)
 
     bl = wb.create_sheet("Balloons")
     _sheet(bl, ["Balloon", "ID", "Centre X", "Centre Y", "Radius", "Anchor X", "Anchor Y",
-                "Leader"],
+                "Zone", "Leader"],
            [[b.number, b.cid, b.centre[0], b.centre[1], b.radius, b.anchor[0], b.anchor[1],
-             " -> ".join(f"({p[0]:g}, {p[1]:g})" for p in b.leader)]
+             b.zone, " -> ".join(f"({p[0]:g}, {p[1]:g})" for p in b.leader)]
             for b in plan.layout.balloons],
-           [8, 9, 11, 11, 8, 10, 10, 30], name="Balloons")
+           [8, 9, 11, 11, 8, 10, 10, 8, 30], name="Balloons")
 
     fd = wb.create_sheet("Checks and findings")
     check_rows = [[c.name, c.outcome.value, c.expected, c.actual, c.why or "",

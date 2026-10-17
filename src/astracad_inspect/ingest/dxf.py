@@ -788,6 +788,11 @@ def read_dxf(path: str | Path, declared_unit: str | None = None,
         cx0, cy0, cx1, cy1 = content_extents
         content_extents = (min(cx0, x), min(cy0, y - h), max(cx1, x + w), max(cy1, y))
 
+    zone_labels = _extract_dxf_zone_labels(doc, msp, extents)
+    if zone_labels:
+        from ..zones import assign_zones
+        assign_zones(characteristics, zone_labels)
+
     feature_support = {
         "dimension.linear": "supported",
         "dimension.diameter": "supported",
@@ -867,3 +872,67 @@ def _read_title_block(msp, doc) -> dict[str, str]:
     if "drawing_number" not in out:
         out["_note"] = "no title-block drawing number recognised; recorded as absent"
     return out
+
+
+def _extract_dxf_zone_labels(doc, msp, extents: tuple[float, float, float, float]) -> list[tuple[int, str, float, float]]:
+    """Extract grid zone labels (row letters A-Z, column numbers 1-99) situated along sheet borders.
+
+    Standard drawing formats place row labels along left and right margins and column labels along
+    top and bottom margins. When both row and column borders have at least 2 distinct labels each,
+    the candidate coordinates are returned for spatial zone matching.
+    """
+    minx, miny, maxx, maxy = extents
+    w = maxx - minx
+    h = maxy - miny
+    if w <= 0 or h <= 0:
+        return []
+    max_dx = 0.12 * w
+    max_dy = 0.12 * h
+    candidates: list[tuple[int, str, float, float, str]] = []
+
+    def check_entity(raw: str, x: float, y: float) -> None:
+        t = raw.strip()
+        if not t:
+            return
+        if len(t) == 1 and t.isalpha() and t.isupper():
+            dx = min(abs(x - minx), abs(maxx - x))
+            if dx <= max_dx:
+                candidates.append((1, t, x, y, "row"))
+        elif re.fullmatch(r"\d{1,2}", t):
+            dy = min(abs(y - miny), abs(maxy - y))
+            if dy <= max_dy:
+                candidates.append((1, t, x, y, "col"))
+
+    for e in msp:
+        t = e.dxftype()
+        if t in ("TEXT", "MTEXT"):
+            raw = e.plain_text() if t == "MTEXT" else e.dxf.get("text", "")
+            if e.dxf.hasattr("insert"):
+                check_entity(raw, float(e.dxf.insert.x), float(e.dxf.insert.y))
+
+    for ins in msp.query("INSERT"):
+        try:
+            blk = doc.blocks.get(ins.dxf.name)
+        except Exception:
+            blk = None
+        bx = float(ins.dxf.insert.x) if ins.dxf.hasattr("insert") else 0.0
+        by = float(ins.dxf.insert.y) if ins.dxf.hasattr("insert") else 0.0
+        for e in (blk or []):
+            t = e.dxftype()
+            if t in ("TEXT", "MTEXT", "ATTDEF", "ATTRIB"):
+                raw = e.plain_text() if t == "MTEXT" else (e.dxf.get("text", "") if e.dxf.hasattr("text") else "")
+                ex = float(e.dxf.insert.x) if e.dxf.hasattr("insert") else 0.0
+                ey = float(e.dxf.insert.y) if e.dxf.hasattr("insert") else 0.0
+                check_entity(raw, bx + ex, by + ey)
+        for att in getattr(ins, "attribs", []):
+            raw = att.dxf.get("text", "") if att.dxf.hasattr("text") else ""
+            ax = float(att.dxf.insert.x) if att.dxf.hasattr("insert") else bx
+            ay = float(att.dxf.insert.y) if att.dxf.hasattr("insert") else by
+            check_entity(raw, ax, ay)
+
+    rows = [c for c in candidates if c[4] == "row"]
+    cols = [c for c in candidates if c[4] == "col"]
+    if len({c[1] for c in rows}) >= 2 and len({c[1] for c in cols}) >= 2:
+        return [(c[0], c[1], c[2], c[3]) for c in candidates]
+    return []
+

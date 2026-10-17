@@ -113,6 +113,7 @@ class InspectionRow:
     entity_type: str
     layer: str
     page: int
+    zone: str = ""
 
 
 @dataclass
@@ -230,7 +231,8 @@ class InspectionPlan:
             "balloons": [
                 {"number": b.number, "cid": b.cid, "page": b.page, "style": b.style,
                  "centre": list(b.centre), "radius": b.radius,
-                 "leader": [list(p) for p in b.leader]}
+                 "leader": [list(p) for p in b.leader],
+                 "zone": b.zone}
                 for b in self.layout.balloons],
         }
         d["checks"] = [asdict(c) for c in self.checks]
@@ -246,11 +248,11 @@ def _row(c: Characteristic, methods: dict[str, str]) -> InspectionRow:
     src = c.source
     link = dict(
         source_document="<not from the drawing>", entity_handle="", entity_type="",
-        layer="", page=0, source_sha256="")
+        layer="", page=0, source_sha256="", zone="")
     if src is not None:
         link = dict(source_document=src.document, entity_handle=src.entity_handle,
                     entity_type=src.entity_type, layer=src.layer, page=src.page,
-                    source_sha256=src.document_sha256)
+                    source_sha256=src.document_sha256, zone=src.zone or "")
     return InspectionRow(
         balloon_no=c.balloon_no,
         cid=c.cid,

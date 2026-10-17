@@ -1,5 +1,26 @@
 # NEXT ACTION
 
+## Done 2026-10-18: DXF zone references (C-26)
+
+**What was changed:**
+- `astracad/src/astracad_inspect/ingest/dxf.py`: Added `_extract_dxf_zone_labels(doc, msp, extents)` helper that detects drawing sheet border grid zone references (row letters A-Z on left/right margins within 12% width threshold, column digits 1-99 on top/bottom margins within 12% height threshold) from TEXT, MTEXT, ATTRIB, and block INSERT entities. In `read_dxf()`, invokes `assign_zones(characteristics, zone_labels)` when both row and column labels are present.
+- `astracad/src/astracad_inspect/balloons.py`: Added `zone: str = ""` field to `Balloon` dataclass and assigned `b.zone = c.source.zone` in `layout_balloons()`.
+- `astracad/src/astracad_inspect/plan.py`: Added `zone: str = ""` field to `InspectionRow` dataclass; populated `zone=src.zone or ""` in `_row()`; included `"zone": b.zone` in `layout.balloons` JSON serialization.
+- `astracad/src/astracad_inspect/export/xlsx.py`: Added `r.zone` to "Inspection table" rows and `"Zone"` to header (col 24); added `b.zone` to "Balloons" sheet rows and `"Zone"` to header (col 8).
+- `astracad/src/astracad_inspect/export/pdf.py`: Updated `_inspection_table()` to append `\nzone {r.zone}` to Source column cells when zone is present.
+- `astracad/tests/test_fai.py`: Added assertions to `test_fai_workbook_round_trip` ensuring drawings without grid labels produce empty `zone == ""` and Form 3 location `"sheet 1"`; added `test_dxf_zone_assignment_end_to_end` testing synthetic DXF grid borders, plan JSON, balloon zone, Form 3 `"sheet 1, zone B2"`, and XLSX table and balloon sheets; added `test_dxf_zone_assignment_cabinet_bath_corpus` testing corpus drawing `cabinet_bath_s1.dxf` (24/24 characteristics zoned).
+- Documentation: Updated `CURRENT_STATE.md` (531 passed), and `docs/competitive/parity-matrix.md` (C-26 verified across DXF, vector PDF and scan routes).
+
+**What was verified and how:**
+- Targeted test suite: `py -m pytest -q tests/test_fai.py` passed: **5 passed** in 9.32s.
+- Layout benchmark: `py tools/benchmark_layout.py` passed with 0 unplaced, 0 crossings, 0 overlaps across 56 sheets and 233 balloons.
+- SolidWorks corpus benchmark: `py tools/benchmark_sw.py` passed: 27 DXF sheets, 29 PDF sheets, 0 errors, 98.17% recall.
+- Full test suite: `py -m pytest -q` passed completely: **531 passed**, 0 failed (202.92s).
+- Line endings verified with Python byte checks: 100% compliant across all modified files (`balloons.py`, `xlsx.py`, `test_fai.py` 100% LF; `dxf.py`, `plan.py`, `pdf.py`, `CURRENT_STATE.md`, `NEXT_ACTION.md`, `parity-matrix.md` 100% CRLF).
+
+**What could not be verified:**
+- DXF drawings with non-orthogonal or rotated title block coordinate systems (rare edge cases in specialized CAD templates; standard Cartesian modelspace coordinates are verified).
+
 ## Done 2026-10-18: Slots and rectangular pockets (C-18)
 
 **What was changed:**

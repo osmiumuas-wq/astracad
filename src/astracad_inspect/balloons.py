@@ -43,6 +43,7 @@ class Balloon:
     leader: list[tuple[float, float]] = field(default_factory=list)
     page: int = 1
     style: str = "ring"                  # "adjacent" | "ring"
+    zone: str = ""
 
 
 @dataclass
@@ -418,7 +419,10 @@ def layout_balloons(characteristics: list[Characteristic],
     by_cid = {c.cid: c for c in characteristics}
     for n, b in enumerate(balloons, start=1):
         b.number = n
-        by_cid[b.cid].balloon_no = n
+        c = by_cid[b.cid]
+        c.balloon_no = n
+        if c.source and c.source.zone:
+            b.zone = c.source.zone
     for cid in unplaced:
         by_cid[cid].balloon_no = None
     method = ("adjacent to each callout on clear paper (measured from the rendered sheet), ring "

@@ -157,6 +157,10 @@ def _inspection_table(plan: InspectionPlan, S) -> Table:
         src = "-" if r.entity_handle else "reviewer-stated"
         if r.entity_handle:
             src = f"{r.entity_type} {r.entity_handle}\nlayer {r.layer}"
+            if r.zone:
+                src += f"\nzone {r.zone}"
+        elif r.zone:
+            src += f"\nzone {r.zone}"
         rows.append([
             Paragraph(f"<b>{fmt_number(r.balloon_no)}</b>", S["cell"]),
             r.cid, r.kind, Paragraph(
