@@ -1,5 +1,25 @@
 # NEXT ACTION
 
+## Done 2026-10-18: Slots and rectangular pockets (C-18)
+
+**What was changed:**
+- `mecagent-alternative/src/MecAgent.Core/Verification.cs`: Added analytic expectation derivation for rectangular cuts (`CutExtrude cut when lastSketch is SketchRectangle r`): volume removed `r.Width * r.Height * depth`, and exact analytic surface area calculation accounting for blind pockets vs through cuts (`area = a + 2 * (r.Width + r.Height) * depth - bottoms * r.Width * r.Height`).
+- `mecagent-alternative/src/Mac/Program.cs`: Added selftests for rectangular pocket plan validation and closed-form analytic volume and surface area derivation (`expPocketV == 45000`, `expPocketA == 9300`). Selftest baseline expanded from 38/38 to **40/40**.
+- `astracad/src/astracad_core/requests.py`: Added `_cuts()` helper and integrated it into both `block` and `disc` handlers. Supports rectangular pockets (`pocket`, `recess`) and slots (`slot`, `groove`, `channel`). Enforces strict engineering checks: dimension extraction (W x H or length/width), depth validation (depth <= part thickness; through pocket), slot orientation requirement when length != width (`along the width` or `along the height`), position validation (explicit coords or `centred`; unstated position recorded as `AI_PROPOSED` and flagged as ambiguity), and strict boundary checks preventing face edge breakout. Emits `sketch.rectangle` and `feature.cut`.
+- `astracad/tests/test_text_to_cad.py`: Added 6 unit tests (`test_centred_rectangular_pocket_on_block`, `test_slot_along_width_and_height`, `test_pocket_and_slot_position_ambiguities_and_proposals`, `test_missing_depth_and_depth_exceeding_stock_refused`, `test_pocket_breakout_and_through_pocket`, `test_pocket_on_disc_and_disc_breakout`) covering all pocket and slot behaviors.
+- Documentation: Updated `CURRENT_STATE.md` (40/40 mac selftest, 529 passed Python tests), `parity-matrix.md` (C-18), and `known-limitations.md` (section H).
+
+**What was verified and how:**
+- Mac .NET build: `dotnet build -c Release` succeeded with 0 warnings, 0 errors.
+- Mac selftest: `dotnet run --project src/Mac selftest` passed completely: **40/40 passed** (0 failed).
+- Targeted Python test suite: `py -m pytest -q tests/test_text_to_cad.py` passed: **18 passed** in 0.10s.
+- Full Python test suite: `py -m pytest -q` passed completely: **529 passed**, 0 failed (195.04s).
+- CLI request interpreter: `$env:PYTHONPATH="src"; py -m astracad_cad interpret "Create a 60 x 40 x 20 mm block in SolidWorks with a 30 x 20 mm pocket, 5 mm deep, centred"` executed and verified (emits exact `sketch.rectangle` at [15, 10] of size 30x20 and `feature.cut` depth 5, volume 45000 mm^3).
+- Line endings verified with Python byte checks: 100% compliant across all modified files in both repositories.
+
+**What could not be verified:**
+- Live CAD run against a running GUI SOLIDWORKS session with active documents: `mac docs` reports `no live CAD session` (SOLIDWORKS was not running during this step). CAD plan validation, analytic geometry expectation engine, and interpreter execution were fully verified via `mac selftest` (40/40 checks) and pytest (529 tests).
+
 ## Done 2026-10-17: Circular pattern op in mac & bolt circles (C-18)
 
 **What was changed:**

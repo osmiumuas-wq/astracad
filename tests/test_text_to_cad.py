@@ -120,3 +120,76 @@ def test_single_hole_still_needs_a_stated_position_on_a_block():
     assert not it.executable and "hole position" in it.ambiguities[0]
     disc = interpret("solidworks disc dia 50 mm thick 5 mm with a central 10 mm bore")
     assert disc.executable and disc.fact("hole_centres_mm") == [[0, 0]]
+
+
+def test_centred_rectangular_pocket_on_block():
+    it = interpret("Create a 60 x 40 x 20 mm block in SolidWorks with a 30 x 20 mm pocket, 5 mm deep, centred")
+    assert it.executable
+    assert ops(it) == ["sketch.rectangle", "feature.extrude", "sketch.rectangle", "feature.cut"]
+    pock_sk = it.spec["features"][2]["args"]
+    assert pock_sk == {"x": 15.0, "y": 10.0, "width": 30.0, "height": 20.0}
+    assert it.spec["features"][3]["args"] == {"depth": 5.0}
+    # 60*40*20 - 30*20*5 = 48000 - 3000 = 45000 mm^3 (matches mac selftest pocket baseline)
+    assert it.expect["volume_mm3"] == pytest.approx(45000.0)
+    assert it.fact("pocket_size_mm") == [30.0, 20.0, 5.0]
+    assert it.fact("pocket_corner_mm") == [15.0, 10.0]
+
+
+def test_slot_along_width_and_height():
+    w_slot = interpret("SolidWorks 100 x 40 x 10 mm plate with a 40 x 10 mm slot 5 mm deep along the width, centred")
+    assert w_slot.executable
+    assert ops(w_slot) == ["sketch.rectangle", "feature.extrude", "sketch.rectangle", "feature.cut"]
+    assert w_slot.spec["features"][2]["args"] == {"x": 30.0, "y": 15.0, "width": 40.0, "height": 10.0}
+    assert w_slot.expect["volume_mm3"] == pytest.approx(100 * 40 * 10 - 40 * 10 * 5)
+
+    h_slot = interpret("SolidWorks 100 x 60 x 10 mm plate with a 40 x 10 mm slot 5 mm deep along the height, centred")
+    assert h_slot.executable
+    assert h_slot.spec["features"][2]["args"] == {"x": 45.0, "y": 10.0, "width": 10.0, "height": 40.0}
+    assert h_slot.expect["volume_mm3"] == pytest.approx(100 * 60 * 10 - 40 * 10 * 5)
+
+
+def test_pocket_and_slot_position_ambiguities_and_proposals():
+    no_pos = interpret("SolidWorks 100 x 80 x 20 mm block with a 40 x 30 mm pocket, 5 mm deep")
+    assert not no_pos.executable and no_pos.spec is None
+    assert any("pocket position not stated" in a for a in no_pos.ambiguities)
+    pos_fact = next(f for f in no_pos.facts if f.name == "pocket_position")
+    assert pos_fact.provenance == "AI_PROPOSED"
+
+    no_ori = interpret("SolidWorks 100 x 40 x 10 mm plate with a 40 x 10 mm slot 5 mm deep, centred")
+    assert not no_ori.executable and no_ori.spec is None
+    assert any("slot orientation not stated" in a for a in no_ori.ambiguities)
+
+
+def test_missing_depth_and_depth_exceeding_stock_refused():
+    no_depth = interpret("SolidWorks 100 x 80 x 20 mm block with a 40 x 30 mm pocket, centred")
+    assert not no_depth.executable
+    assert any("pocket depth" in m for m in no_depth.missing)
+
+    too_deep = interpret("SolidWorks 100 x 80 x 20 mm block with a 40 x 30 mm pocket, 25 mm deep, centred")
+    assert not too_deep.executable
+    assert any("exceeds part thickness" in a for a in too_deep.ambiguities)
+
+
+def test_pocket_breakout_and_through_pocket():
+    breaks = interpret("SolidWorks 50 x 50 x 10 mm block with a 60 x 30 mm pocket, 5 mm deep, centred")
+    assert not breaks.executable
+    assert any("breaks out" in a for a in breaks.ambiguities)
+
+    thru = interpret("SolidWorks 100 x 80 x 20 mm block with a 40 x 30 mm through pocket, centred")
+    assert thru.executable
+    assert thru.spec["features"][3]["args"] == {"depth": 20.0}
+    assert thru.expect["volume_mm3"] == pytest.approx(100 * 80 * 20 - 40 * 30 * 20)
+
+
+def test_pocket_on_disc_and_disc_breakout():
+    disc = interpret("SolidWorks disc dia 100 mm thick 20 mm with a centred 40 x 20 mm pocket 5 mm deep")
+    assert disc.executable
+    assert ops(disc) == ["sketch.circle", "feature.extrude", "sketch.rectangle", "feature.cut"]
+    assert disc.spec["features"][2]["args"] == {"x": -20.0, "y": -10.0, "width": 40.0, "height": 20.0}
+    want_vol = math.pi * 50**2 * 20 - 40 * 20 * 5
+    assert disc.expect["volume_mm3"] == pytest.approx(want_vol)
+
+    breaks_disc = interpret("SolidWorks disc dia 50 mm thick 10 mm with a centred 40 x 40 mm pocket 5 mm deep")
+    assert not breaks_disc.executable
+    assert any("breaks out of the disc" in a for a in breaks_disc.ambiguities)
+

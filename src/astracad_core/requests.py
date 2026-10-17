@@ -12,6 +12,7 @@ Supported request shapes (anything else is UNRECOGNISED, with the reason):
 - tube / pipe / sleeve / bush / spacer / washer / ring  OD <d>  ID <d> (or wall <t>)  length <l>
 - holes: "a 10 mm hole at the centre"; "4 x 6 mm holes at 20 mm pitch along the width, centred"
   (one hole + linear pattern); "6 x 8 mm holes on a 70 mm PCD [starting at 30 deg]"
+- pockets and slots: "a 40 x 30 mm pocket, 5 mm deep, centred"; "a 40 x 10 mm slot 5 mm deep along the width, centred"
 - change|set the <name> <dimension> of <document> to <v> <unit>   -> modify existing document
 - each may name an application (SolidWorks, Creo, Fusion, AutoCAD) and "export STEP"
 """
@@ -187,15 +188,32 @@ def interpret(request: str, default_app: str | None = None) -> Interpretation:
                  {"$op": "feature.extrude", "id": "body", "args": {"depth": d}}]
         vol = w * h * d
         rest = low[:dims.start()] + " " * len(dims.group(0)) + low[dims.end():]
-        holes = _holes(it, rest, face="block", w=w, h=h, depth=d)
+        cut_text = rest
+        hole_text = rest
+        if re.search(r"\b(pocket|recess|slot|groove|channel)\b", rest) and re.search(r"\b(holes?|bores?)\b", rest):
+            parts = re.split(r"\b(?:and|with)\b", rest)
+            cp = [p for p in parts if re.search(r"\b(pocket|recess|slot|groove|channel)\b", p)]
+            hp = [p for p in parts if re.search(r"\b(holes?|bores?)\b", p)]
+            if cp:
+                cut_text = " ".join(cp)
+            if hp:
+                hole_text = " ".join(hp)
+        cuts = _cuts(it, cut_text, face="block", w=w, h=h, depth=d)
+        if cuts is None:
+            return it
+        holes = _holes(it, hole_text, face="block", w=w, h=h, depth=d)
         if holes is None:
             return it
-        feats += holes["features"]
-        vol -= holes["removed_mm3"]
+        feats += cuts["features"] + holes["features"]
+        vol -= cuts["removed_mm3"] + holes["removed_mm3"]
         it.expect = {"size_mm": [w, h, d], "volume_mm3": vol}
-        it.facts.append(Fact("volume_mm3", vol, "mm^3", "CALCULATED",
-                             "w*h*d" + (f" - {holes['count']}*pi*(dh/2)^2*d" if holes["count"] else "")))
-        tag = f"block_{w:g}x{h:g}x{d:g}" + holes["tag"]
+        vol_calc = "w*h*d"
+        if cuts["removed_mm3"]:
+            vol_calc += f" - {cuts['removed_mm3']:g}"
+        if holes["count"]:
+            vol_calc += f" - {holes['count']}*pi*(dh/2)^2*d"
+        it.facts.append(Fact("volume_mm3", vol, "mm^3", "CALCULATED", vol_calc))
+        tag = f"block_{w:g}x{h:g}x{d:g}" + cuts["tag"] + holes["tag"]
         it.spec = {"name": _safe_name(tag), "units": "mm",
                    "features": feats, "exports": [{"format": e} for e in exports],
                    "notes": {"request": text}}
@@ -232,19 +250,37 @@ def interpret(request: str, default_app: str | None = None) -> Interpretation:
         rest = low
         for g in (dm or rm, lm):
             rest = rest[:g.start()] + " " * (g.end() - g.start()) + rest[g.end():]
-        holes = _holes(it, rest, face="disc", w=dia, h=dia, depth=length)
+        cut_text = rest
+        hole_text = rest
+        if re.search(r"\b(pocket|recess|slot|groove|channel)\b", rest) and re.search(r"\b(holes?|bores?)\b", rest):
+            parts = re.split(r"\b(?:and|with)\b", rest)
+            cp = [p for p in parts if re.search(r"\b(pocket|recess|slot|groove|channel)\b", p)]
+            hp = [p for p in parts if re.search(r"\b(holes?|bores?)\b", p)]
+            if cp:
+                cut_text = " ".join(cp)
+            if hp:
+                hole_text = " ".join(hp)
+        cuts = _cuts(it, cut_text, face="disc", w=dia, h=dia, depth=length)
+        if cuts is None:
+            return it
+        holes = _holes(it, hole_text, face="disc", w=dia, h=dia, depth=length)
         if holes is None:
             return it
-        vol = math.pi * (dia / 2) ** 2 * length - holes["removed_mm3"]
+        vol = math.pi * (dia / 2) ** 2 * length - cuts["removed_mm3"] - holes["removed_mm3"]
         it.expect = {"size_mm": [dia, dia, length], "volume_mm3": vol}
-        it.facts.append(Fact("volume_mm3", vol, "mm^3", "CALCULATED", "pi*(d/2)^2*L" + (
-            f" - {holes['count']}*pi*(dh/2)^2*L" if holes["count"] else "")))
-        it.spec = {"name": _safe_name(f"{m.group(1)}_d{dia:g}_l{length:g}{holes['tag']}"),
+        vol_calc = "pi*(d/2)^2*L"
+        if cuts["removed_mm3"]:
+            vol_calc += f" - {cuts['removed_mm3']:g}"
+        if holes["count"]:
+            vol_calc += f" - {holes['count']}*pi*(dh/2)^2*L"
+        it.facts.append(Fact("volume_mm3", vol, "mm^3", "CALCULATED", vol_calc))
+        tag = f"{m.group(1)}_d{dia:g}_l{length:g}" + cuts["tag"] + holes["tag"]
+        it.spec = {"name": _safe_name(tag),
                    "units": "mm",
                    "features": [{"$op": "sketch.circle", "id": "disc", "sketched_on": "front",
                                  "args": {"radius": dia / 2, "x": 0, "y": 0}},
                                 {"$op": "feature.extrude", "id": "body",
-                                 "args": {"depth": length}}] + holes["features"],
+                                 "args": {"depth": length}}] + cuts["features"] + holes["features"],
                    "exports": [{"format": e} for e in exports], "notes": {"request": text}}
         return it
 
@@ -544,3 +580,175 @@ def _holes(it: Interpretation, low: str, face: str, w: float, h: float,
                          "CALCULATED", "from the stated count, diameter and pitch / circle"))
     return {"features": feats, "removed_mm3": n * math.pi * (dh / 2) ** 2 * depth, "count": n,
             "tag": tag}
+
+
+def _cuts(it: Interpretation, low: str, face: str, w: float, h: float,
+          depth: float) -> dict[str, Any] | None:
+    """Rectangular pocket, recess, slot, groove, or channel in the front face.
+
+    `face` is "block" (corner at origin, W x H) or "disc" (centre at origin, diameter W).
+    Returns the cut features, or None when something is missing or ambiguous (recorded on `it`).
+    Every position must be stated (or 'centred'); unstated positions are recorded as AI_PROPOSED
+    and flagged as an ambiguity.
+    """
+    none = {"features": [], "removed_mm3": 0.0, "count": 0, "tag": ""}
+    is_pocket = bool(re.search(r"\b(pocket|recess)\b", low))
+    is_slot = bool(re.search(r"\b(slot|groove|channel)\b", low))
+    if not (is_pocket or is_slot):
+        return none
+    if is_pocket and is_slot:
+        it.ambiguities.append("both a pocket and a slot were specified")
+        return None
+
+    kind = "pocket" if is_pocket else "slot"
+
+    # 1. Parse depth: 'through', 'X mm deep', 'depth [of] X mm'
+    through_m = re.search(r"\b(?:through|thru)\b", low)
+    dm = re.search(r"\b(?:depth|deep)\b\s*(?:of\s*)?" + _NUM + _UNIT, low) or \
+        re.search(_NUM + _UNIT + r"\s*(?:deep|depth)\b", low)
+
+    # 2. Parse dimensions: 3-way (W x H x D), 2-way (W x H), or 'L long, W wide' / 'W wide, H high'
+    m_dim3 = re.search(_NUM + _UNIT + r"\s*x\s*" + _NUM + _UNIT + r"\s*x\s*" + _NUM + _UNIT, low)
+    m_dim2 = re.search(_NUM + _UNIT + r"\s*x\s*" + _NUM + _UNIT, low) if not m_dim3 else None
+    lm = re.search(r"\b(?:length|long)\b\s*(?:of\s*)?" + _NUM + _UNIT, low) or \
+        re.search(_NUM + _UNIT + r"\s*(?:long|length)\b", low)
+    wm = re.search(r"\b(?:width|wide)\b\s*(?:of\s*)?" + _NUM + _UNIT, low) or \
+        re.search(_NUM + _UNIT + r"\s*(?:wide|width)\b", low)
+    hm = re.search(r"\b(?:height|high)\b\s*(?:of\s*)?" + _NUM + _UNIT, low) or \
+        re.search(_NUM + _UNIT + r"\s*(?:high|height)\b", low)
+
+    pw: float | None = None
+    ph: float | None = None
+    d_cut: float | None = None
+
+    if m_dim3:
+        u_last = _norm_unit(m_dim3.group(6))
+        u1 = _norm_unit(m_dim3.group(2)) or u_last
+        u2 = _norm_unit(m_dim3.group(4)) or u_last
+        u3 = u_last
+        pw = _to_mm(m_dim3.group(1), u1, f"{kind}_width", it, m_dim3.group(0))
+        ph = _to_mm(m_dim3.group(3), u2, f"{kind}_height", it, m_dim3.group(0))
+        d_cut = _to_mm(m_dim3.group(5), u3, f"{kind}_depth", it, m_dim3.group(0))
+    elif m_dim2:
+        u_last = _norm_unit(m_dim2.group(4))
+        u1 = _norm_unit(m_dim2.group(2)) or u_last
+        u2 = u_last
+        pw = _to_mm(m_dim2.group(1), u1, f"{kind}_width", it, m_dim2.group(0))
+        ph = _to_mm(m_dim2.group(3), u2, f"{kind}_height", it, m_dim2.group(0))
+    elif lm and wm:
+        u_last = _norm_unit(wm.group(2)) or _norm_unit(lm.group(2))
+        u_l = _norm_unit(lm.group(2)) or u_last
+        u_w = _norm_unit(wm.group(2)) or u_last
+        pw = _to_mm(lm.group(1), u_l, f"{kind}_length", it, lm.group(0))
+        ph = _to_mm(wm.group(1), u_w, f"{kind}_width", it, wm.group(0))
+    elif wm and hm:
+        u_last = _norm_unit(hm.group(2)) or _norm_unit(wm.group(2))
+        u_w = _norm_unit(wm.group(2)) or u_last
+        u_h = _norm_unit(hm.group(2)) or u_last
+        pw = _to_mm(wm.group(1), u_w, f"{kind}_width", it, wm.group(0))
+        ph = _to_mm(hm.group(1), u_h, f"{kind}_height", it, hm.group(0))
+    else:
+        it.missing.append(f"{kind} dimensions as W x H with a unit")
+        return None
+
+    if pw is None or ph is None:
+        return None
+    if pw <= 0 or ph <= 0:
+        it.ambiguities.append(f"{kind} dimensions must be greater than zero")
+        return None
+
+    if d_cut is None:
+        if through_m:
+            d_cut = depth
+            it.facts.append(Fact(f"{kind}_depth", depth, "mm", "USER_SPECIFIED", through_m.group(0)))
+        elif dm:
+            d_cut = _to_mm(dm.group(1), _norm_unit(dm.group(2)), f"{kind}_depth", it, dm.group(0))
+        else:
+            it.missing.append(f"{kind} depth with a unit (e.g. '5 mm deep' or 'through')")
+            return None
+
+    if d_cut is None:
+        return None
+    if d_cut <= 0:
+        it.ambiguities.append(f"{kind} depth must be greater than zero")
+        return None
+    if d_cut > depth:
+        it.ambiguities.append(f"{kind} depth {d_cut:g} mm exceeds part thickness {depth:g} mm")
+        return None
+
+    # Slot orientation check
+    if is_slot:
+        l_slot = max(pw, ph)
+        w_slot = min(pw, ph)
+        if l_slot != w_slot:
+            along = re.search(r"\balong\s+(?:the\s+)?(x|y|width|height|length|long\s+side)\b", low)
+            if along:
+                ax = along.group(1)
+                axis = "X" if ax in ("x", "width") else "Y" if ax in ("y", "height") else (
+                    "X" if w >= h else "Y")
+                if ax not in ("x", "y", "width", "height") and w == h:
+                    it.ambiguities.append("'along the length' of a square face names no direction")
+                    return None
+                it.facts.append(Fact("slot_direction", axis, None, "USER_SPECIFIED", along.group(0)))
+                pw, ph = (l_slot, w_slot) if axis == "X" else (w_slot, l_slot)
+            else:
+                it.ambiguities.append("slot orientation not stated - say 'along the width' (X) or 'along the height' (Y)")
+                return None
+        else:
+            pw, ph = l_slot, w_slot
+
+    # Position check
+    centred = bool(re.search(r"\bcent(?:re|er|red|ered|ral)\b", low))
+    pos_m = re.search(r"\bat\s*\(\s*" + _NUM + _UNIT + r"\s*,\s*" + _NUM + _UNIT + r"\s*\)", low) or \
+        re.search(r"\bat\s*x\s*=\s*" + _NUM + _UNIT + r"\s*,\s*y\s*=\s*" + _NUM + _UNIT, low)
+
+    if pos_m and not centred:
+        u2 = _norm_unit(pos_m.group(4)) or "mm"
+        u1 = _norm_unit(pos_m.group(2)) or u2
+        px = _to_mm(pos_m.group(1), u1, f"{kind}_x", it, pos_m.group(0))
+        py = _to_mm(pos_m.group(3), u2, f"{kind}_y", it, pos_m.group(0))
+        if px is None or py is None:
+            return None
+        it.facts.append(Fact(f"{kind}_position", [px, py], "mm", "USER_SPECIFIED", pos_m.group(0)))
+    elif centred:
+        it.facts.append(Fact(f"{kind}_position", "face centre" if face == "block" else "on the axis",
+                             None, "USER_SPECIFIED", "centred"))
+        if face == "block":
+            px = (w - pw) / 2
+            py = (h - ph) / 2
+        else:
+            px = -pw / 2
+            py = -ph / 2
+    else:
+        it.facts.append(Fact(f"{kind}_position", "face centre" if face == "block" else "on the axis",
+                             None, "AI_PROPOSED", "not stated; proposed at the centre"))
+        it.ambiguities.append(f"{kind} position not stated (proposal: centre of the face) - say 'centred'")
+        return None
+
+    # Boundary check (no breakout)
+    if face == "block":
+        if px <= 0 or py <= 0 or (px + pw) >= w or (py + ph) >= h:
+            it.ambiguities.append(f"a {pw:g} x {ph:g} mm {kind} at ({px:g}, {py:g}) breaks out of the {w:g} x {h:g} mm face")
+            return None
+    else:
+        r_disc = w / 2
+        corners = [(px, py), (px + pw, py), (px, py + ph), (px + pw, py + ph)]
+        for cx_i, cy_i in corners:
+            if math.hypot(cx_i, cy_i) >= r_disc:
+                it.ambiguities.append(f"a {pw:g} x {ph:g} mm {kind} breaks out of the disc (radius {r_disc:g} mm)")
+                return None
+
+    feats = [
+        {"$op": "sketch.rectangle", "id": f"{kind}_sketch", "sketched_on": "front",
+         "args": {"x": round(px, 9), "y": round(py, 9), "width": round(pw, 9), "height": round(ph, 9)}},
+        {"$op": "feature.cut", "id": kind,
+         "args": {"depth": round(d_cut, 9)}}
+    ]
+    removed_mm3 = pw * ph * d_cut
+    it.facts.append(Fact(f"{kind}_size_mm", [round(pw, 6), round(ph, 6), round(d_cut, 6)], "mm",
+                         "CALCULATED", f"width {pw:g}, height {ph:g}, depth {d_cut:g}"))
+    it.facts.append(Fact(f"{kind}_corner_mm", [round(px, 6), round(py, 6)], "mm",
+                         "CALCULATED", "lower-left sketch rectangle corner"))
+    return {"features": feats, "removed_mm3": removed_mm3, "count": 1,
+            "tag": f"_{kind}{pw:g}x{ph:g}x{d_cut:g}"}
+

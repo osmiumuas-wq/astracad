@@ -261,10 +261,15 @@ covered by a check that now fails if it regresses.
 
 ## H. Text → CAD (2026-10-17)
 
-- Shapes: block / plate, cylinder / disc / flange, stepped shaft, tube / washer / spacer, plus through holes
-  (one, a straight row, a bolt circle) in the front face. No fillets, chamfers, threads, slots, pockets,
-  blind holes, counterbores or features on other faces; such words are not read and the request still
-  builds without them only if nothing in it is missing - check the facts table, which lists what was read.
+- Shapes: block / plate, cylinder / disc / flange, stepped shaft, tube / washer / spacer, through holes
+  (one, a straight row, a bolt circle), and rectangular pockets and slots (pocket, recess, slot, groove, channel)
+  in the front face. No fillets, chamfers, threads, blind holes, counterbores or features on other faces;
+  such words are not read and the request still builds without them only if nothing in it is missing -
+  check the facts table, which lists what was read.
+- Rectangular pockets and slots: dimensions (W x H or length/width) and depth (or through) are required.
+  Position must be explicit or 'centred' (unstated position is recorded as AI_PROPOSED and reported as an ambiguity).
+  For slots with unequal length and width, orientation must be stated ('along the width' or 'along the height').
+  Edge breakout and depth exceeding part thickness are strictly refused.
 - Patterns are interpreted from fixed phrasings ("4 x 6 mm holes at 20 mm pitch along the width,
   centred", "6 x 10 mm holes on a 90 mm PCD starting at 30 deg"). Anything else is reported missing.
 - Bolt circles are built using circular patterns in mac (eature.pattern.circular) from a seed
