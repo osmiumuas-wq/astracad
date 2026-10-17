@@ -471,36 +471,51 @@ class Workspace:
         return plan_path, {"plan": plan, "provenance": self._read(prov_p) if prov_p.exists() else {},
                            "log": log, "measurements": evaluate(plan, log), "sample": (sample or "").strip() or None}
 
+    @property
+    def cl_store(self):
+        from astracad_inspect.checklists import TemplateStore
+        return TemplateStore(self.projects.root if self.projects is not None else self.runs[0])
+
     def checklist_templates(self) -> list[dict]:
-        from astracad_inspect.checklists import TEMPLATES
-        return [{"id": k, "title": t["title"], "purpose": t["purpose"], "per_sample": t["per_sample"],
-                 "items": len(t["items"]), "auto": sum(1 for i in t["items"] if i[1] == "auto")}
-                for k, t in TEMPLATES.items()]
+        from astracad_inspect.checklists import TEMPLATES, _builtin
+        ts = [_builtin(k) for k in TEMPLATES] + self.cl_store.list()
+        return [{"id": t["id"], "title": t["title"], "purpose": t.get("purpose", ""), "per_sample": t["per_sample"],
+                 "items": len(t["items"]), "auto": sum(1 for i in t["items"] if i["type"] == "auto"),
+                 "builtin": t.get("builtin", False), "version": t.get("version", 0),
+                 "by": t.get("by"), "at": t.get("at")} for t in ts]
+
+    def checklist_template(self, tid: str, version: str | None = None) -> dict:
+        from astracad_inspect.checklists import AUTO_CHECKS, resolve
+        t = resolve(tid, self.cl_store, int(version) if version else None)
+        return {**t, "auto_checks": {k: v[1] for k, v in AUTO_CHECKS.items()}}
+
+    def save_checklist_template(self, body: dict) -> dict:
+        return self.cl_store.save(body)
 
     def checklist(self, key: str, template: str, sample: str | None) -> dict:
         from astracad_inspect.checklists import load
         plan_path, ctx = self._checklist_ctx(key, sample)
-        return load(plan_path, template, ctx)
+        return load(plan_path, template, ctx, self.cl_store)
 
     def checklist_decide(self, body: dict) -> dict:
         from astracad_inspect.checklists import decide
         plan_path, ctx = self._checklist_ctx(str(body.get("key", "")), body.get("sample"))
-        return decide(plan_path, str(body.get("template", "")), ctx, body)
+        return decide(plan_path, str(body.get("template", "")), ctx, body, self.cl_store)
 
     def export_checklist(self, key: str, template: str, sample: str | None) -> dict:
-        from astracad_inspect.checklists import TEMPLATES, _read, load, log_path, write_xlsx
+        from astracad_inspect.checklists import _read, load, log_path, write_xlsx
         from openpyxl import load_workbook
         plan_path, ctx = self._checklist_ctx(key, sample)
-        state = load(plan_path, template, ctx)
+        state = load(plan_path, template, ctx, self.cl_store)
         if state.get("needs_sample"):
             raise ValueError("this checklist is per serial number: give the sample")
-        per = TEMPLATES[template]["per_sample"]
+        per = state["per_sample"]
         hist = _read(log_path(plan_path, template, ctx["sample"] if per else None))
         stem = plan_path.name[:-len(".plan.json")]
         tail = f"_{re.sub(r'[^\w.-]', '_', ctx['sample'])[:40]}" if per else ""
         out = write_xlsx(state, hist, plan_path.with_name(f"{stem}_checklist_{template}{tail}.xlsx"))
         ws = load_workbook(out, read_only=True)
-        rows = [r for r in ws["Checklist"].iter_rows(min_row=6, values_only=True) if r and r[0]]
+        rows = [r for r in ws["Checklist"].iter_rows(min_row=7, values_only=True) if r and r[0]]
         hrows = [r for r in ws["History"].iter_rows(min_row=2, values_only=True) if r and r[0]]
         checks = [{"name": "items", "ok": len(rows) == state["total"], "detail": f"{len(rows)}/{state['total']}"},
                   {"name": "history", "ok": len(hrows) == len(hist), "detail": f"{len(hrows)}/{len(hist)}"}]
@@ -696,6 +711,8 @@ def make_handler(ws: Workspace):
                     return self._json(ws.ncr.get(q.get("number", [""])[0]))
                 if u.path == "/api/checklists":
                     return self._json(ws.checklist_templates())
+                if u.path == "/api/checklist_template":
+                    return self._json(ws.checklist_template(q.get("id", [""])[0], q.get("version", [""])[0] or None))
                 if u.path == "/api/checklist":
                     return self._json(ws.checklist(q.get("key", [""])[0], q.get("template", [""])[0],
                                                    q.get("sample", [""])[0]))
@@ -840,6 +857,8 @@ def make_handler(ws: Workspace):
                     return self._json(ws.checklist_decide(body))
                 if u.path == "/api/ncr":
                     return self._json(ws.ncr_action(body))
+                if u.path == "/api/checklist_template":
+                    return self._json(ws.save_checklist_template(body))
                 if u.path == "/api/export_checklist":
                     return self._json(ws.export_checklist(str(body.get("key", "")), str(body.get("template", "")),
                                                           body.get("sample")))

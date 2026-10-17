@@ -86,3 +86,60 @@ def test_unknown_template_and_item_are_refused(ws_run):
         w.checklist(key, "nope", None)
     with pytest.raises(ValueError, match="unknown item"):
         w.checklist_decide({"key": key, "template": "drawing_review", "by": "Q", "item": "zzz", "result": "PASS"})
+
+
+CUSTOM = {"by": "Q Lead", "id": "deburr-check", "title": "Deburr and visual check", "per_sample": True,
+          "items": [{"id": "edges", "type": "check", "text": "All edges broken 0.2-0.5 mm"},
+                    {"id": "flatness", "type": "numeric", "text": "Flatness of face A", "unit": "mm", "max": 0.05},
+                    {"id": "hardness", "type": "numeric", "text": "Hardness", "unit": "HRC", "min": 58, "max": 62},
+                    {"id": "operator", "type": "text", "text": "Operator stamp"},
+                    {"id": "limits_ok", "type": "auto", "auto": "units"}]}
+
+
+def test_custom_template_numeric_items_are_judged_by_their_limits(ws_run):
+    w, key = ws_run
+    t = w.save_checklist_template(CUSTOM)
+    assert t["version"] == 1 and t["items"][4]["text"].startswith("Units")
+    base = {"key": key, "template": "deburr-check", "sample": "SN-1", "by": "K M"}
+    st = w.checklist_decide({**base, "item": "flatness", "value": "0.03"})
+    assert next(i for i in st["items"] if i["id"] == "flatness")["decision"]["result"] == "PASS"
+    st = w.checklist_decide({**base, "item": "hardness", "value": "63.5"})
+    d = next(i for i in st["items"] if i["id"] == "hardness")["decision"]
+    assert d["result"] == "FAIL" and "above the maximum 62" in d["judged"] and "58 .. 62" in d["judged"] and d["unit"] == "HRC"
+    with pytest.raises(ValueError, match="number"):
+        w.checklist_decide({**base, "item": "flatness", "value": "flat"})
+    with pytest.raises(ValueError, match="answer"):
+        w.checklist_decide({**base, "item": "operator"})
+    st = w.checklist_decide({**base, "item": "operator", "text": "stamp 17"})
+    assert next(i for i in st["items"] if i["id"] == "operator")["decision"]["result"] == "RECORDED"
+    assert "hardness" in st["failed"] and not st["complete"]
+    out = w.export_checklist(key, "deburr-check", "SN-1")
+    assert all(c["ok"] for c in out["checks"])
+
+
+def test_template_versions_and_pinning(ws_run):
+    w, key = ws_run
+    w.save_checklist_template(CUSTOM)
+    base = {"key": key, "template": "deburr-check", "sample": "SN-2", "by": "K M"}
+    w.checklist_decide({**base, "item": "flatness", "value": "0.04"})
+    # tighten the limit: a new version; the instance already started stays on version 1
+    t2 = w.save_checklist_template({**CUSTOM, "items": [{**CUSTOM["items"][1], "max": 0.02}] + CUSTOM["items"][2:]})
+    assert t2["version"] == 2 and len(t2["versions"]) == 2
+    st = w.checklist(key, "deburr-check", "SN-2")
+    assert st["version"] == 1 and len(st["items"]) == 5
+    fresh = w.checklist(key, "deburr-check", "SN-3")
+    assert fresh["version"] == 2 and len(fresh["items"]) == 4
+    assert w.save_checklist_template({**CUSTOM, "items": t2["items"]})["version"] == 2    # unchanged: no new version
+
+
+@pytest.mark.parametrize("bad,why", [({"id": "drawing_review"}, "built-in"), ({"title": ""}, "title"),
+                                      ({"items": []}, "at least one"),
+                                      ({"items": [{"id": "aa", "type": "numeric", "text": "x", "min": 5, "max": 1}]}, "above"),
+                                      ({"items": [{"id": "aa", "type": "auto", "auto": "nope"}]}, "automatic"),
+                                      ({"items": [{"id": "a", "text": "x"}]}, "invalid"),
+                                      ({"items": [{"id": "aa", "text": "x"}, {"id": "aa", "text": "y"}]}, "repeated"),
+                                      ({"by": ""}, "name")])
+def test_template_validation(ws_run, bad, why):
+    w, key = ws_run
+    with pytest.raises(ValueError, match=why):
+        w.save_checklist_template({**CUSTOM, **bad})

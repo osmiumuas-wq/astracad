@@ -429,6 +429,7 @@ pre.code { margin: 0; white-space: pre-wrap; word-break: break-word; font-family
     <div class="navlabel">Quality</div>
     <button class="nav" data-tab="projects"><svg class="i" data-i="file"></svg><span class="lbl">Projects</span><span class="count" id="n-proj"></span></button>
     <button class="nav" data-tab="inspections"><svg class="i" data-i="scan"></svg><span class="lbl">Inspections</span><span class="count" id="n-insp"></span></button>
+    <button class="nav" data-tab="templates"><svg class="i" data-i="tasks"></svg><span class="lbl">Checklist templates</span></button>
     <button class="nav" data-tab="ncrs"><svg class="i" data-i="flag"></svg><span class="lbl">Nonconformances</span><span class="count" id="n-ncr"></span></button>
     <button class="nav" data-tab="instruments"><svg class="i" data-i="crosshair"></svg><span class="lbl">Instruments</span><span class="count" id="n-inst"></span></button>
     <button class="nav" data-tab="changes"><svg class="i" data-i="diff"></svg><span class="lbl">Revision changes</span></button>
@@ -619,6 +620,7 @@ function palBase() {
     { label: "Instruments", group: "Page", icon: "crosshair", run: () => location.hash = "#instruments" },
     { label: "Machining calculations", group: "Page", icon: "cube", run: () => location.hash = "#machining" },
     { label: "Nonconformances", group: "Page", icon: "flag", run: () => location.hash = "#ncrs" },
+    { label: "Checklist templates", group: "Page", icon: "tasks", run: () => location.hash = "#templates" },
     { label: "Revision changes", group: "Page", icon: "diff", run: () => location.hash = "#changes" },
     { label: "Tasks", group: "Page", icon: "tasks", run: () => location.hash = "#tasks" },
     { label: "CAD connections", group: "Page", icon: "cube", run: () => location.hash = "#cad" },
@@ -1678,6 +1680,12 @@ function checklistPane(key, sampleOf, templates) {
     try { st = await api(`/api/checklist?key=${encodeURIComponent(key)}&template=${encodeURIComponent(tpl)}&sample=${encodeURIComponent(sample || "")}`); }
     catch (e) { box.replaceChildren(empty("alert", "Could not load the checklist", e.message)); return; }
     const by = () => (document.getElementById("reviewer")?.value || "").trim();
+    const decideV = async (item, extra, note) => {
+      if (!by()) { toast("Enter your name in the bar below first — every decision is signed.", "warn"); document.getElementById("reviewer")?.focus(); return; }
+      try { const r = await post("/api/checklist", { key, template: tpl, sample, item, note, by: by(), ...extra });
+        const dd = r.items.find(x => x.id === item)?.decision; if (dd?.result === "FAIL") toast(dd.judged || "Fail", "bad"); draw(); }
+      catch (e) { toast(e.message.replace(/^\w+Error: /, ""), "bad"); }
+    };
     const decide = async (item, result, note) => {
       if (!by()) { toast("Enter your name in the bar below first — every decision is signed.", "warn"); document.getElementById("reviewer")?.focus(); return; }
       try { await post("/api/checklist", { key, template: tpl, sample, item, result, note, by: by() }); draw(); }
@@ -1691,8 +1699,21 @@ function checklistPane(key, sampleOf, templates) {
           toast(r.checks.every(c => c.ok) ? "Exported and re-opened" : "Exported, read-back failed", r.checks.every(c => c.ok) ? "ok" : "bad"); window.open("/file?key=" + encodeURIComponent(r.file), "_blank", "noopener"); } catch (e) { toast(e.message, "bad"); } } }, ic("sheet"), "Export"),
         h("button", { class: "btn sm primary", disabled: !st.complete || !!st.signed, onclick: () => decide("__sign__", "SIGNED", "") }, ic("shield"), "Sign off")));
     if (st.needs_sample) { box.replaceChildren(head, empty("user", "This checklist is per serial number", "Enter the sample / serial number in the bar below.")); return; }
+    const DECX = { ...DEC, RECORDED: ["info", "check", "Recorded"] };
     const rows = st.items.map(i => {
       const d = i.decision, noteIn = h("input", { class: "input sm", placeholder: "note (needed for Fail / N/A)", style: "min-width:160px" });
+      if (i.type === "numeric" || i.type === "text") {
+        const lim = i.type === "numeric" ? `${i.min ?? "–"} … ${i.max ?? "–"} ${i.unit || ""}` : "";
+        const inp = h("input", { class: "input sm" + (i.type === "numeric" ? " mono" : ""), placeholder: i.type === "numeric" ? `value ${i.unit ? "(" + i.unit + ")" : ""}` : "answer", inputmode: i.type === "numeric" ? "decimal" : "text", style: "width:" + (i.type === "numeric" ? "110px" : "200px") });
+        const rec = () => { if (!inp.value.trim()) { inp.focus(); return; } decideV(i.id, i.type === "numeric" ? { value: inp.value } : { text: inp.value }, noteIn.value); };
+        inp.addEventListener("keydown", e => { if (e.key === "Enter") rec(); });
+        return h("tr", {},
+          h("td", {}, h("div", { class: "title", style: "font-weight:500" }, i.text), h("div", { class: "x muted", style: "font-size:12px;margin-top:4px" }, i.type === "numeric" ? `numeric — limits ${lim} (judged by ASTraCAD)` : "text answer")),
+          h("td", { class: "nowrap" }, d ? h("div", {}, pill(...(DECX[d.result] || DECX.NA)), d.value != null ? h("span", { class: "mono" }, ` ${fmt(d.value)} ${d.unit || ""}`) : null, d.text ? h("div", { style: "font-size:12.5px" }, d.text) : null,
+            h("div", { class: "hlegend" }, `${d.by} · ${ago(d.at)}`), d.judged ? h("div", { class: "muted", style: "font-size:12px" }, d.judged) : null) : h("span", { class: "muted" }, "—")),
+          h("td", {}, h("div", { style: "display:flex;gap:6px;flex-wrap:wrap" }, inp, h("button", { class: "btn sm primary", onclick: rec }, ic("check"), "Record"), noteIn,
+            h("button", { class: "btn sm ghost", onclick: () => noteIn.value.trim() ? decide(i.id, "NA", noteIn.value) : (noteIn.focus(), toast("N/A needs a note", "warn")) }, "N/A"))));
+      }
       const ev = i.auto ? h("div", { class: "x", style: "margin-top:4px" }, pill(i.auto.state === "PASS" ? "ok" : i.auto.state === "FAIL" ? "bad" : "na", i.auto.state === "PASS" ? "check" : i.auto.state === "FAIL" ? "x" : "info", "ASTraCAD: " + human(i.auto.state.toLowerCase())), " ", h("span", { class: "muted", style: "font-size:12px" }, i.auto.evidence)) : h("div", { class: "x muted", style: "font-size:12px;margin-top:4px" }, "manual — a person's check");
       return h("tr", {},
         h("td", {}, h("div", { class: "title", style: "font-weight:500" }, i.text), ev),
@@ -1703,7 +1724,7 @@ function checklistPane(key, sampleOf, templates) {
           h("button", { class: "btn sm bad", onclick: () => noteIn.value.trim() ? decide(i.id, "FAIL", noteIn.value) : (noteIn.focus(), toast("Fail needs a note", "warn")) }, ic("x"), "Fail"),
           h("button", { class: "btn sm ghost", onclick: () => noteIn.value.trim() ? decide(i.id, "NA", noteIn.value) : (noteIn.focus(), toast("N/A needs a note", "warn")) }, "N/A"))));
     });
-    box.replaceChildren(head, h("p", { class: "muted", style: "margin:0 0 10px;font-size:13px" }, st.purpose || ""),
+    box.replaceChildren(head, h("p", { class: "muted", style: "margin:0 0 10px;font-size:13px" }, st.purpose || "", st.builtin ? "" : ` · template v${st.version}`),
       h("div", { class: "tw" }, h("table", { class: "dt" }, h("thead", {}, h("tr", {}, ["Item", "Decision", "Decide"].map(x => h("th", {}, x)))), h("tbody", {}, rows))));
   }
   draw();
@@ -1790,16 +1811,105 @@ async function viewNcrs(number) {
       detail));
 }
 
+// ---------- Checklist templates (builder) ----------
+const ITEM_T = { check: "Check (pass / fail)", numeric: "Numeric with limits", text: "Text answer", auto: "Automatic (ASTraCAD evidence)" };
+async function viewTemplates(arg) {
+  crumbs(arg ? { href: "#templates", label: "Checklist templates" } : "Checklist templates", ...(arg ? [arg.startsWith("new") ? "New" : decodeURIComponent(arg.split(":").pop())] : []));
+  const list = await api("/api/checklists");
+  if (arg) return builder(arg, list);
+  main.replaceChildren(
+    h("div", { class: "ph" }, h("div", {}, h("h1", {}, "Checklist templates"),
+      h("p", {}, "Built-in templates and your own. Numeric items are judged against their limits by ASTraCAD; automatic items show ASTraCAD's evidence; every answer is still a named person's. Saving makes a new version; a checklist already started keeps the version it began with.")),
+      h("div", { class: "actions" }, h("a", { class: "btn primary", href: "#templates=new" }, ic("plus"), "New template"))),
+    card("Templates", `${list.length}`, null, dataTable([
+      { k: "title", label: "Template", render: t => h("div", {}, h("div", { class: "title" }, t.title), h("div", { class: "subline mono" }, t.id)) },
+      { k: "builtin", label: "Kind", render: t => t.builtin ? h("span", { class: "tag" }, "built-in") : h("span", { class: "tag" }, `custom v${t.version}`) },
+      { k: "items", label: "Items", num: true },
+      { k: "auto", label: "Automatic", num: true },
+      { k: "per_sample", label: "Scope", render: t => t.per_sample ? "per serial" : "per run" },
+      { k: "at", label: "Last saved", render: t => t.builtin ? h("span", { class: "muted" }, "–") : h("span", { class: "muted nowrap" }, `${t.by} · ${ago(t.at)}`) },
+      { k: "act", label: "", nosort: true, render: t => h("div", { style: "display:flex;gap:6px" },
+        t.builtin ? null : h("a", { class: "btn sm", href: "#templates=edit:" + encodeURIComponent(t.id) }, ic("edit"), "Edit"),
+        h("a", { class: "btn sm ghost", href: "#templates=copy:" + encodeURIComponent(t.id) }, "Duplicate")) },
+    ], list, { initial: { k: "builtin", dir: 1 } })));
+}
+
+async function builder(arg, list) {
+  const [mode, src] = arg.includes(":") ? [arg.split(":")[0], decodeURIComponent(arg.split(":").slice(1).join(":"))] : [arg, null];
+  const autos = (await api("/api/checklist_template?id=drawing_review")).auto_checks;
+  let base = { id: "", title: "", purpose: "", per_sample: false, items: [{ id: "item1", type: "check", text: "" }] };
+  let versions = [];
+  if (src) {
+    const t = await api("/api/checklist_template?id=" + encodeURIComponent(src));
+    base = { id: mode === "edit" ? t.id : `${t.id}-copy`.slice(0, 41), title: mode === "edit" ? t.title : `${t.title} (copy)`, purpose: t.purpose || "",
+             per_sample: t.per_sample, items: t.items.map(i => ({ ...i })) };
+    if (mode === "edit") versions = t.versions || [];
+  }
+  const items = base.items;
+  const id = h("input", { class: "input", value: base.id, readOnly: mode === "edit", placeholder: "e.g. deburr-visual", maxlength: 41 });
+  const title = h("input", { class: "input", value: base.title, placeholder: "e.g. Deburr and visual check" });
+  const purpose = h("input", { class: "input", value: base.purpose, placeholder: "when this checklist is used" });
+  const per = h("input", { type: "checkbox", checked: base.per_sample });
+  const by = h("input", { class: "input", value: store.get("astracad.reviewer"), placeholder: "your name", autocomplete: "name" });
+  const rowsBox = h("div", { class: "stack" });
+  const msg = h("div");
+  const field = (label, el, extra = "") => h("label", { class: "field", style: extra }, h("span", {}, label), el);
+  function draw() {
+    rowsBox.replaceChildren(...items.map((it, k) => {
+      const typ = h("select", { class: "input sm", onchange: () => { it.type = typ.value; if (it.type === "auto" && !it.auto) it.auto = Object.keys(autos)[0]; draw(); } },
+        Object.entries(ITEM_T).map(([v, l]) => h("option", { value: v, selected: it.type === v }, l)));
+      const text = h("input", { class: "input sm", value: it.text || "", placeholder: it.type === "auto" ? "(defaults to the check's own wording)" : "requirement, as the person checking will read it", oninput: () => it.text = text.value });
+      const iid = h("input", { class: "input sm mono", value: it.id, style: "width:120px", oninput: () => it.id = iid.value.trim().toLowerCase(), "aria-label": "item id" });
+      const extra = [];
+      if (it.type === "numeric") {
+        const u = h("input", { class: "input sm", value: it.unit || "", placeholder: "unit", style: "width:80px", oninput: () => it.unit = u.value });
+        const lo = h("input", { class: "input sm", value: it.min ?? "", placeholder: "min", inputmode: "decimal", style: "width:90px", oninput: () => it.min = lo.value });
+        const hi = h("input", { class: "input sm", value: it.max ?? "", placeholder: "max", inputmode: "decimal", style: "width:90px", oninput: () => it.max = hi.value });
+        extra.push(field("Unit", u), field("Minimum", lo), field("Maximum", hi));
+      }
+      if (it.type === "auto") {
+        const a = h("select", { class: "input sm", onchange: () => it.auto = a.value }, Object.entries(autos).map(([k, l]) => h("option", { value: k, selected: it.auto === k }, l)));
+        extra.push(field("Evidence", a));
+      }
+      const move = d => { const j = k + d; if (j < 0 || j >= items.length) return; [items[k], items[j]] = [items[j], items[k]]; draw(); };
+      return h("div", { class: "card", style: "padding:12px" }, h("div", { style: "display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:8px;align-items:end" },
+        h("span", { class: "bn c-info", style: "align-self:center" }, k + 1), field("Id", iid), field("Requirement", text),
+        h("div", { style: "display:flex;gap:4px" }, h("button", { class: "iconbtn", "aria-label": "Move up", onclick: () => move(-1) }, "↑"), h("button", { class: "iconbtn", "aria-label": "Move down", onclick: () => move(1) }, "↓"),
+          h("button", { class: "iconbtn", "aria-label": "Remove item", onclick: () => { items.splice(k, 1); draw(); } }, ic("x")))),
+        h("div", { style: "display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:end" }, field("Type", typ), ...extra));
+    }));
+  }
+  const addBtn = (t) => h("button", { class: "btn sm", onclick: () => { let n = items.length + 1; while (items.some(i => i.id === "item" + n)) n++; items.push({ id: "item" + n, type: t, text: "", ...(t === "auto" ? { auto: Object.keys(autos)[0] } : {}) }); draw(); } }, ic("plus"), ITEM_T[t].split(" (")[0]);
+  const save = async () => {
+    store.set("astracad.reviewer", by.value.trim());
+    try {
+      const t = await post("/api/checklist_template", { by: by.value.trim(), id: id.value.trim().toLowerCase(), title: title.value, purpose: purpose.value, per_sample: per.checked, items });
+      toast(`${t.title} saved as version ${t.version}`); location.hash = "#templates=edit:" + encodeURIComponent(t.id);
+    } catch (e) { msg.replaceChildren(h("div", { class: "gate t-warn", style: "grid-template-columns:auto 1fr" }, h("div", { class: "gi" }, ic("alert", "i lg")), h("div", {}, h("b", {}, "Not saved"), h("div", { class: "why" }, e.message.replace(/^\w+Error: /, ""))))); }
+  };
+  draw();
+  main.replaceChildren(
+    h("div", { class: "ph" }, h("div", {}, h("h1", {}, mode === "edit" ? `Edit ${base.title}` : mode === "copy" ? "Duplicate template" : "New checklist template"),
+      h("p", {}, "Saving makes a new version. Answers already given stay on the version they were given against.")),
+      h("div", { class: "actions" }, h("a", { class: "btn ghost", href: "#templates" }, "Cancel"), h("button", { class: "btn primary", onclick: save }, ic("check"), "Save version"))),
+    h("div", { class: "stack" }, msg,
+      card("Template", versions.length ? `${versions.length} version(s): ` + versions.map(v => `v${v.version} ${v.by}`).join(", ") : null, null,
+        h("div", { class: "body newproj", style: "grid-template-columns:repeat(auto-fit,minmax(200px,1fr))" }, field("Id (permanent)", id), field("Title", title), field("Purpose", purpose),
+          h("label", { class: "field" }, h("span", {}, "Scope"), h("span", { style: "display:flex;gap:8px;align-items:center;height:36px" }, per, "one checklist per serial number")), field("Saved by", by))),
+      card("Items", null, [addBtn("check"), addBtn("numeric"), addBtn("text"), addBtn("auto")], h("div", { class: "body" }, rowsBox))));
+}
+
 // ---------- router ----------
 async function route() {
   const hash = location.hash.slice(1);
-  const tab = hash.startsWith("inspection=") ? "inspections" : hash.startsWith("project=") ? "projects" : hash.startsWith("instruments=") ? "instruments" : hash.startsWith("machining") ? "machining" : hash.startsWith("ncrs") ? "ncrs" : (hash || "inspections");
+  const tab = hash.startsWith("inspection=") ? "inspections" : hash.startsWith("project=") ? "projects" : hash.startsWith("instruments=") ? "instruments" : hash.startsWith("machining") ? "machining" : hash.startsWith("ncrs") ? "ncrs" : hash.startsWith("templates") ? "templates" : (hash || "inspections");
   document.querySelectorAll(".nav").forEach(b => { if (b.dataset.tab === tab) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   viewKeys = null; palExtra = [];
   try {
     if (hash.startsWith("inspection=")) await viewInspection(decodeURIComponent(hash.slice(11)));
     else if (hash.startsWith("project=")) await viewProject(decodeURIComponent(hash.slice(8)));
     else if (tab === "projects") await viewProjects();
+    else if (tab === "templates") await viewTemplates(hash.startsWith("templates=") ? hash.slice(10) : null);
     else if (tab === "ncrs") await viewNcrs(hash.startsWith("ncrs=") ? decodeURIComponent(hash.slice(5)) : null);
     else if (tab === "machining") await viewMachining(hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "");
     else if (tab === "instruments") await viewInstruments(hash.startsWith("instruments=") ? decodeURIComponent(hash.slice(12)) : null);
