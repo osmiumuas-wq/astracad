@@ -15,3 +15,15 @@ switched to MMGS: the installed default template is in inches, so SOLIDWORKS pri
 0.79 / ⌀0.39 (inches, 2 decimals) for a 60 x 40 x 20 mm part with a Ø10 hole, and duplicated three
 dimensions across views. mac's own report said "ok"; it is kept as a real negative case that the
 independent DXF check must reject.
+
+`pocket_title_block.dxf` was produced 2026-10-18 on the same SOLIDWORKS 2026 SP04.1 by
+
+    astracad_cad drawing _out/verify_20261018/pocket/block_60x40x20_pocket30x20x5.SLDPRT --name pocket_stated
+        --title "Pocket block" --drawing-number DWG-0418 --revision B --material "AISI 1020"
+        --tolerance "ISO 2768-m" --authorize KM
+
+(the part built by `astracad_cad build "60 x 40 x 20 mm block with a 30 x 20 mm pocket, 5 mm deep,
+centred"`). SOLIDWORKS wrote each title-block line and the tolerance note as a block (SW_NOTE_n)
+inserted on the sheet, which the title-block reader did not look into. In that session SOLIDWORKS
+inserted no model dimensions (`InsertModelAnnotations3` returned 0 with the pre-handoff mac too), so
+the file is used for its title block and notes only.

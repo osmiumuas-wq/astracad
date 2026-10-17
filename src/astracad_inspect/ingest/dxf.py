@@ -869,6 +869,22 @@ def _read_title_block(msp, doc) -> dict[str, str]:
                     value = _text_of(texts[i + 1]).strip()
                 if value:
                     out[key] = value
+    # SOLIDWORKS exports each note as a block (SW_NOTE_n) inserted on the sheet (measured 2026-10-18 on
+    # a `mac drawing` DXF). Read text inside inserted named blocks too, after loose text, and only
+    # "LABEL: value" on one line - no next-text fallback, which inside a template could pair wrongly.
+    for ins in msp.query("INSERT"):
+        name = ins.dxf.get("name", "")
+        blk = doc.blocks.get(name) if name and not name.startswith("*") else None
+        for e in (blk or []):
+            if e.dxftype() not in ("TEXT", "MTEXT"):
+                continue
+            for line in (e.plain_text() if e.dxftype() == "MTEXT" else _text_of(e)).splitlines():
+                raw = normalise(line).lower()
+                for label, key in labels.items():
+                    if raw.startswith(label) and key not in out:
+                        value = line.strip()[len(label):].strip(" :")
+                        if value:
+                            out[key] = value
     if "drawing_number" not in out:
         out["_note"] = "no title-block drawing number recognised; recorded as absent"
     return out

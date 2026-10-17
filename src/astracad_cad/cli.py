@@ -96,6 +96,8 @@ def main(argv: list[str] | None = None) -> int:
     dr.add_argument("--out", required=True)
     dr.add_argument("--angle", choices=("first", "third"), default="first")
     dr.add_argument("--authorize", metavar="NAME", default=None)
+    for opt in ("title", "drawing-number", "revision", "material", "tolerance"):
+        dr.add_argument(f"--{opt}", default=None)   # unstated revision / tolerance: reported missing
     ins = sub.add_parser("inspect", help="read dimensions and mass of an existing .sldprt")
     ins.add_argument("path")
     r = sub.add_parser("reopen", help="independently re-read an exported STEP file")
@@ -155,7 +157,9 @@ def main(argv: list[str] | None = None) -> int:
         tid, res = _orch(a.db).submit(CadRequest(
             "solidworks", Op.CREATE_DRAWING,
             {"part_path": str(Path(a.part).resolve()), "name": a.name, "out_dir": out,
-             "angle": a.angle}, summary=f"drawing of {a.part}"), auth)
+             "angle": a.angle, "title": a.title, "drawing_number": a.drawing_number,
+             "revision": a.revision, "material": a.material, "tolerance": a.tolerance},
+            summary=f"drawing of {a.part}"), auth)
         print(f"TASK {tid}")
         if res is None:
             return 1

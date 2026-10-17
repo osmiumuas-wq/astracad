@@ -160,3 +160,35 @@ def test_drawing_dxf_checks_verifies_title_block_and_general_tolerance(tmp_path)
     assert bad["inspect:title_block:drawing_number"] == "failed"
     assert bad["inspect:title_block:revision"] == "failed"
     assert bad["inspect:general_tolerance"] == "failed"
+
+
+def test_unstated_revision_and_tolerance_are_reported_not_invented(part, tmp_path, monkeypatch):
+    # mac prints REVISION: NOT STATED and adds no tolerance note; the result must say so, never pass it
+    monkeypatch.setitem(REPORT, "title_block", {"revision": None})   # fixture DXF has no title block
+    monkeypatch.setitem(REPORT, "general_tolerance", None)
+    monkeypatch.setitem(REPORT, "missing", ["revision", "general_tolerance"])
+    a = adapter()
+    r = a.execute(Op.CREATE_DRAWING, {"part_path": str(part), "name": "d", "out_dir": str(tmp_path / "o")})
+    call = next(c for c in a.probe.calls if c[1] == "drawing")
+    assert "--revision" not in call and "--tolerance" not in call
+    checks = {c.name: c.outcome for c in r.checks}
+    assert checks["drawing:revision"] == "not_verifiable"
+    assert checks["drawing:general_tolerance"] == "not_verifiable"
+    assert "inspect:title_block:revision" not in checks and "inspect:general_tolerance" not in checks
+    assert r.status is OpStatus.SUCCEEDED, [(c.name, c.outcome, c.actual) for c in r.checks
+                                            if c.outcome == "failed"]
+
+
+def test_title_block_read_from_real_solidworks_note_blocks():
+    # Genuine `mac drawing` output: every title-block line sits in an inserted SW_NOTE_n block
+    checks = {c.name: (c.outcome, c.actual) for c in drawing_dxf_checks(
+        SWD / "pocket_title_block.dxf", [],
+        expected_title={"title": "Pocket block", "drawing_number": "DWG-0418", "revision": "B",
+                        "material": "AISI 1020"},
+        expected_tolerance="ISO 2768-m")}
+    for key in ("title", "drawing_number", "revision", "material"):
+        assert checks[f"inspect:title_block:{key}"][0] == "passed", checks
+    assert checks["inspect:general_tolerance"][0] == "passed"
+    wrong = {c.name: c.outcome for c in drawing_dxf_checks(
+        SWD / "pocket_title_block.dxf", [], expected_title={"revision": "C"})}
+    assert wrong["inspect:title_block:revision"] == "failed"

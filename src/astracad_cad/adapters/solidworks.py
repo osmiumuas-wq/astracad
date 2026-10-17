@@ -115,10 +115,12 @@ def drawing_dxf_checks(dxf: Path, model_dims: list[dict],
                      "every printed dimension is a model dimension",
                      ", ".join(r.callout for r in remaining) or "none extra"))
     if expected_title:
-        for key in ("drawing_number", "part_name", "revision", "material"):
-            if key in expected_title:
+        # mac reports "title"; the DXF reader files a TITLE label under part_name
+        for key, read_as in (("drawing_number", "drawing_number"), ("title", "part_name"),
+                             ("revision", "revision"), ("material", "material")):
+            if expected_title.get(key):                  # unstated (None) = nothing to compare
                 expected_val = str(expected_title[key])
-                actual_val = str(bundle.title_block.get(key) or "")
+                actual_val = str(bundle.title_block.get(read_as) or "")
                 out.append(Check(f"inspect:title_block:{key}",
                                  "passed" if actual_val.lower() == expected_val.lower() else "failed",
                                  expected_val, actual_val or "<absent>"))
@@ -401,6 +403,10 @@ class SolidWorksAdapter(Adapter):
         checks += drawing_dxf_checks(dxf, report.get("model_dimensions") or [],
                                     expected_title=report.get("title_block"),
                                     expected_tolerance=report.get("general_tolerance"))
+        for item in report.get("missing") or []:          # stated, never counted as passed
+            checks.append(Check(f"drawing:{item}", "not_verifiable", "stated by the user", "not stated",
+                                why=f"no {item.replace('_', ' ')} was given (--{item.split('_')[-1]}); "
+                                    "none was invented for the drawing"))
         artifacts = [{"path": str(p), "bytes": p.stat().st_size, "sha256": _sha256(p)}
                      for p in (out_dir / f"{name}.SLDDRW", dxf, out_dir / f"{name}.pdf")
                      if p.exists()]
