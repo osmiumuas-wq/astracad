@@ -1740,9 +1740,22 @@ async function viewProject(pid) {
     { k: "dl", label: "", nosort: true, render: s => h("a", { class: "btn sm ghost", href: "/file?key=" + encodeURIComponent(s.key), download: s.filename, title: "Download the preserved original" }, ic("ext"), "Original") },
     { k: "go", label: "", nosort: true, render: inspectRow },
   ], d.sources, { initial: { k: "added_utc", dir: -1 } }) : empty("file", "No drawings yet", "Add the drawings for this project above. They are kept exactly as received.");
+  const dossierBtn = h("button", { class: "btn sm primary", title: "Everything recorded for this project (all runs, serials, NCRs, checklists), with verified hashes", onclick: async ev => {
+      const b = ev.currentTarget;
+      b.disabled = true; b.replaceChildren(h("span", { class: "spin" }), " Building…");
+      try {
+        const r = await post("/api/project_dossier", { project: pid });
+        const okv = r.checks.every(c => c.ok);
+        toast(`${okv ? "Project dossier built and re-verified" : "Project dossier built, verification FAILED"}: ${r.files} files across ${r.runs} run(s)`, okv ? "ok" : "bad");
+        toast(r.status.conforming ? "Records show project conformance (no open items)" : `${r.status.open_items.length} open item(s): ${r.status.open_items[0]}`, r.status.conforming ? "ok" : "warn");
+        window.open("/file?key=" + encodeURIComponent(r.file), "_blank", "noopener");
+      } catch (e) { toast("Project dossier not built: " + e.message.replace(/^\w+Error: /, ""), "bad"); }
+      finally { b.disabled = false; b.replaceChildren(ic("shield"), "Quality dossier"); }
+    } }, ic("shield"), "Quality dossier");
   main.replaceChildren(
     h("div", { class: "ph" }, h("div", {}, h("h1", {}, d.name), h("p", {}, d.description || "Created " + when(d.created_utc)),
-      h("div", { class: "meta", style: "display:flex;gap:6px;margin-top:6px" }, h("span", { class: "tag mono" }, d.id), h("span", { class: "tag" }, `${d.sources.length} drawing(s)`), h("span", { class: "tag" }, `${d.runs.length} run(s)`)))),
+      h("div", { class: "meta", style: "display:flex;gap:6px;margin-top:6px" }, h("span", { class: "tag mono" }, d.id), h("span", { class: "tag" }, `${d.sources.length} drawing(s)`), h("span", { class: "tag" }, `${d.runs.length} run(s)`))),
+      h("div", { class: "actions" }, d.runs.length ? dossierBtn : null)),
     h("div", { class: "stack" },
       card("Add drawings", "originals are preserved read-only by SHA-256; inspections read the preserved copy", null, h("div", { class: "body" }, drop, queue)),
       card("Drawings", `${d.sources.length}`, null, sources),

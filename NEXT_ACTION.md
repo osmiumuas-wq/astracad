@@ -1,5 +1,24 @@
 # NEXT ACTION
 
+## Done 2026-10-17: Project-level quality dossier (C-33)
+
+**What was changed:**
+- `src/astracad_inspect/dossier.py`: Added `project_status()`, `_project_pdf()`, and `build_project()`. Builds a project-level dossier ZIP bundling all runs (`runs/<stem>/...`), all serial results and FAI workbooks, all NCRs (`ncr/...`), all started checklists, and preserved source drawings (`sources/...`). Emits `dossier.pdf` with project-wide summary table and per-run breakdown, plus `manifest.json`. Adheres to strict honesty rule: `conforming: True` only if every run is releasable, every serial is acceptable, every NCR is closed/cancelled, and every checklist is signed.
+- `src/astracad_web/server.py`: Added `Workspace.project_dossier(pid)` and endpoint `POST /api/project_dossier` (`{"project": "<pid>"}`). Gathers all runs, exports fresh workbooks/checklists, collects unique project NCRs and verified source paths, builds the ZIP, and re-verifies all hashes via `dossier.verify()`.
+- `src/astracad_web/index.html`: Added "Quality dossier" action button in the project view header (`viewProject`) that calls `/api/project_dossier`, reports verification checks and conformance status via toasts, and opens the dossier ZIP. Preserved CRLF line endings.
+- `tests/test_dossier.py`: Added 6 new unit & integration tests covering project dossier build, verification, manifest structure, honesty rules with open items vs conforming state, empty project rejection, HTTP API endpoint, and omitting modified/tampered source drawings.
+- `CURRENT_STATE.md`, `parity-matrix.md`, `known-limitations.md`: Updated capability row C-33 and test baseline (520 passed).
+
+**What was verified and how:**
+- Baseline test suite before changes: 514 passed (187.57s).
+- Web frontend syntax check: `py -m pytest -q tests/test_web.py` passed (14 passed, Node.js syntax check on `index.html`).
+- Dossier test suite: `py -m pytest -q tests/test_dossier.py` passed (10 passed in 16.81s).
+- Full test suite: `py -m pytest -q` passed completely: **520 passed**, 0 failed, 0 skipped (191.17s).
+- Line ending integrity verified with python byte checks: `server.py`, `index.html`, `CURRENT_STATE.md`, `NEXT_ACTION.md` 100% CRLF; `dossier.py` and `test_dossier.py` 100% LF.
+
+**What could not be verified:**
+- Live browser click on the new button in a running browser session with real human interaction (verified via programmatic headless HTTP API integration test and Node syntax check).
+
 ## Done 2026-10-17: Text → CAD (constitution Part 6 / C-18)
 
     py -m astracad_cad build "SolidWorks 80 x 80 x 10 mm plate with 4 x 8 mm holes on a 50 mm bolt circle, centred, starting at 45 deg, export STEP" --out OUT --authorize KM

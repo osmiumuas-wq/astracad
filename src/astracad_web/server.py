@@ -513,7 +513,80 @@ class Workspace:
                 "drawing": res["manifest"]["drawing"],
                 "checks": [{"name": n, "ok": ok, "detail": d} for n, ok, d in checks]}
 
+    def project_dossier(self, pid: str) -> dict:
+        """Build a project-level quality dossier: all runs, all serials, all NCRs, all checklists."""
+        from astracad_inspect.checklists import log_path
+        from astracad_inspect.dossier import build_project, verify
+        from astracad_inspect.measure import evaluate, read_log
+        ps = self._need_projects()
+        project = ps.get(pid)
+        runs_dir = ps.runs_dir(pid)
+        # gather all runs in this project
+        run_data: list[dict] = []
+        all_ncrs: list[dict] = []
+        seen_ncr_numbers: set[str] = set()
+        for plan_path in sorted(runs_dir.rglob("*.plan.json")):
+            stem = plan_path.name[:-len(".plan.json")]
+            try:
+                plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            key = self.key_for(plan_path)
+            log = read_log(plan_path)
+            meas = evaluate(plan, log)
+            if log:
+                for sample in meas["samples"]:
+                    try:
+                        self.export_results(key, sample)
+                    except (OSError, ValueError):
+                        pass
+            # checklists for this run
+            states = []
+            for t in self.checklist_templates():
+                per = t["per_sample"]
+                samples_for_cl = list(meas["samples"]) if per else [None]
+                for s in samples_for_cl:
+                    if log_path(plan_path, t["id"], s).exists():
+                        try:
+                            states.append(self.checklist(key, t["id"], s))
+                            self.export_checklist(key, t["id"], s)
+                        except (OSError, ValueError):
+                            pass
+            # NCRs for this run
+            run_ncrs = self.ncr.for_run(key)
+            for n in run_ncrs:
+                if n["number"] not in seen_ncr_numbers:
+                    seen_ncr_numbers.add(n["number"])
+                    all_ncrs.append(n)
+            run_data.append({
+                "plan_path": plan_path, "plan": plan, "meas": meas,
+                "ncrs": run_ncrs, "checklists": states,
+                "samples": list(meas["samples"]),
+                "stem": stem,
+            })
+        if not run_data:
+            raise ValueError("this project has no inspection runs")
+        # sources
+        sources = []
+        for s in project.sources:
+            try:
+                p = ps.source_path(pid, s.sha256, verify=True)
+                sources.append({"filename": s.filename, "sha256": s.sha256,
+                                "size": s.size, "media_type": s.media_type, "path": p})
+            except (OSError, ValueError):
+                sources.append({"filename": s.filename, "sha256": s.sha256,
+                                "size": s.size, "media_type": s.media_type, "path": None})
+        out = runs_dir / f"{pid}_project_dossier.zip"
+        res = build_project(project.name, out, runs=run_data, ncrs=all_ncrs, sources=sources)
+        checks = verify(out)
+        return {"file": self.key_for(out), "status": res["status"],
+                "files": len(res["manifest"]["files"]),
+                "sources": res["manifest"]["sources"],
+                "runs": len(run_data),
+                "checks": [{"name": n, "ok": ok, "detail": d} for n, ok, d in checks]}
+
     # ---- nonconformance reports --------------------------------------------------------------------
+
     @property
     def ncr(self):
         from astracad_inspect.ncr import NcrStore
@@ -965,6 +1038,8 @@ def make_handler(ws: Workspace):
                     return self._json(ws.cad_build(body.get("request", ""), body.get("authorize", "")))
                 if u.path == "/api/dossier":
                     return self._json(ws.dossier(str(body.get("key", "")), body.get("sample")))
+                if u.path == "/api/project_dossier":
+                    return self._json(ws.project_dossier(str(body.get("project", ""))))
                 if u.path == "/api/export_checklist":
                     return self._json(ws.export_checklist(str(body.get("key", "")), str(body.get("template", "")),
                                                           body.get("sample")))

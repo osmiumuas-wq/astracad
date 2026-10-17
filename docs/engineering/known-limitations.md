@@ -283,3 +283,8 @@ covered by a check that now fails if it regresses.
 - Values are taken in the characteristic's unit; a value in another unit is not converted.
 - Cp/Cpk from a few samples is an indication only; the label states n. No control charts.
 - GD&T rows are judged as a measured deviation against 0..zone; MMC/LMC bonus is not applied.
+
+## I. Quality dossiers (2026-10-17)
+
+- **Project-level quality dossier**: aggregates all runs in a project folder. If a run has multiple samples, each is checked; an empty project cannot build a dossier. Drawing sources modified outside ASTraCAD are excluded from the sources/ folder with a note in the manifest and PDF rather than halting the dossier generation.
+

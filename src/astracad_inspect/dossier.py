@@ -1,15 +1,23 @@
 """Quality dossier: everything recorded about one inspection run (and one serial), in one package.
 
-`<stem>_dossier[_<serial>].zip` holds the run's own records as they are on disk - plan, provenance,
-export read-back, report, workbook, layout pages, measurement log, review and import logs, imported
-files, checklist exports, NCRs, and the source drawing (only when its SHA-256 still matches the
-plan) - plus `dossier.pdf`, a cover summary, and `manifest.json` listing every file with its
-SHA-256 and size. After writing, the package is re-opened and every file is hashed again against
-the manifest; the PDF is opened and its pages counted.
+**Per-run dossier** (`build`): `<stem>_dossier[_<serial>].zip` holds the run's own records as they
+are on disk - plan, provenance, export read-back, report, workbook, layout pages, measurement log,
+review and import logs, imported files, checklist exports, NCRs, and the source drawing (only when
+its SHA-256 still matches the plan) - plus `dossier.pdf`, a cover summary, and `manifest.json`
+listing every file with its SHA-256 and size.
 
-The cover states what the records show and nothing more. It says "conforming" only when the plan
-is releasable, the serial is complete with no failure, no NCR is open and every checklist that was
-started is signed; otherwise it lists what is still open. A dossier is evidence, not an approval.
+**Project-level dossier** (`build_project`): one ZIP per project, covering all runs, all serials,
+all re-issues, all NCRs and all started checklists. The ZIP nests each run under `runs/<run-stem>/`
+and includes preserved source drawings under `sources/`. The cover PDF gives a project-wide
+conformance statement and per-run detail sections. Conforming only when every run is releasable,
+every serial across all runs is acceptable, every NCR is closed or cancelled, and every started
+checklist is signed.
+
+After writing, both package types are re-opened and every file is hashed again against the manifest;
+the PDF is opened and its pages counted.
+
+The cover states what the records show and nothing more. It says "conforming" only when nothing is
+open. A dossier is evidence, not an approval.
 The PDF cannot carry its own hash (it is listed in the manifest's `self` note instead).
 """
 from __future__ import annotations
@@ -219,3 +227,209 @@ def verify(out_zip: Path) -> list[tuple[str, bool, str]]:
         except Exception as e:  # noqa: BLE001 - reported as a failed check
             checks.append(("pdf_opens", False, f"{type(e).__name__}: {e}"))
     return checks
+
+
+# ---- project-level dossier ---------------------------------------------------------------
+
+
+def project_status(runs: list[dict]) -> dict:
+    """Aggregate conformance across all runs in a project.
+
+    Each entry in *runs* is a dict with at least:
+        plan  - the loaded plan JSON
+        meas  - evaluate() result for this run
+        ncrs  - list of NCR dicts relevant to this run
+        checklists - list of checklist state dicts relevant to this run
+        samples - list of sample IDs measured in this run (may be empty)
+        stem   - run stem name (for reporting)
+
+    Returns {"conforming": bool, "open_items": [...], "run_statuses": [...]}.
+    """
+    open_items: list[str] = []
+    run_statuses: list[dict] = []
+    for r in runs:
+        plan, meas = r["plan"], r["meas"]
+        samples = r["samples"] or [None]
+        for sample in samples:
+            st = status(plan, meas, sample, r["ncrs"], r["checklists"])
+            run_statuses.append({
+                "stem": r["stem"], "sample": sample, **st,
+            })
+            for it in st["open_items"]:
+                open_items.append(f"{r['stem']}" + (f" / {sample}" if sample else "") + f": {it}")
+    return {"conforming": not open_items, "open_items": open_items, "run_statuses": run_statuses}
+
+
+def _project_pdf(path: Path, project_name: str, runs: list[dict], ncrs: list[dict],
+                 manifest: list[dict], st: dict, sources: list[dict]) -> None:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    from .export.pdf import _esc, _styles, _table
+    S = _styles()
+    title = f"Project quality dossier - {project_name}"
+    doc = SimpleDocTemplate(str(path), pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm,
+                            topMargin=14 * mm, bottomMargin=14 * mm, title=title, author="ASTraCAD", creator="astracad_inspect.dossier")
+    W = 273 * mm
+    story = [Paragraph(_esc(title), S["h1"])]
+    ok = st["conforming"]
+    color = "#0a7d33" if ok else "#b00020"
+    head = ("<b>CONFORMING ON THE RECORDS</b> - every run releasable, every serial complete without failure, "
+            "no open NCR, every started checklist signed."
+            if ok else "<b>NOT CONFORMING / NOT COMPLETE</b> - open items:")
+    story.append(Paragraph(f"<font color='{color}'>{head}</font>", S["gate"]))
+    for it in st["open_items"]:
+        story.append(Paragraph("&bull; " + _esc(it), S["body"]))
+    story.append(Spacer(1, 2 * mm))
+    story.append(Paragraph(_esc(f"Project: {project_name}  |  {len(runs)} run(s)  |  "
+                                f"Generated {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime())}. "
+                                "A dossier is a record of what was done, not an approval; acceptance is the organisation's decision."), S["small"]))
+
+    # ---- summary table of runs ----
+    story += [Spacer(1, 3 * mm), Paragraph("Inspection runs", S["h2"])]
+    data = [["Run", "Drawing", "Revision", "Rows", "Releasable", "Serials measured"]]
+    for r in runs:
+        plan = r["plan"]
+        tb = plan.get("title_block") or {}
+        drawing = tb.get("drawing_number") or tb.get("part_name") or Path(plan.get("source_document") or "").stem
+        data.append([r["stem"], Paragraph(_esc(drawing), S["cell"]), plan.get("revision", ""),
+                     len(plan.get("rows") or []),
+                     "yes" if plan.get("approvable") else "NO",
+                     ", ".join(r["samples"]) or "-"])
+    story.append(_table(data, [50 * mm, 60 * mm, 18 * mm, 15 * mm, 24 * mm, 106 * mm]))
+
+    # ---- per-run detail sections ----
+    for r in runs:
+        plan, meas = r["plan"], r["meas"]
+        tb = plan.get("title_block") or {}
+        part = tb.get("drawing_number") or tb.get("part_name") or Path(plan.get("source_document") or "").stem
+        story += [Spacer(1, 4 * mm), Paragraph(f"Run: {_esc(r['stem'])} — {_esc(part)} rev {plan.get('revision')}", S["h2"])]
+
+        for sample in (r["samples"] or [None]):
+            if sample:
+                story.append(Paragraph(f"Serial {_esc(sample)}", S["h2"]))
+            rows = plan.get("rows") or []
+            data_rows = [["#", "Requirement", "Limits", "Value", "Verdict"]]
+            for row in rows:
+                c = (meas.get("cells") or {}).get(f"{sample}|{row['cid']}") if sample else None
+                lim = f"{row['minimum']:g} .. {row['maximum']:g}" if row.get("minimum") is not None and row.get("maximum") is not None else "-"
+                data_rows.append([row.get("balloon_no"),
+                                  Paragraph(_esc(row.get("callout") or ""), S["cell"]), lim,
+                                  "-" if not c or c.get("value") is None else f"{c['value']:g}",
+                                  c["verdict"] if c else "not measured"])
+            t = _table(data_rows, [10 * mm, 85 * mm, 30 * mm, 22 * mm, 30 * mm])
+            for i, dr in enumerate(data_rows[1:], start=1):
+                if dr[4] == "FAIL":
+                    t.setStyle(TableStyle([("TEXTCOLOR", (4, i), (4, i), colors.HexColor("#b00020"))]))
+            story.append(t)
+
+    # ---- NCRs ----
+    if ncrs:
+        story += [Spacer(1, 3 * mm), Paragraph("Nonconformance reports", S["h2"])]
+        data = [["NCR", "Status", "About", "Disposition", "Closure"]]
+        for n in ncrs:
+            l = n.get("link") or {}
+            about = f"balloon {l.get('balloon_no')} {l.get('requirement') or ''} actual {l.get('actual')}" if l.get("cid") else f"checklist {l.get('checklist')} / {l.get('item')}"
+            d = n.get("disposition") or {}
+            data.append([n["number"], n["status"], Paragraph(_esc(about), S["cell"]),
+                         Paragraph(_esc(f"{d.get('disposition', '')} {d.get('justification', '')}" + (f" (approved {d['approved_by']})" if d.get("approved_by") else "")), S["cell"]),
+                         Paragraph(_esc((n.get("closure") or {}).get("corrective_action", "")), S["cell"])])
+        story.append(_table(data, [30 * mm, 26 * mm, 70 * mm, 80 * mm, 67 * mm]))
+
+    # ---- sources ----
+    if sources:
+        story += [Spacer(1, 3 * mm), Paragraph("Preserved source drawings", S["h2"])]
+        data = [["File", "SHA-256", "Media type", "Size"]]
+        for s in sources:
+            data.append([s["filename"], s["sha256"][:16] + "…", s["media_type"], f"{s['size']:,}"])
+        story.append(_table(data, [70 * mm, 50 * mm, 40 * mm, 30 * mm]))
+
+    # ---- contents table ----
+    story += [Spacer(1, 3 * mm), Paragraph("Contents (SHA-256; manifest.json in the package lists the same)", S["h2"])]
+    data = [["File", "Bytes", "SHA-256"]] + [[Paragraph(_esc(m["path"]), S["cell"]), m["bytes"], m["sha256"]] for m in manifest]
+    story.append(_table(data, [120 * mm, 22 * mm, 131 * mm]))
+    doc.build(story)
+
+
+def build_project(project_name: str, out_zip: Path, *,
+                  runs: list[dict], ncrs: list[dict], sources: list[dict]) -> dict:
+    """Build a project-level quality dossier ZIP.
+
+    *runs*: list of dicts, each with keys:
+        plan_path  - Path to the .plan.json
+        plan       - loaded plan JSON
+        meas       - evaluate() result
+        ncrs       - NCRs for this run
+        checklists - checklist states for this run
+        samples    - sample IDs
+        stem       - run stem name
+        run_files  - list of (arc_name, bytes) for this run's files in the ZIP
+
+    *ncrs*: all NCRs across the project (deduplicated).
+    *sources*: list of dicts with filename, sha256, size, media_type, path (Path to preserved file).
+
+    Returns {"zip": Path, "manifest": dict, "status": dict}.
+    """
+    files: list[tuple[str, bytes]] = []
+
+    # per-run files, nested under runs/<stem>/
+    for r in runs:
+        plan_path = r["plan_path"]
+        stem = r["stem"]
+        folder = plan_path.parent
+        for p in sorted(folder.iterdir()):
+            if p.is_file() and p.name.startswith(stem) and "_dossier" not in p.name and not p.name.endswith(".tmp"):
+                files.append((f"runs/{stem}/{p.name}", p.read_bytes()))
+        if (folder / "imports").is_dir():
+            for p in sorted((folder / "imports").iterdir()):
+                files.append((f"runs/{stem}/imports/{p.name}", p.read_bytes()))
+
+    # NCRs
+    seen_ncrs: set[str] = set()
+    for n in ncrs:
+        if n["number"] not in seen_ncrs:
+            seen_ncrs.add(n["number"])
+            files.append((f"ncr/{n['number']}.json", json.dumps(n, indent=1, ensure_ascii=False).encode("utf-8")))
+
+    # preserved source drawings
+    source_notes: list[str] = []
+    for s in sources:
+        src_path = s.get("path")
+        if src_path and Path(src_path).is_file():
+            b = Path(src_path).read_bytes()
+            if _sha(b) == s["sha256"]:
+                files.append((f"sources/{s['filename']}", b))
+                source_notes.append(f"{s['filename']}: included (SHA-256 verified)")
+            else:
+                source_notes.append(f"{s['filename']}: NOT included (SHA-256 mismatch)")
+        else:
+            source_notes.append(f"{s['filename']}: NOT included (file not found)")
+
+    manifest = [{"path": a, "bytes": len(b), "sha256": _sha(b)} for a, b in files]
+    st = project_status(runs)
+
+    pdf_buf = Path(str(out_zip) + ".cover.pdf")
+    _project_pdf(pdf_buf, project_name, runs, ncrs, manifest, st, sources)
+    pdf_bytes = pdf_buf.read_bytes()
+    pdf_buf.unlink()
+
+    man = {
+        "generator": "astracad_inspect.dossier",
+        "type": "project",
+        "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "project": project_name,
+        "runs": [r["stem"] for r in runs],
+        "status": st,
+        "sources": source_notes,
+        "files": manifest + [{"path": "dossier.pdf", "bytes": len(pdf_bytes), "sha256": _sha(pdf_bytes)}],
+        "self": "manifest.json cannot list its own hash; dossier.pdf's own contents table excludes dossier.pdf",
+    }
+    out_zip = Path(out_zip)
+    with zipfile.ZipFile(out_zip, "w", zipfile.ZIP_DEFLATED) as z:
+        for a, b in files:
+            z.writestr(a, b)
+        z.writestr("dossier.pdf", pdf_bytes)
+        z.writestr("manifest.json", json.dumps(man, indent=1, ensure_ascii=False))
+    return {"zip": out_zip, "manifest": man, "status": st}
