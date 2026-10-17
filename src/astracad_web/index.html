@@ -327,6 +327,13 @@ table.dt { border-collapse: separate; border-spacing: 0; width: 100%; font-size:
 .esc .tx { font-family: var(--mono); font-weight: 600; overflow-wrap: anywhere; }
 .esc .why { font-size: 12.5px; color: var(--muted); }
 
+/* machining */
+.calcsplit { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 14px; align-items: start; }
+.calcsplit > * { min-width: 0; }
+@media (max-width: 860px) { .calcsplit { grid-template-columns: minmax(0, 1fr); } .calclist { max-height: 40vh; } }
+.calclist { max-height: 70vh; overflow: auto; }
+.calclist .citem { grid-template-columns: 30px minmax(0, 1fr) 0; }
+
 /* instruments */
 .instform { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; align-items: end; }
 
@@ -424,6 +431,8 @@ pre.code { margin: 0; white-space: pre-wrap; word-break: break-word; font-family
     <button class="nav" data-tab="inspections"><svg class="i" data-i="scan"></svg><span class="lbl">Inspections</span><span class="count" id="n-insp"></span></button>
     <button class="nav" data-tab="instruments"><svg class="i" data-i="crosshair"></svg><span class="lbl">Instruments</span><span class="count" id="n-inst"></span></button>
     <button class="nav" data-tab="changes"><svg class="i" data-i="diff"></svg><span class="lbl">Revision changes</span></button>
+    <div class="navlabel">Manufacturing</div>
+    <button class="nav" data-tab="machining"><svg class="i" data-i="cube"></svg><span class="lbl">Machining</span></button>
     <div class="navlabel">Automation</div>
     <button class="nav" data-tab="tasks"><svg class="i" data-i="tasks"></svg><span class="lbl">Tasks</span></button>
     <button class="nav" data-tab="cad"><svg class="i" data-i="cube"></svg><span class="lbl">CAD connections</span></button>
@@ -607,6 +616,7 @@ function palBase() {
     { label: "Projects", group: "Page", icon: "file", run: () => location.hash = "#projects" },
     { label: "Inspections", group: "Page", icon: "scan", run: () => location.hash = "#inspections" },
     { label: "Instruments", group: "Page", icon: "crosshair", run: () => location.hash = "#instruments" },
+    { label: "Machining calculations", group: "Page", icon: "cube", run: () => location.hash = "#machining" },
     { label: "Revision changes", group: "Page", icon: "diff", run: () => location.hash = "#changes" },
     { label: "Tasks", group: "Page", icon: "tasks", run: () => location.hash = "#tasks" },
     { label: "CAD connections", group: "Page", icon: "cube", run: () => location.hash = "#cad" },
@@ -1068,6 +1078,8 @@ async function viewInspection(key, keepSel, focusId) {
         h("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap" }, h("span", { class: "tx" }, sym(u.text)), dec ? pill("accent", "clock", human(dec.action) + " pending", "outline") : null,
           typeof u.anchor_x === "number" ? h("button", { class: "btn sm ghost", style: "margin-left:auto", onclick: () => pick("esc:" + u._i) }, ic("crosshair"), "Locate") : null),
         h("div", { class: "why" }, u.reason),
+        /^surface finish value/.test(u.reason || "") && /^[\d.]+$/.test(String(u.text).trim()) ? h("a", { class: "btn sm ghost", style: "justify-self:start",
+          href: `#machining?calc=turning_feed_for_ra&ra_um=${encodeURIComponent(String(u.text).trim())}`, title: "theoretical maximum turning feed for this Ra (needs a nose radius)" }, ic("cube"), "Feasibility: max turning feed") : null,
         h("div", { class: "actbar" }, h("button", { class: "btn sm", onclick: dismiss }, ic("ban"), "Dismiss"), h("button", { class: "btn sm", onclick: promote }, ic("plus"), "Add as characteristic")), formBox);
     }) : [empty("check", "Nothing escalated", "All dimension-like text on the sheet was interpreted.")]));
   }
@@ -1229,8 +1241,11 @@ async function viewInspection(key, keepSel, focusId) {
     ];
     return h("div", {}, states, h("div", { style: "margin-top:12px" }, dataTable(cols, rows)));
   };
+  let CLT = [];
+  try { CLT = await api("/api/checklists"); } catch (e) {}
   const evTabs = [
     ["meas", "Measurements", M.entries, measPane],
+    ["check", "Checklists", CLT.length, () => checklistPane(key, curSample, CLT)],
     ["checks", "Plan checks", checks.length, () => dataTable([
       { k: "outcome", label: "Outcome", render: c => outcome(c.outcome) }, { k: "name", label: "Check", render: c => h("span", { class: "title" }, human(c.name)) },
       { k: "expected", label: "Expected" }, { k: "actual", label: "Actual" }, { k: "why", label: "Why", render: c => h("span", { class: "muted" }, c.why || "") }], checks)],
@@ -1545,16 +1560,111 @@ async function viewInstruments(editId) {
   if (!list.length) id.focus();
 }
 
+// ---------- Machining calculations ----------
+const CALC_TITLE = { spindle_speed: "Spindle speed", cutting_speed: "Cutting speed", milling_feed: "Milling table feed",
+  chip_thinning: "Chip thinning", removal_rate: "Material removal rate", cutting_power: "Cutting power & torque",
+  turning_roughness: "Turning roughness (Ra, Rt)", turning_feed_for_ra: "Max feed for a target Ra",
+  scallop_height: "Ball-end scallop height", stepover_for_scallop: "Stepover for a scallop", iso_metric_thread: "ISO metric thread",
+  tap_drill: "Tap drill / thread %" };
+async function viewMachining(arg) {
+  crumbs("Machining");
+  const calcs = await api("/api/calculations");
+  const params = new URLSearchParams(arg || "");
+  let cur = params.get("calc") || calcs[0].id;
+  const list = h("div", { class: "calclist", role: "listbox", "aria-label": "Calculations" });
+  const pane = h("div");
+  function draw() {
+    list.replaceChildren(...calcs.map(c => h("button", { class: "citem", role: "option", "aria-selected": String(c.id === cur), onclick: () => { cur = c.id; draw(); } },
+      h("span", { class: "bn c-info", style: "border-radius:8px" }, ic("crosshair")), h("span", { style: "min-width:0" }, h("div", { class: "co", style: "font-family:var(--font)" }, CALC_TITLE[c.id] || c.id)), h("span"))));
+    const c = calcs.find(x => x.id === cur);
+    const inputs = {};
+    const result = h("div");
+    const form = h("form", { class: "instform", onsubmit: async ev => {
+        ev.preventDefault();
+        const p = {}; for (const [k, el] of Object.entries(inputs)) if (el.value.trim() !== "") p[k] = el.value.trim();
+        try { showResult(await post("/api/calculate", { name: c.id, params: p })); }
+        catch (e) { result.replaceChildren(h("div", { class: "gate t-warn", style: "grid-template-columns:auto 1fr" }, h("div", { class: "gi" }, ic("alert", "i lg")), h("div", {}, h("b", {}, "Not calculated"), h("div", { class: "why" }, e.message.replace(/^\w+Error: /, ""))))); }
+      } },
+      c.fields.map(f => { const el = h("input", { class: "input", name: f.key, value: params.get(f.key) || "", placeholder: f.key === "process" ? "milling / turning / drilling" : f.key === "source" ? "e.g. tool maker catalogue 2026, p.12" : "", inputmode: ["process", "source"].includes(f.key) ? "text" : "decimal" });
+        inputs[f.key] = el; return h("label", { class: "field" }, h("span", {}, f.label, f.unit && f.unit !== "-" ? h("span", { class: "muted", style: "font-weight:400" }, ` [${f.unit}]`) : null), el); }),
+      h("div", { class: "field" }, h("button", { class: "btn primary", type: "submit" }, ic("play"), "Calculate")));
+    function showResult(r) {
+      const warn = r.findings.filter(f => f.startsWith("WARNING"));
+      result.replaceChildren(card("Result", r.provenance, null, h("div", { class: "body stack" },
+        h("div", { class: "kpis", style: "margin:0" }, Object.entries(r.outputs).map(([k, v]) => h("div", { class: "card kpi" }, h("div", { class: "k" }, k), h("div", { class: "v mono", style: "font-size:22px" }, fmt(v.value, 4)), h("div", { class: "d" }, v.unit)))),
+        warn.length ? h("ul", { class: "list" }, warn.map(w => h("li", {}, h("span", { class: "c-warn" }, ic("flag")), h("div", {}, w.replace(/^WARNING:\s*/, ""))))) : null,
+        h("dl", { class: "spec" },
+          h("div", { class: "wide" }, h("dt", {}, "Equation"), h("dd", { class: "mono" }, r.equation)),
+          h("div", { class: "wide" }, h("dt", {}, "Inputs"), h("dd", { class: "mono", style: "font-weight:500" }, Object.entries(r.inputs).map(([k, v]) => `${k} = ${fmt(v.value, 6)} ${v.unit}`).join("   "))),
+          r.assumptions.length ? h("div", { class: "wide" }, h("dt", {}, "Assumptions"), h("dd", { style: "font-weight:400" }, r.assumptions.join("; "))) : null,
+          r.sources.length ? h("div", { class: "wide" }, h("dt", {}, "Data source (yours)"), h("dd", { style: "font-weight:400" }, r.sources.join("; "))) : null))));
+    }
+    pane.replaceChildren(card(CALC_TITLE[c.id] || c.id, c.doc, null, h("div", { class: "body" }, form)), h("div", { style: "margin-top:14px" }, result));
+    // prefilled from a link (e.g. a roughness requirement): run once the form is on the page
+    if ([...params.keys()].some(k => k !== "calc") && c.id === params.get("calc")) setTimeout(() => form.isConnected && form.requestSubmit(), 0);
+  }
+  draw();
+  main.replaceChildren(
+    h("div", { class: "ph" }, h("div", {}, h("h1", {}, "Machining calculations"),
+      h("p", {}, "Deterministic, unit-explicit and shown with their equation and assumptions. No material data is built in: cutting-force constants come from your source, and the result says which."))),
+    h("div", { class: "calcsplit" }, card("Calculations", `${calcs.length}`, null, list), pane));
+}
+
+// ---------- Checklists (inside an inspection) ----------
+function checklistPane(key, sampleOf, templates) {
+  const box = h("div", { class: "body" }, h("div", { class: "skel", style: "height:60px" }));
+  let tpl = store.get("astracad.checklist") || templates[0]?.id;
+  const DEC = { PASS: ["ok", "check", "Pass"], FAIL: ["bad", "x", "Fail"], NA: ["na", "ban", "N/A"] };
+  async function draw() {
+    const sample = sampleOf();
+    const sel = h("select", { class: "input sm", style: "width:auto", "aria-label": "Checklist", onchange: () => { tpl = sel.value; store.set("astracad.checklist", tpl); draw(); } },
+      templates.map(t => h("option", { value: t.id, selected: t.id === tpl }, `${t.title} (${t.auto} automatic / ${t.items})`)));
+    let st;
+    try { st = await api(`/api/checklist?key=${encodeURIComponent(key)}&template=${encodeURIComponent(tpl)}&sample=${encodeURIComponent(sample || "")}`); }
+    catch (e) { box.replaceChildren(empty("alert", "Could not load the checklist", e.message)); return; }
+    const by = () => (document.getElementById("reviewer")?.value || "").trim();
+    const decide = async (item, result, note) => {
+      if (!by()) { toast("Enter your name in the bar below first — every decision is signed.", "warn"); document.getElementById("reviewer")?.focus(); return; }
+      try { await post("/api/checklist", { key, template: tpl, sample, item, result, note, by: by() }); draw(); }
+      catch (e) { toast(e.message.replace(/^\w+Error: /, ""), "bad"); }
+    };
+    const head = h("div", { style: "display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px" }, sel,
+      st.needs_sample ? null : (st.signed ? pill("ok", "shield", `Signed by ${st.signed.by}`) : st.complete ? pill("accent", "check", "Complete — ready to sign") : pill("warn", "clock", `${st.decided}/${st.total} decided`)),
+      st.signature_superseded ? pill("warn", "alert", "Signature voided by a later decision") : null,
+      st.needs_sample ? null : h("span", { style: "margin-left:auto;display:flex;gap:8px" },
+        h("button", { class: "btn sm", onclick: async () => { try { const r = await post("/api/export_checklist", { key, template: tpl, sample });
+          toast(r.checks.every(c => c.ok) ? "Exported and re-opened" : "Exported, read-back failed", r.checks.every(c => c.ok) ? "ok" : "bad"); window.open("/file?key=" + encodeURIComponent(r.file), "_blank", "noopener"); } catch (e) { toast(e.message, "bad"); } } }, ic("sheet"), "Export"),
+        h("button", { class: "btn sm primary", disabled: !st.complete || !!st.signed, onclick: () => decide("__sign__", "SIGNED", "") }, ic("shield"), "Sign off")));
+    if (st.needs_sample) { box.replaceChildren(head, empty("user", "This checklist is per serial number", "Enter the sample / serial number in the bar below.")); return; }
+    const rows = st.items.map(i => {
+      const d = i.decision, noteIn = h("input", { class: "input sm", placeholder: "note (needed for Fail / N/A)", style: "min-width:160px" });
+      const ev = i.auto ? h("div", { class: "x", style: "margin-top:4px" }, pill(i.auto.state === "PASS" ? "ok" : i.auto.state === "FAIL" ? "bad" : "na", i.auto.state === "PASS" ? "check" : i.auto.state === "FAIL" ? "x" : "info", "ASTraCAD: " + human(i.auto.state.toLowerCase())), " ", h("span", { class: "muted", style: "font-size:12px" }, i.auto.evidence)) : h("div", { class: "x muted", style: "font-size:12px;margin-top:4px" }, "manual — a person's check");
+      return h("tr", {},
+        h("td", {}, h("div", { class: "title", style: "font-weight:500" }, i.text), ev),
+        h("td", { class: "nowrap" }, d ? h("div", {}, pill(...DEC[d.result]), h("div", { class: "hlegend" }, `${d.by} · ${ago(d.at)}`), d.note ? h("div", { class: "muted", style: "font-size:12px" }, d.note) : null) : h("span", { class: "muted" }, "—")),
+        h("td", {}, h("div", { style: "display:flex;gap:6px;flex-wrap:wrap" }, noteIn,
+          h("button", { class: "btn sm ok", disabled: i.auto?.state === "FAIL", title: i.auto?.state === "FAIL" ? "the evidence fails: it cannot be passed" : "", onclick: () => decide(i.id, "PASS", noteIn.value) }, ic("check"), "Pass"),
+          h("button", { class: "btn sm bad", onclick: () => noteIn.value.trim() ? decide(i.id, "FAIL", noteIn.value) : (noteIn.focus(), toast("Fail needs a note", "warn")) }, ic("x"), "Fail"),
+          h("button", { class: "btn sm ghost", onclick: () => noteIn.value.trim() ? decide(i.id, "NA", noteIn.value) : (noteIn.focus(), toast("N/A needs a note", "warn")) }, "N/A"))));
+    });
+    box.replaceChildren(head, h("p", { class: "muted", style: "margin:0 0 10px;font-size:13px" }, st.purpose || ""),
+      h("div", { class: "tw" }, h("table", { class: "dt" }, h("thead", {}, h("tr", {}, ["Item", "Decision", "Decide"].map(x => h("th", {}, x)))), h("tbody", {}, rows))));
+  }
+  draw();
+  return box;
+}
+
 // ---------- router ----------
 async function route() {
   const hash = location.hash.slice(1);
-  const tab = hash.startsWith("inspection=") ? "inspections" : hash.startsWith("project=") ? "projects" : hash.startsWith("instruments=") ? "instruments" : (hash || "inspections");
+  const tab = hash.startsWith("inspection=") ? "inspections" : hash.startsWith("project=") ? "projects" : hash.startsWith("instruments=") ? "instruments" : hash.startsWith("machining") ? "machining" : (hash || "inspections");
   document.querySelectorAll(".nav").forEach(b => { if (b.dataset.tab === tab) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   viewKeys = null; palExtra = [];
   try {
     if (hash.startsWith("inspection=")) await viewInspection(decodeURIComponent(hash.slice(11)));
     else if (hash.startsWith("project=")) await viewProject(decodeURIComponent(hash.slice(8)));
     else if (tab === "projects") await viewProjects();
+    else if (tab === "machining") await viewMachining(hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "");
     else if (tab === "instruments") await viewInstruments(hash.startsWith("instruments=") ? decodeURIComponent(hash.slice(12)) : null);
     else if (tab === "tasks") await viewTasks();
     else if (tab === "changes") await viewChanges();

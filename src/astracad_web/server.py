@@ -414,6 +414,65 @@ class Workspace:
         entry = record(plan_path, plan, body, register=load(self.instruments_path))
         return {"entry": entry, "measurements": evaluate(plan, read_log(plan_path))}
 
+    # ---- checklists ----------------------------------------------------------------------------
+    def _checklist_ctx(self, key: str, sample: str | None) -> tuple[Path, dict]:
+        from astracad_inspect.measure import evaluate, read_log
+        plan_path = self._plan_path(key)
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        stem = plan_path.name[:-len(".plan.json")]
+        prov_p = plan_path.with_name(f"{stem}.provenance.json")
+        log = read_log(plan_path)
+        return plan_path, {"plan": plan, "provenance": self._read(prov_p) if prov_p.exists() else {},
+                           "log": log, "measurements": evaluate(plan, log), "sample": (sample or "").strip() or None}
+
+    def checklist_templates(self) -> list[dict]:
+        from astracad_inspect.checklists import TEMPLATES
+        return [{"id": k, "title": t["title"], "purpose": t["purpose"], "per_sample": t["per_sample"],
+                 "items": len(t["items"]), "auto": sum(1 for i in t["items"] if i[1] == "auto")}
+                for k, t in TEMPLATES.items()]
+
+    def checklist(self, key: str, template: str, sample: str | None) -> dict:
+        from astracad_inspect.checklists import load
+        plan_path, ctx = self._checklist_ctx(key, sample)
+        return load(plan_path, template, ctx)
+
+    def checklist_decide(self, body: dict) -> dict:
+        from astracad_inspect.checklists import decide
+        plan_path, ctx = self._checklist_ctx(str(body.get("key", "")), body.get("sample"))
+        return decide(plan_path, str(body.get("template", "")), ctx, body)
+
+    def export_checklist(self, key: str, template: str, sample: str | None) -> dict:
+        from astracad_inspect.checklists import TEMPLATES, _read, load, log_path, write_xlsx
+        from openpyxl import load_workbook
+        plan_path, ctx = self._checklist_ctx(key, sample)
+        state = load(plan_path, template, ctx)
+        if state.get("needs_sample"):
+            raise ValueError("this checklist is per serial number: give the sample")
+        per = TEMPLATES[template]["per_sample"]
+        hist = _read(log_path(plan_path, template, ctx["sample"] if per else None))
+        stem = plan_path.name[:-len(".plan.json")]
+        tail = f"_{re.sub(r'[^\w.-]', '_', ctx['sample'])[:40]}" if per else ""
+        out = write_xlsx(state, hist, plan_path.with_name(f"{stem}_checklist_{template}{tail}.xlsx"))
+        ws = load_workbook(out, read_only=True)
+        rows = [r for r in ws["Checklist"].iter_rows(min_row=6, values_only=True) if r and r[0]]
+        hrows = [r for r in ws["History"].iter_rows(min_row=2, values_only=True) if r and r[0]]
+        checks = [{"name": "items", "ok": len(rows) == state["total"], "detail": f"{len(rows)}/{state['total']}"},
+                  {"name": "history", "ok": len(hrows) == len(hist), "detail": f"{len(hrows)}/{len(hist)}"}]
+        return {"file": self.key_for(out), "checks": checks}
+
+    # ---- machining calculations ------------------------------------------------------------------
+    @staticmethod
+    def calculations() -> list[dict]:
+        from astracad_mfg.machining import REGISTRY
+        return [{"id": k, "doc": (fn.__doc__ or "").strip().split("\n")[0],
+                 "fields": [{"key": a, "label": b, "unit": c} for a, b, c in fields]}
+                for k, (fn, fields) in REGISTRY.items()]
+
+    @staticmethod
+    def calculate(body: dict) -> dict:
+        from astracad_mfg.machining import run
+        return run(str(body.get("name", "")), body.get("params") or {}).to_dict()
+
     @property
     def instruments_path(self) -> Path:
         return (self.projects.root if self.projects is not None else self.runs[0]) / "instruments.json"
@@ -582,6 +641,13 @@ def make_handler(ws: Workspace):
                     return self._json(ws.projects_list())
                 if u.path == "/api/instruments":
                     return self._json(ws.instruments())
+                if u.path == "/api/checklists":
+                    return self._json(ws.checklist_templates())
+                if u.path == "/api/checklist":
+                    return self._json(ws.checklist(q.get("key", [""])[0], q.get("template", [""])[0],
+                                                   q.get("sample", [""])[0]))
+                if u.path == "/api/calculations":
+                    return self._json(ws.calculations())
                 if u.path == "/api/project":
                     return self._json(ws.project(q.get("id", [""])[0]))
                 if u.path == "/api/changes":
@@ -691,6 +757,13 @@ def make_handler(ws: Workspace):
                     return self._json(ws.review(str(body.get("key", "")), body))
                 if u.path == "/api/instruments":
                     return self._json(ws.save_instrument(body))
+                if u.path == "/api/checklist":
+                    return self._json(ws.checklist_decide(body))
+                if u.path == "/api/export_checklist":
+                    return self._json(ws.export_checklist(str(body.get("key", "")), str(body.get("template", "")),
+                                                          body.get("sample")))
+                if u.path == "/api/calculate":
+                    return self._json(ws.calculate(body))
                 if u.path == "/api/measure":
                     return self._json(ws.measure(str(body.get("key", "")), body))
                 if u.path == "/api/export_results":

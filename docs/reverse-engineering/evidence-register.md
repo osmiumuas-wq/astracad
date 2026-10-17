@@ -82,3 +82,20 @@ acceptance persists in the built-in browser's profile until its cookies are clea
 | P6-29 | rows #7, #9, #26, #33 | OBSERVED | Deviation tolerances read as "53 +0.01 -0.02", "80.129 +0.015 -0.025", "⌀36 +0.25 -0.1", "⌀15 +0.25 -0.15" — all **orange (needs verification)**; plain values and ± forms were mostly green. Verification state is the system's confidence, not a geometry check (consistent with P6-18). |
 | P6-30 | `/lens/try` third parties | OBSERVED | After acceptance the page contacts **Google Ads / DoubleClick (conversion id 17385937004), Google Analytics (G-W8G8B69KBW), Google Tag Manager and Mixpanel** in addition to Cloudflare. Before acceptance (P6-13) only Cloudflare analytics and Google Fonts were seen. |
 | P6-31 | — | INFERRED | 73 dimensions on an A3 multi-view sheet, GD&T read, in ~10 s, mostly marked verified: on **raster/scanned-style input Lens is clearly ahead** of ASTraCAD, which has no OCR. Its "verified" state can mark a two-number token as verified without a stated separator (P6-28), where ASTraCAD refuses to guess. **Not a measured accuracy comparison**: no ground truth exists for this sample, and ASTraCAD cannot read it (raster route absent). A fair benchmark needs the same drawings run through both, with labels — the M2 corpus. |
+
+## ChecklistGuro (checklistguro.com) and Machining Doctor (machiningdoctor.com) — 2026-10-17
+
+Method: REA 6.4.0 `list-browser-targets` + `inspect-web-page` (passive; isolated, empty Chrome
+profile; no login, no form, no cookie choice) on 12 public pages, at the user's request.
+**Stopped** after reading each site's terms. Full captures were deleted; what remains is
+`reverse_engineering/web2026/BOUNDARY_RECORD.json` (URL, title, capture hash, evidence id per page).
+
+| ID | Site | Class | Finding |
+|---|---|---|---|
+| CG-01 | checklistguro.com | DOCUMENTED | Checklist / workflow platform ("Work OS"): template library by industry (incl. manufacturing "production line readiness"), audit/inspection-management solution, AI assistant, Android and Windows apps, ROI calculator; publishes `/llms.txt`. |
+| CG-02 | checklistguro.com `/terms-of-service` | DOCUMENTED | Prohibits reverse engineering, automated extraction (bots, spiders, scrapers) without permission, and derivative works based on its proprietary templates. |
+| MD-01 | machiningdoctor.com | DOCUMENTED | Machining reference hub: 27+ calculators (speeds & feeds, chip thinning, chip load, power, removal rate, surface finish, threading, tap drill, tolerances, hardness), 700+ material records, threading standards, G-code and GD&T learning, carbide-grade cross references. |
+| MD-02 | machiningdoctor.com `/terms/` | DOCUMENTED | Permits personal / internal use of results; prohibits copying data or tools, scraping (incl. headless browsers), reverse engineering or deriving its formulas/data structures, incorporating data/code/tools into other products, and using its content to train or ground AI. |
+| X-01 | both | INFERRED | Their **content, data, formulas-as-implemented and templates may not be used**. The generic *capability categories* (shop-floor checklists; machining calculators) are ideas common to the industry and are built in ASTraCAD independently from public engineering knowledge, with our own wording and no reference to their pages. |
+
+Decision recorded for the charter (Part 2, Part 18): no further automated investigation of either site.
