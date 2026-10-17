@@ -99,3 +99,18 @@ recall from 26.2% to **43.7%** (45/103) at **80.4%** precision (45/56) on the sa
 are values SOLIDWORKS stores as notes (bolt-circle and chamfer callouts), balloons and a frame value —
 still no misread dimension. Stacked tolerances read as separate regions are joined when both agree; when
 one does not, the row is blocked (`ocr_adjacent_tolerance_unread`) instead of appearing untoleranced.
+
+### Simulated scans (same day)
+
+`tools/degrade.py` turns each sheet into a SIMULATED scan (rotation 0.5-1.5 deg, grey paper, noise,
+blur, JPEG 55-75), deterministic per sheet; parameters are written next to each image. Not real scans.
+
+| OCR route on | Recall | Precision |
+|---|---|---|
+| clean 300 dpi renders | 43.7% (45/103) | 80.4% |
+| simulated scans, no deskew | 42.7% (44/103) | 80.0% |
+| simulated scans, with deskew | 42.7% (44/103) | 83.0% |
+
+Deskew measures within 0.021 deg of the true rotation (5 sheets x 4 angles) but did not change recall:
+both engines already tolerate ~1 deg. The OCR bottleneck is two-engine agreement on cluttered text,
+not page geometry. Real scans (stamps, folds, hand marks, low dpi) remain unmeasured.
