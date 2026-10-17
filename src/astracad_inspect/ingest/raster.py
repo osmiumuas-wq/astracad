@@ -537,6 +537,7 @@ def read_raster(path: str | Path, declared_unit: str | None = None,
     zone_labels: list = []
     n_regions = n_agreed = n_disagree = n_single = 0
     page_w = page_h = 0.0
+    page_frames: dict[int, tuple[float, float, float, float]] = {}
     for pno, (img, dpi, stated) in enumerate(pages, start=1):
         if not stated:
             warnings.append(f"page {pno}: the image states no DPI; {DEFAULT_DPI:g} assumed for "
@@ -544,6 +545,7 @@ def read_raster(path: str | Path, declared_unit: str | None = None,
         mm = 25.4 / dpi
         if pno == 1:
             page_w, page_h = img.width * mm, img.height * mm
+        page_frames[pno] = (0.0, 0.0, img.width * mm, img.height * mm)
         img, skew = deskew(img)
         if skew:
             warnings.append(f"page {pno}: rotated {skew:+.2f} deg to deskew (estimated from long straight "
@@ -621,7 +623,9 @@ def read_raster(path: str | Path, declared_unit: str | None = None,
                 review=ReviewStatus.NEEDS_REVIEW,
                 source=SourceLocation(document=str(p), document_sha256=doc_sha, revision=revision,
                                       page=pno, entity_handle=handle, entity_type="OCR_REGION",
-                                      layer="", anchor_x=cx, anchor_y=cy),
+                                      layer="", anchor_x=cx, anchor_y=cy,
+                                      text_box=(r.box[0] * mm, (img.height - r.box[3]) * mm,
+                                                r.box[2] * mm, (img.height - r.box[1]) * mm)),
                 limits=limits)
             c.record("extractor", "extracted", f"OCR consensus at {handle}: {readings}"
                      + (f", RapidOCR confidence {r.b_conf:.3f}" if r.b_conf is not None else ""))
@@ -674,4 +678,4 @@ def read_raster(path: str | Path, declared_unit: str | None = None,
                                                      page_w * 0.95, page_h * 0.95),
         notes=notes, page_count=len(pages), characteristics=characteristics,
         uninterpreted=uninterpreted, census=census, warnings=warnings,
-        feature_support=feature_support)
+        feature_support=feature_support, page_frames=page_frames)

@@ -267,22 +267,27 @@ def write_report(plan: InspectionPlan, record: ProvenanceRecord, drawing_png: st
         story.append(_table(frows, [20 * mm, 46 * mm, 176 * mm]))
 
     story.append(PageBreak())
-    png = Path(drawing_png)
-    if png.exists():
-        from PIL import Image as PILImage
-        w, h = PILImage.open(png).size
-        max_w = 267 * mm
-        max_h = 150 * mm
-        scale = min(max_w / w, max_h / h)
-        story += [Paragraph("Inspection layout", S["h2"]),
-                  Paragraph("Balloons are placed outside the part outline; the leader ends at "
-                            "the dimension's own definition-point cluster.", S["body"]),
-                  Spacer(1, 2 * mm),
-                  Image(str(png), width=w * scale, height=h * scale)]
-    else:
-        story += [Paragraph("Inspection layout", S["h2"]),
-                  Paragraph("<font color='#b00020'><b>Rendered page missing: "
-                            f"{png}</b></font> - the layout could not be shown.", S["body"])]
+    pngs = [Path(p) for p in (drawing_png if isinstance(drawing_png, (list, tuple)) else [drawing_png])]
+    method = getattr(plan.layout, "method", "") or "ring of slots around the content"
+    for k, png in enumerate(pngs):
+        if k:
+            story.append(PageBreak())
+        head = "Inspection layout" + (f" - page {k + 1} of {len(pngs)}" if len(pngs) > 1 else "")
+        if png.exists():
+            from PIL import Image as PILImage
+            w, h = PILImage.open(png).size
+            max_w = 267 * mm
+            max_h = 150 * mm
+            scale = min(max_w / w, max_h / h)
+            story += [Paragraph(head, S["h2"]),
+                      Paragraph(f"Balloon placement: {method}. Ring colour and the legend give "
+                                "each balloon's status; the leader dot marks the callout.", S["body"]),
+                      Spacer(1, 2 * mm),
+                      Image(str(png), width=w * scale, height=h * scale)]
+        else:
+            story += [Paragraph(head, S["h2"]),
+                      Paragraph("<font color='#b00020'><b>Rendered page missing: "
+                                f"{png}</b></font> - the layout could not be shown.", S["body"])]
 
     story.append(PageBreak())
     story += [Paragraph("Inspection table", S["h2"]),

@@ -81,6 +81,22 @@ is matched by the half-digit rule, a deliberately overridden text is not.
 | OCR, before sheet geometry | 30.1% (31/103) | 28.4% (31/109) | 0/0 | 0/1 | ~75 min |
 | OCR, with sheet geometry from pixels | 26.2% (27/103) | 79.4% (27/34) | 0/0 | 0/1 | 14.5 min |
 
+* Later still: item-balloon detection by circle fit (each radius band fitted on its own) removed
+  the 6 BOM item numbers read as dimensions on "leg"; the vector-PDF route is now **78.6% recall /
+  86.2% precision** (81/103, 81/94). One real dimension is lost: on "box_intro" the "95" is printed
+  inside a tight drawn circle with nothing else in it, which geometry alone cannot tell from an item
+  balloon; it is counted in the census as a balloon item number, not dropped silently.
+
+### Balloon layout quality (`tools/benchmark_layout.py`, same corpus, 22 sheets with balloons)
+
+| Layout | Balloons | Crossing leaders | Balloons on ink | Unplaced | Mean leader (diameters) | Numbering path |
+|---|---|---|---|---|---|---|
+| Ring around the content, greedy by cid (before) | 177 | 8 | 12 | 5 | 8.39 | 0.67 |
+| Adjacent to the callout on measured clear paper, uncrossed, reading order | 175 | **0** | **0** | **0** | **0.20** | **0.50** |
+
+Ink is measured on the balloon-free rendered sheet (dark pixels under the disc > 3 %). The inch
+drawings also had 4 mm treated as 4 *inches* before, which is where the unplaced balloons came from.
+
 * OCR precision rose because balloons, zone labels and table cells are now classified from rules and
   circles recovered from the image. **No OCR row in either run was a misread dimension value**: every
   unmatched row was real text of another kind (balloon numbers, BOM/hole-table/title-block values,

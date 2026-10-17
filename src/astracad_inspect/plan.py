@@ -17,7 +17,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from . import iso286
-from .balloons import Layout, inside_content, layout_balloons, overlaps
+from .balloons import (Layout, inside_content, layout_balloons, leader_crossings, on_ink,
+                       overlaps)
 from .callouts import normalise, parse_callout
 from .limits import deviation_band, resolve_limits
 from .model import (
@@ -224,8 +225,10 @@ class InspectionPlan:
             "slot_pitch": self.layout.slot_pitch,
             "ring_offset": self.layout.ring_offset,
             "unplaced": self.layout.unplaced,
+            "method": self.layout.method,
+            "pages": {str(k): list(v) for k, v in sorted(self.layout.pages.items())},
             "balloons": [
-                {"number": b.number, "cid": b.cid,
+                {"number": b.number, "cid": b.cid, "page": b.page, "style": b.style,
                  "centre": list(b.centre), "radius": b.radius,
                  "leader": [list(p) for p in b.leader]}
                 for b in self.layout.balloons],
@@ -330,16 +333,42 @@ def _check_limits(c: Characteristic, unit: str, failures: list[str]) -> bool:
     return True
 
 
+def sheet_frames(bundle, margin: float = 14.0) -> dict[int, tuple[float, float, float, float]]:
+    """The sheet box balloons live in, per page. Paged sources (PDF, scans) use the page itself;
+    a DXF uses everything drawn plus a margin, so a balloon never lands off the picture."""
+    if getattr(bundle, "page_frames", None):
+        return dict(bundle.page_frames)
+    ex, ce = bundle.extents, bundle.content_extents
+    box = (min(ex[0], ce[0]), min(ex[1], ce[1]), max(ex[2], ce[2]), max(ex[3], ce[3]))
+    if box[2] <= box[0] or box[3] <= box[1]:
+        box = ce
+    return {1: (box[0] - margin, box[1] - margin, box[2] + margin, box[3] + margin)}
+
+
+def _avoid_boxes(bundle) -> dict[int, list[tuple[float, float, float, float]]]:
+    """Escalated text the reviewer still has to read: balloons keep clear of it too."""
+    out: dict[int, list] = {}
+    for u in bundle.uninterpreted:
+        w = min(40.0, 1.6 * max(1, len(u.text or ""))) / 2
+        out.setdefault(int(u.page or 1), []).append(
+            (u.anchor_x - w, u.anchor_y - 2.0, u.anchor_x + w, u.anchor_y + 2.0))
+    return out
+
+
 def build_plan(bundle, balloon_radius: float = 4.0, gap: float = 2.0,
-               margin: float = 14.0, methods: dict[str, str] | None = None) -> InspectionPlan:
+               margin: float = 14.0, methods: dict[str, str] | None = None,
+               frames: dict | None = None, occupancy: dict | None = None) -> InspectionPlan:
     """Turn an ingested drawing bundle into a validated inspection plan."""
     methods = methods or {}
     chars = sorted(bundle.characteristics, key=lambda c: c.cid)
     checks: list[Check] = []
     plan_issues: list[Issue] = []
 
-    layout = layout_balloons(chars, bundle.content_extents, balloon_radius, gap, margin)
-    rows = [_row(c, methods) for c in chars]
+    layout = layout_balloons(chars, bundle.content_extents, balloon_radius, gap, margin,
+                             frames=frames, occupancy=occupancy, avoid=_avoid_boxes(bundle))
+    # the table reads in balloon order, the same order an inspector walks the drawing
+    rows = sorted((_row(c, methods) for c in chars),
+                  key=lambda r: (r.balloon_no is None, r.balloon_no or 0, r.cid))
     manual_rows = [r for r in rows if not r.entity_handle]
 
     def add(name: str, ok: bool, expected: str, actual: str, why: str | None = None) -> None:
@@ -362,10 +391,22 @@ def build_plan(bundle, balloon_radius: float = 4.0, gap: float = 2.0,
         f"{len(collide)} intersecting pairs",
         "overlapping balloons cannot be read: " + ", ".join(f"{a}/{b}" for a, b in collide))
 
-    covering = inside_content(layout.balloons, bundle.content_extents)
-    add("balloons_clear_of_part", not covering, "0 balloons on the part outline",
-        f"{len(covering)} on the outline",
-        "these balloons obscure the geometry they describe: " + ", ".join(covering))
+    if occupancy:
+        covering = on_ink(layout.balloons, occupancy)
+        add("balloons_clear_of_drawing", not covering, "0 balloons on drawing ink",
+            f"{len(covering)} on ink (measured on the rendered sheet)",
+            "these balloons cover lines or text of the drawing: " + ", ".join(covering))
+    else:
+        covering = inside_content(layout.balloons, bundle.content_extents)
+        add("balloons_clear_of_part", not covering, "0 balloons on the part outline",
+            f"{len(covering)} on the outline",
+            "these balloons obscure the geometry they describe: " + ", ".join(covering))
+
+    crossed = leader_crossings(layout.balloons)
+    add("leaders_do_not_cross", not crossed, "0 crossing leader pairs",
+        f"{len(crossed)} crossing pairs",
+        "crossing leaders make it easy to read a balloon against the wrong callout: "
+        + ", ".join(f"{a}/{b}" for a, b in crossed))
 
     broken_links = [r.cid for r in rows
                     if r.entity_handle and r.source_sha256 != bundle.sha256]

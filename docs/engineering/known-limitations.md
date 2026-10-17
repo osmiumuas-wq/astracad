@@ -240,12 +240,20 @@ covered by a check that now fails if it regresses.
 
 ## F. Web workspace (2026-10-17 redesign)
 
-- The interactive sheet is **page 1 only**; balloons of later pages of a multi-page PDF/scan are
-  listed but not drawn on a sheet.
+- Sheets and layout pages are rendered for up to 12 pages; balloons on later pages fall back to
+  ring placement and are not shown on a sheet.
 - The DXF sheet is ezdxf's rendering: dimension text is drawn at its true (often small) size, so it
   needs zooming to read. The callout itself is always shown in the list and inspector.
-- Runs made before the redesign have no `_sheet.png`; the viewer falls back to the static layout
-  image and says so. Re-running the drawing produces the interactive sheet.
+- Runs made before the interactive sheet get one rendered on first view, only when the source
+  drawing is byte-identical (SHA-256); otherwise the static layout image is shown, and says so.
+  Their balloons keep the layout they were issued with (ring style) until re-run.
+- Adjacent placement needs the callout's text box: DXF from the dimension's own geometry block,
+  PDF from the text run, scans from the OCR region. A DXF dimension without a geometry block, and
+  ring-placed balloons, point at the feature anchor instead.
+- Reading order is by bands of 1/8 of the sheet height; two callouts straddling a band edge can read
+  in the "wrong" band. Numbers are always unique and stable for the same drawing.
+- Item-balloon detection (PDF) can take a dimension printed inside a tight empty circle for an item
+  balloon (one case on the 18-sheet corpus); the census names how many were skipped as balloons.
 - The UI was checked in a Chromium-based pane at 1440×900, 1024×768 and 375×812 (touch emulation);
   not checked in Firefox or Safari, and not with a screen reader.
 - The design method (UI UX Pro Max) has no manufacturing-inspection category; the nearest rows were

@@ -152,13 +152,26 @@ class Workspace:
             if p.exists():
                 files[label] = self.key_for(p)
         sheet_path = plan_path.with_name(f"{stem}.sheet.json")
+        if not sheet_path.exists():
+            self._upgrade_sheet(plan_path, plan, prov_path)
         sheet = self._read(sheet_path) if sheet_path.exists() else None
+        pages = []
+        if sheet:
+            for pg in sheet.get("pages") or [{"page": 1, "image": sheet.get("image") or f"{stem}_sheet.png",
+                                               "extents": sheet["extents"], "width_px": sheet["width_px"],
+                                               "height_px": sheet["height_px"]}]:
+                img = plan_path.with_name(pg["image"])
+                if img.exists():
+                    pages.append({"page": pg["page"], "extents": pg["extents"], "width_px": pg["width_px"],
+                                  "height_px": pg["height_px"], "key": self.key_for(img)})
+        for lp in sorted(plan_path.parent.glob(f"{stem}_layout_p*.png")):
+            files[lp.stem[len(stem) + 1:]] = self.key_for(lp)
         return {"key": key, "name": stem, "plan": {k: plan.get(k) for k in (
                     "source_document", "source_sha256", "revision", "unit", "rows", "checks",
                     "uninterpreted", "gate", "approvable", "warnings", "feature_support",
                     "layout", "title_block", "coverage", "open_gaps")},
-                "sheet": {k: sheet.get(k) for k in ("extents", "width_px", "height_px")}
-                if sheet else None,
+                "sheet": {"pages": pages, **{k: sheet.get(k) for k in ("extents", "width_px", "height_px")}}
+                if pages else None,
                 # per-characteristic evidence for the detail panel: what was checked and who did what
                 "evidence": {c["cid"]: {
                     "checks": c.get("checks") or [], "history": c.get("history") or [],
@@ -169,6 +182,33 @@ class Workspace:
                         "page")}} for c in plan.get("characteristics") or [] if c.get("cid")},
                 "provenance": self._read(prov_path) if prov_path.exists() else None,
                 "files": files}
+
+    def _upgrade_sheet(self, plan_path: Path, plan: dict, prov_path: Path) -> None:
+        """Runs made before the interactive sheet existed: render it now, from the same drawing,
+        in the frame the run's own layout used. Only when the drawing is byte-identical to the one
+        the plan was made from (SHA-256); otherwise the viewer keeps the static image."""
+        import hashlib
+        stem = plan_path.name[:-len(".plan.json")]
+        try:
+            src = Path(plan.get("source_document") or "")
+            if not src.is_absolute():
+                meta_p = plan_path.with_name(f"{stem}.run.json")
+                meta = self._read(meta_p) if meta_p.exists() else {}
+                src = Path(meta.get("drawing") or src)
+            if not src.is_file() or hashlib.sha256(src.read_bytes()).hexdigest() != plan.get("source_sha256"):
+                return
+            route = (self._read(prov_path) if prov_path.exists() else {}).get("route", "dxf-vector")
+            lay = plan.get("layout") or {}
+            p, pad = lay["page"], float(lay.get("slot_pitch") or 0) / 2
+            frame = (p[0] - pad, p[1] - pad, p[2] + pad, p[3] + pad)
+            from astracad_inspect.export.render import render_sheet
+            png = plan_path.with_name(f"{stem}_sheet.png")
+            rec = render_sheet(src, route, frame, png)
+            rec.update(image=png.name, generated_later=True,
+                       note="rendered when first viewed, for a run made before the interactive sheet")
+            plan_path.with_name(f"{stem}.sheet.json").write_text(json.dumps(rec, indent=1), encoding="utf-8")
+        except Exception:  # noqa: BLE001 - the static layout image remains; nothing else depends on it
+            return
 
     def changes(self) -> list[dict]:
         out = []

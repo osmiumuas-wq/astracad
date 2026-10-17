@@ -88,6 +88,8 @@ class SourceLocation:
     anchor_y: float
     definition_points: list[tuple[float, float]] = field(default_factory=list)
     zone: str = ""          # sheet grid reference (e.g. "C4") from the sheet's own border labels
+    # where the callout's own text sits (x0, y0, x1, y1): a balloon is placed next to it
+    text_box: tuple[float, float, float, float] | None = None
 
 
 # --- tolerance representations -------------------------------------------------------------

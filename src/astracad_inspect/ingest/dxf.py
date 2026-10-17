@@ -125,6 +125,8 @@ class DrawingBundle:
     dxf_version: str = ""
     revision_source: str = "default - not stated by the drawing"
     dimstyle_notes: list[str] = field(default_factory=list)
+    # sheet box per page for paged sources (PDF, scans): balloons are kept on the sheet
+    page_frames: dict[int, tuple[float, float, float, float]] = field(default_factory=dict)
 
 
 def resolve_unit(doc, declared: str | None, warnings: list[str]) -> str:
@@ -157,6 +159,24 @@ def _anchor(entity) -> tuple[float, float]:
         except (AttributeError, TypeError, ValueError):
             continue
     return (0.0, 0.0)
+
+
+def _dim_text_box(entity) -> tuple[float, float, float, float] | None:
+    """Where a DIMENSION's text is drawn: the text entities of its rendered geometry block (WCS).
+    None when the block is missing or has no text - the balloon then falls back to the anchor."""
+    try:
+        blk = entity.get_geometry_block()
+        if blk is None:
+            return None
+        texts = [t for t in blk if t.dxftype() in ("MTEXT", "TEXT")]
+        if not texts:
+            return None
+        box = bbox.extents(texts, fast=False)
+        if not box.has_data:
+            return None
+        return (float(box.extmin.x), float(box.extmin.y), float(box.extmax.x), float(box.extmax.y))
+    except Exception:       # noqa: BLE001 - a missing text box only costs adjacency, not the row
+        return None
 
 
 def _measurable_extents(entities) -> tuple[tuple[float, float, float, float], list[str]]:
@@ -397,6 +417,7 @@ def _build_characteristic(cid: str, entity, parsed: CalloutParse, geometry: floa
         definition_points=points,
         anchor_x=anchor[0],
         anchor_y=anchor[1],
+        text_box=_dim_text_box(entity),
     )
 
     from ..limits import resolve_limits
@@ -461,7 +482,9 @@ def _frame_characteristics(e, next_cid, doc_sha: str, path: str, revision: str, 
             review=ReviewStatus.DETECTED,
             source=SourceLocation(document=path, document_sha256=doc_sha, revision=revision,
                                   page=1, entity_handle=e.dxf.handle, entity_type="TOLERANCE",
-                                  layer=e.dxf.layer, anchor_x=ax, anchor_y=ay - 4.0 * i),
+                                  layer=e.dxf.layer, anchor_x=ax, anchor_y=ay - 4.0 * i,
+                                  text_box=(ax, ay - 4.0 * (i + 1),
+                                            ax + 4.0 * (2 + len(tol.datums)) + 6.0, ay - 4.0 * i)),
             limits=(0.0, tol.zone))
         c.record("extractor", "extracted",
                  f"TOLERANCE handle {e.dxf.handle} row {i + 1} on layer {e.dxf.layer}")

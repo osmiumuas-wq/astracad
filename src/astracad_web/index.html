@@ -754,50 +754,85 @@ function band(r, ev) {
     typeof g === "number" ? h("div", { class: "muted", style: "font-size:12px" }, inside ? "The value measured from the drawing's geometry lies inside the limits." : "The value measured from the drawing's geometry lies OUTSIDE the limits.") : null);
 }
 
-function createViewer({ sheet, layout, fileKey, layoutKey, onPick }) {
+function createViewer({ sheet, layout, layoutKey, onPick }) {
   const stage = h("div", { class: "stage", tabindex: 0, "aria-label": "Drawing viewer. Drag to pan, scroll to zoom." });
   const tip = h("div", { class: "tip", hidden: true });
   const zoomLbl = h("span", { class: "zoom" }, "100%");
   const api_ = { el: null, select() {}, setStatus() {}, fit() {}, showEsc() {} };
   const btn = (icon, label, fn) => h("button", { class: "iconbtn", "aria-label": label, title: label, onclick: fn }, ic(icon));
-  if (!sheet || !fileKey) {
-    // runs made before the interactive sheet existed: the static layout image
-    api_.el = h("section", { class: "card viewer" }, h("div", { class: "vbar" }, h("b", { style: "font-size:13px" }, "Layout"), h("span", { class: "muted", style: "font-size:12px" }, "static image — re-run to get the interactive sheet")),
+  const pages = sheet?.pages || [];
+  if (!pages.length) {
+    // the source drawing is gone or changed since this run: the static layout image is all there is
+    api_.el = h("section", { class: "card viewer" }, h("div", { class: "vbar" }, h("b", { style: "font-size:13px" }, "Layout"), h("span", { class: "muted", style: "font-size:12px" }, "static image — the source drawing is not available unchanged, so no interactive sheet")),
       h("div", { class: "stage", style: "overflow:auto;cursor:default" }, layoutKey ? h("img", { src: "/file?key=" + encodeURIComponent(layoutKey), alt: "Drawing with inspection balloons", style: "max-width:100%;display:block;margin:auto;background:#fff" }) : empty("image", "No layout image")));
     return api_;
   }
-  const [x0, y0, x1, y1] = sheet.extents, W = sheet.width_px, H = sheet.height_px;
-  const P = (x, y) => [(x - x0) / (x1 - x0) * W, (y1 - y) / (y1 - y0) * H];
-  const unit = W / (x1 - x0);            // pixels per drawing unit
   const cam = s("g");
   const svg = s("svg", { "aria-hidden": "true" }, cam);
-  const paper = s("g", { class: "paper" }, s("rect", { x: 0, y: 0, width: W, height: H, fill: "#fff" }),
-    s("image", { href: "/file?key=" + encodeURIComponent(fileKey), x: 0, y: 0, width: W, height: H, preserveAspectRatio: "none" }));
-  const escG = s("g"), blG = s("g");
-  cam.append(paper, escG, blG);
-  stage.append(svg, tip, h("div", { class: "minimapnote" }, "sheet in drawing units · balloons drawn from the plan"));
-  const nodes = new Map();
-  for (const b of layout?.balloons || []) {
-    const [cx, cy] = P(...b.centre), r = b.radius * unit, [ax, ay] = P(...(b.leader?.[0] || b.centre));
-    const g = s("g", { class: "bl s-na", "data-cid": b.cid },
-      s("polyline", { class: "ld", points: (b.leader || []).map(p => P(...p).join(",")).join(" "), "vector-effect": "non-scaling-stroke" }),
-      s("circle", { class: "an", cx: ax, cy: ay, r: Math.max(2.5, r * 0.12) }),
-      s("circle", { class: "ring", cx, cy, r: r + 6 }),
-      s("circle", { class: "c", cx, cy, r, "vector-effect": "non-scaling-stroke" }),
-      s("text", { x: cx, y: cy, "font-size": r * 1.05 }, b.number));
-    g.querySelector(".ring").style.display = "none";
-    nodes.set(b.cid, { g, cx, cy, r, ax, ay, b });
-    g.addEventListener("click", e => { e.stopPropagation(); onPick?.(b.cid); });
-    g.addEventListener("pointerenter", () => { tip.hidden = false; tip.replaceChildren(...(api_.tipFor?.(b.cid) || [String(b.number)])); });
-    g.addEventListener("pointerleave", () => { tip.hidden = true; });
-    blG.append(g);
-  }
-  let k = 1, tx = 0, ty = 0, fitK = 1, anim = 0;
+  const pageNote = h("div", { class: "minimapnote" });
+  stage.append(svg, tip, pageNote);
+  const status = new Map();         // cid -> [tone, decided, dim]
+  let sel = null, selEsc = null, escList = [];
+  let nodes = new Map(), escG = null, blG = null, cur = null, W = 1, H = 1, P = null, unit = 1;
+  let k = 1, tx = 0, ty = 0, fitK = 1, anim = 0, fitted = false, tries = 0;
+  const pageOf = b => +(b.page || 1);
   const apply = () => { cam.setAttribute("transform", `translate(${tx} ${ty}) scale(${k})`); zoomLbl.textContent = Math.round(k / fitK * 100) + "%"; };
   const fit = () => {
-    const vw = stage.clientWidth, vh = stage.clientHeight; if (!vw || !vh) return;
+    const vw = stage.clientWidth, vh = stage.clientHeight;
+    // not laid out yet (still detached, or hidden): try again next frame rather than keep scale 1
+    if (!vw || !vh) { fitted = false; if (tries++ < 120) requestAnimationFrame(fit); return; }
+    tries = 0; fitted = true;
     fitK = Math.min(vw / W, vh / H) * 0.94; k = fitK; tx = (vw - W * k) / 2; ty = (vh - H * k) / 2; apply();
   };
+  const paint = (cid) => {
+    const n = nodes.get(cid); if (!n) return;
+    const [tone, decided, dim] = status.get(cid) || ["na", false, false];
+    n.g.setAttribute("class", `bl s-${tone}${decided ? " decided" : ""}${dim ? " dim" : ""}${sel === cid ? " sel" : ""}`);
+    n.g.querySelector(".ring").style.display = sel === cid ? "" : "none";
+    if (sel === cid) blG.append(n.g);
+  };
+  function show(pno) {
+    const pg = pages.find(p => +p.page === +pno) || pages[0];
+    cur = +pg.page;
+    const [x0, y0, x1, y1] = pg.extents; W = pg.width_px; H = pg.height_px;
+    P = (x, y) => [(x - x0) / (x1 - x0) * W, (y1 - y) / (y1 - y0) * H];
+    unit = W / (x1 - x0);
+    const paper = s("g", { class: "paper" }, s("rect", { x: 0, y: 0, width: W, height: H, fill: "#fff" }),
+      s("image", { href: "/file?key=" + encodeURIComponent(pg.key), x: 0, y: 0, width: W, height: H, preserveAspectRatio: "none" }));
+    escG = s("g"); blG = s("g");
+    cam.replaceChildren(paper, escG, blG);
+    nodes = new Map();
+    for (const b of (layout?.balloons || []).filter(b => pageOf(b) === cur)) {
+      const [cx, cy] = P(...b.centre), r = b.radius * unit, [ax, ay] = P(...(b.leader?.[0] || b.centre));
+      const g = s("g", { class: "bl s-na", "data-cid": b.cid },
+        s("polyline", { class: "ld", points: (b.leader || []).map(p => P(...p).join(",")).join(" "), "vector-effect": "non-scaling-stroke" }),
+        s("circle", { class: "an", cx: ax, cy: ay, r: Math.max(2.5, r * 0.14) }),
+        s("circle", { class: "ring", cx, cy, r: r + 6 }),
+        s("circle", { class: "c", cx, cy, r, "vector-effect": "non-scaling-stroke" }),
+        s("text", { x: cx, y: cy, "font-size": r * (String(b.number).length > 2 ? 0.8 : 1.05) }, b.number));
+      nodes.set(b.cid, { g, cx, cy, r, ax, ay, b });
+      g.addEventListener("click", e => { e.stopPropagation(); onPick?.(b.cid); });
+      g.addEventListener("pointerenter", () => { tip.hidden = false; tip.replaceChildren(...(api_.tipFor?.(b.cid) || [String(b.number)])); });
+      g.addEventListener("pointerleave", () => { tip.hidden = true; });
+      blG.append(g);
+    }
+    for (const cid of nodes.keys()) paint(cid);
+    drawEsc();
+    pageNote.textContent = pages.length > 1 ? `page ${cur} of ${pages.length} · balloons drawn from the plan` : "sheet in drawing units · balloons drawn from the plan";
+    pageBtns.forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.p === cur)));
+    fitted = false; fit();
+  }
+  function drawEsc() {
+    if (!escG) return;
+    escG.replaceChildren(...escList.filter(u => (+u.page || 1) === cur && typeof u.anchor_x === "number").map(u => {
+      // sized like a balloon (a printed size in the drawing's own unit), never "7 units"
+      const [cx, cy] = P(u.anchor_x, u.anchor_y), sz = 1.75 * ((layout?.balloons || [])[0]?.radius || 4) * unit;
+      const g = s("g", { class: "escm" + (selEsc === String(u._i) ? " sel" : ""), "data-i": u._i }, s("rect", { x: cx - sz, y: cy - sz * 0.6, width: sz * 2, height: sz * 1.2, rx: 2, "vector-effect": "non-scaling-stroke" }));
+      g.addEventListener("click", e => { e.stopPropagation(); onPick?.("esc:" + u._i); });
+      g.addEventListener("pointerenter", () => { tip.hidden = false; tip.replaceChildren(h("b", {}, sym(u.text)), h("div", {}, "Escalated: not accepted as a characteristic")); });
+      g.addEventListener("pointerleave", () => { tip.hidden = true; });
+      return g; }));
+  }
   const animateTo = (nk, ntx, nty) => {
     cancelAnimationFrame(anim);
     if (reduced()) { k = nk; tx = ntx; ty = nty; apply(); return; }
@@ -809,12 +844,12 @@ function createViewer({ sheet, layout, fileKey, layoutKey, onPick }) {
   const zoomAt = (f, px, py) => { const nk = Math.min(fitK * 40, Math.max(fitK * 0.5, k * f)); tx = px - (px - tx) * (nk / k); ty = py - (py - ty) * (nk / k); k = nk; apply(); };
   const zoomBy = f => zoomAt(f, stage.clientWidth / 2, stage.clientHeight / 2);
   const centreOn = (pts, minK) => {
+    if (!fitted) { fit(); if (!fitted) return; minK = fitK * 1.6; }
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
     const bx = Math.min(...xs), by = Math.min(...ys), bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by;
     const vw = stage.clientWidth, vh = stage.clientHeight;
-    let nk = Math.max(k, minK); nk = Math.min(nk, vw / (bw + 80), vh / (bh + 80)); nk = Math.max(nk, fitK);
+    let nk = Math.max(k, minK); nk = Math.min(nk, 0.3 * vw / Math.max(bw, 1), 0.3 * vh / Math.max(bh, 1)); nk = Math.max(nk, fitK);
     const cx = bx + bw / 2, cy = by + bh / 2;
-    // only move when the target is not already comfortably in view
     const sx = cx * k + tx, sy = cy * k + ty;
     if (nk === k && sx > vw * .15 && sx < vw * .85 && sy > vh * .15 && sy < vh * .85) return;
     animateTo(nk, vw / 2 - cx * nk, vh / 2 - cy * nk);
@@ -837,37 +872,39 @@ function createViewer({ sheet, layout, fileKey, layoutKey, onPick }) {
   stage.addEventListener("pointerup", up); stage.addEventListener("pointercancel", up);
   stage.addEventListener("click", e => { if (moved > 3) { e.stopPropagation(); e.preventDefault(); } }, true);
   stage.addEventListener("dblclick", e => { const rc = stage.getBoundingClientRect(); zoomAt(2, e.clientX - rc.left, e.clientY - rc.top); });
-  new ResizeObserver(() => { const wasFit = Math.abs(k - fitK) < 1e-9; if (wasFit || !stage.dataset.ready) { fit(); stage.dataset.ready = "1"; } }).observe(stage);
+  new ResizeObserver(() => { if (!fitted || Math.abs(k - fitK) < 1e-9) fit(); }).observe(stage);
   let showB = true;
-  const tgl = h("button", { class: "iconbtn", "aria-label": "Show balloons", "aria-pressed": "true", title: "Balloons (B)", onclick: () => { showB = !showB; blG.style.display = showB ? "" : "none"; tgl.setAttribute("aria-pressed", String(showB)); } }, ic("layers"));
+  const tgl = h("button", { class: "iconbtn", "aria-label": "Show balloons", "aria-pressed": "true", title: "Balloons (B)", onclick: () => { showB = !showB; cam.classList.toggle("hideb", !showB); blG.style.display = showB ? "" : "none"; tgl.setAttribute("aria-pressed", String(showB)); } }, ic("layers"));
   const legend = h("div", { class: "legend" }, [["#2456e6", "Detected"], ["#b86400", "Review"], ["#c62038", "Blocking"], ["#0f7a4f", "Approved"]].map(([c, l]) => h("span", {}, h("i", { style: `border-color:${c}` }), l)),
     h("span", {}, h("i", { style: "border-color:#b86400;border-style:dashed;border-radius:2px" }), "Escalated text"));
+  const pageBtns = pages.length > 1 ? pages.map(p => h("button", { "aria-pressed": "false", "data-p": p.page, onclick: () => show(p.page) }, "p" + p.page)) : [];
+  const pageSeg = pageBtns.length ? h("div", { class: "seg", role: "group", "aria-label": "Sheet page" }, pageBtns) : null;
   api_.el = h("section", { class: "card viewer", "aria-label": "Drawing" }, h("div", { class: "vbar" },
-    btn("minus", "Zoom out (−)", () => zoomBy(1 / 1.4)), zoomLbl, btn("plus", "Zoom in (+)", () => zoomBy(1.4)), btn("fit", "Fit sheet (F)", () => animateTo(fitK, (stage.clientWidth - W * fitK) / 2, (stage.clientHeight - H * fitK) / 2)), tgl, legend), stage);
+    btn("minus", "Zoom out (−)", () => zoomBy(1 / 1.4)), zoomLbl, btn("plus", "Zoom in (+)", () => zoomBy(1.4)),
+    btn("fit", "Fit sheet (F)", () => api_.fit()), tgl, pageSeg, legend), stage);
   api_.fit = () => animateTo(fitK, (stage.clientWidth - W * fitK) / 2, (stage.clientHeight - H * fitK) / 2);
   api_.zoomBy = zoomBy;
+  api_.refit = () => { fitted = false; tries = 0; fit(); };
   api_.toggle = () => tgl.click();
-  api_.setStatus = (cid, tone, decided, dim) => { const n = nodes.get(cid); if (!n) return; n.g.setAttribute("class", `bl s-${tone}${decided ? " decided" : ""}${dim ? " dim" : ""}${n.g.classList.contains("sel") ? " sel" : ""}`); };
+  api_.setStatus = (cid, tone, decided, dim) => { status.set(cid, [tone, decided, dim]); paint(cid); };
+  const pageOfCid = cid => { const b = (layout?.balloons || []).find(x => x.cid === cid); return b ? pageOf(b) : cur; };
   api_.select = (cid, move = true) => {
-    for (const [c, n] of nodes) { const on = c === cid; n.g.classList.toggle("sel", on); n.g.querySelector(".ring").style.display = on ? "" : "none"; if (on) blG.append(n.g); }
-    escG.querySelectorAll(".escm").forEach(m => m.classList.remove("sel"));
+    const prev = sel; sel = cid; selEsc = null;
+    if (cid && pageOfCid(cid) !== cur) { show(pageOfCid(cid)); }
+    if (prev && prev !== cid) paint(prev);
+    paint(cid); drawEsc();
     const n = nodes.get(cid); if (n && move) centreOn([[n.cx - n.r, n.cy - n.r], [n.cx + n.r, n.cy + n.r], [n.ax, n.ay]], fitK * 1.6);
   };
-  api_.showEsc = list => {
-    escG.replaceChildren(...list.filter(u => typeof u.anchor_x === "number" && typeof u.anchor_y === "number").map((u, i) => {
-      const [cx, cy] = P(u.anchor_x, u.anchor_y), sz = 7 * unit;
-      const g = s("g", { class: "escm", "data-i": u._i }, s("rect", { x: cx - sz, y: cy - sz * 0.6, width: sz * 2, height: sz * 1.2, rx: 2, "vector-effect": "non-scaling-stroke" }));
-      g.addEventListener("click", e => { e.stopPropagation(); onPick?.("esc:" + u._i); });
-      g.addEventListener("pointerenter", () => { tip.hidden = false; tip.replaceChildren(h("b", {}, sym(u.text)), h("div", {}, "Escalated: not accepted as a characteristic")); });
-      g.addEventListener("pointerleave", () => { tip.hidden = true; });
-      return g; }));
-  };
+  api_.showEsc = list => { escList = list; drawEsc(); };
   api_.selectEsc = i => {
-    for (const n of nodes.values()) { n.g.classList.remove("sel"); n.g.querySelector(".ring").style.display = "none"; }
-    escG.querySelectorAll(".escm").forEach(m => m.classList.toggle("sel", m.dataset.i === String(i)));
+    const prev = sel; sel = null; selEsc = String(i); if (prev) paint(prev);
+    const u = escList.find(x => String(x._i) === String(i));
+    if (u && (+u.page || 1) !== cur) show(+u.page || 1);
+    drawEsc();
     const m = escG.querySelector(`.escm[data-i="${i}"] rect`);
     if (m) { const x = +m.getAttribute("x"), y = +m.getAttribute("y"), w = +m.getAttribute("width"), hh = +m.getAttribute("height"); centreOn([[x, y], [x + w, y + hh]], fitK * 2); }
   };
+  show(pages[0].page);
   return api_;
 }
 
@@ -903,7 +940,7 @@ async function viewInspection(key, keepSel) {
 
   // viewer
   let sel = keepSel || null;
-  const viewer = createViewer({ sheet: d.sheet, layout: p.layout, fileKey: d.files.sheet, layoutKey: d.files.layout, onPick: c => pick(c) });
+  const viewer = createViewer({ sheet: d.sheet, layout: p.layout, layoutKey: d.files.layout, onPick: c => pick(c) });
   viewer.tipFor = cid => { const r = rows.find(x => x.cid === cid); if (!r) return [cid]; const [t, , l] = rowTone(r);
     return [h("b", {}, sym(r.callout)), h("div", {}, `#${r.balloon_no} · ${r.kind} · ${l}`), r.tolerance_text ? h("div", {}, sym(r.tolerance_text)) : null]; };
   viewer.showEsc?.(esc);
@@ -1102,6 +1139,7 @@ async function viewInspection(key, keepSel) {
     h("div", { class: "ws" }, viewer.el, h("div", { class: "rp" }, listCard, insp)),
     reviewbar,
     h("div", { style: "margin-top:14px" }, h("section", { class: "card" }, evBar, evBody)));
+  viewer.refit?.();            // attached now: fit synchronously, independent of frame timing
   drawList(); drawEsc();
   if (!sel && rows.length) sel = (rows.find(r => r.blocking) || rows.find(r => r.status === "needs_review") || rows[0]).cid;
   if (sel) pick(sel, !!keepSel); else drawInspector();

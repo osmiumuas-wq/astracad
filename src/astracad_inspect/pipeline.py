@@ -87,6 +87,10 @@ def read_drawing(path: str | Path, declared_unit: str | None = None,
                      f"{', '.join(sorted(RASTER_SUFFIXES))} are read")
 
 
+UNIT_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0, "in": 25.4, "ft": 304.8, "um": 0.001}
+MAX_SHEET_PAGES = 12
+
+
 def inspect_drawing(drawing_path: str | Path, out_dir: str | Path, *,
                     declared_unit: str | None = None, revision: str | None = None,
                     overrides: str | Path | None = None,
@@ -103,43 +107,78 @@ def inspect_drawing(drawing_path: str | Path, out_dir: str | Path, *,
     if overrides:
         apply_overrides(bundle, overrides)
         inputs.append(Path(overrides))
-    plan = build_plan(bundle, balloon_radius=balloon_radius)
+    # Balloon size is a printed size (4 mm radius) whatever unit the DXF is drawn in; a paged
+    # source (PDF, scan) is already in page millimetres.
+    to_units = 1.0 if route != "dxf-vector" else 1.0 / UNIT_MM.get(bundle.unit, 1.0)
+    r_units = balloon_radius * to_units
 
-    from .export.render import render_drawing, render_pdf_page, render_raster_page
+    # 1) the sheet, page by page, BEFORE any balloon: its ink is what the layout keeps clear of
+    from .balloons import Occupancy
+    from .export.render import render_layout, render_sheet, row_tone
+    from .plan import sheet_frames
+    frames = sheet_frames(bundle, margin=14.0 * to_units)
+    sheets: list[dict] = []
+    occupancy: dict = {}
+    sheet_errors: list[str] = []
+    for pno in sorted(frames)[:MAX_SHEET_PAGES]:
+        sp = out / (f"{stem}_sheet.png" if pno == 1 else f"{stem}_sheet_p{pno}.png")
+        try:
+            rec = render_sheet(src, route, frames[pno], sp, page=pno)
+            sheets.append({"image": sp.name, **rec})
+            occupancy[pno] = Occupancy.from_image(sp, rec["extents"], cell_mm=0.35 * to_units)
+        except Exception as e:  # noqa: BLE001 - that page falls back to ring placement; named below
+            sheet_errors.append(f"page {pno}: {type(e).__name__}: {e}")
+    if len(frames) > MAX_SHEET_PAGES:
+        sheet_errors.append(f"pages {MAX_SHEET_PAGES + 1}-{len(frames)} not rendered "
+                            f"(limit {MAX_SHEET_PAGES}); their balloons use ring placement")
+
+    # 2) balloons placed on clear paper next to their callouts
+    plan = build_plan(bundle, balloon_radius=r_units, gap=2.0 * to_units, margin=14.0 * to_units,
+                      frames=frames, occupancy=occupancy or None)
+    plan_dict = plan.to_dict()
+    plan_json = _write_json(out / f"{stem}.plan.json", plan_dict)
+    if sheets:
+        _write_json(out / f"{stem}.sheet.json", {**{k: sheets[0][k] for k in (
+            "image", "extents", "width_px", "height_px")}, "pages": sheets})
+
+    # 3) the layout pages: the same sheet with the balloons drawn over it
+    tones = {r["cid"]: row_tone(r) for r in plan_dict["rows"]}
+    layout_pngs: list[Path] = []
+    for sh in sheets:
+        pno = sh["page"]
+        lp = out / (f"{stem}_layout.png" if pno == 1 else f"{stem}_layout_p{pno}.png")
+        render_layout(out / sh["image"], sh["extents"],
+                      [b for b in plan.layout.balloons if b.page == pno], tones, lp,
+                      title=f"{stem}  -  inspection layout",
+                      subtitle=f"rev {plan.revision}   |   {len(plan.layout.balloons)} balloons   |   "
+                               f"units {plan.unit}", page=pno, pages=len(sheets))
+        layout_pngs.append(lp)
     png = out / f"{stem}_layout.png"
-    render = {"pdf-vector": render_pdf_page, "raster-ocr": render_raster_page}.get(route, render_drawing)
-    render_info = render(src, plan.layout, png,
-                         caption=f"{stem} rev {plan.revision} - inspection layout")
-
-    plan_json = _write_json(out / f"{stem}.plan.json", plan.to_dict())
-
-    # balloon-free sheet + its coordinate frame for the interactive viewer. Optional: the report
-    # does not depend on it, so a failure is recorded rather than costing the run.
-    from .export.render import render_sheet
-    sheet_png = out / f"{stem}_sheet.png"
-    try:
-        sheet = render_sheet(src, route, plan.layout, sheet_png)
-        _write_json(out / f"{stem}.sheet.json", {"image": sheet_png.name, **sheet})
-    except Exception as e:  # noqa: BLE001 - viewer image only; named in the record below
-        sheet = None
-        sheet_error = f"{type(e).__name__}: {e}"
+    not_drawn = [w for sh in sheets for w in sh.get("entities_not_drawn", [])]
+    if not layout_pngs:
+        # no sheet could be rendered: the previous renderer, which draws the source directly
+        from .export.render import render_drawing, render_pdf_page, render_raster_page
+        render = {"pdf-vector": render_pdf_page, "raster-ocr": render_raster_page}.get(route, render_drawing)
+        not_drawn = render(src, plan.layout, png,
+                           caption=f"{stem} rev {plan.revision} - inspection layout")["entities_not_drawn"]
+        layout_pngs = [png]
 
     record = build_record(inputs, route=route, plan=plan)
-    for what in render_info["entities_not_drawn"]:
+    for what in not_drawn:
         record.limitations.append(
             f"layout preview: {what} could not be decomposed by ezdxf and is absent from the image; "
             "the extraction and the measured extents cover the entities that could be read")
-    if sheet is None:
-        record.limitations.append(f"interactive sheet image not produced ({sheet_error}); "
-                                  "the layout PNG and report are unaffected")
-    stamp(record, [png, plan_json])
+    for e in sheet_errors:
+        record.limitations.append(f"sheet image not produced for {e}; the layout falls back to ring "
+                                  "placement there")
+    stamp(record, [*layout_pngs, plan_json])
     record.limitations.append(
         "the PDF and XLSX hashes are recorded in provenance.json; an artefact cannot carry its "
         "own hash, so the report does not claim one")
 
     from .export.pdf import write_report
     from .export.xlsx import write_workbook
-    pdf = write_report(plan, record, png, out / f"{stem}_inspection_report.pdf")
+    pdf = write_report(plan, record, layout_pngs, out / f"{stem}_inspection_report.pdf")
     xlsx = write_workbook(plan, record, out / f"{stem}_inspection_table.xlsx")
 
     verification = verify_artifacts(plan, pdf, xlsx, plan_json)

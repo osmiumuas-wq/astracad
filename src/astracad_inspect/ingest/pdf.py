@@ -176,21 +176,52 @@ class SheetGeometry:
         return edge < 15.0 and (_BARE_INT.match(text) is not None or re.fullmatch(r"[A-Z]", text) is not None)
 
     def is_balloon(self, text: str, cx: float, cy: float, th: float) -> bool:
-        """A bare item number centred in a circle: points at a common radius all round it."""
+        """A bare item number inside a drawn circle that hugs it.
+
+        Candidate points at each radius band around the number are fitted with a circle; it is a
+        balloon only if the fit is tight (a drawn circle, not nearby dimension lines that happen to
+        surround the text), its centre is on the number, it covers >= 300 deg, its radius suits the
+        text, and nothing is drawn inside it. Each band is judged on its own, so a neighbouring
+        balloon or a leader cannot drag the estimate off (SOLIDWORKS "leg": stacked item balloons
+        were read as dimensions; "box_intro": dimension lines around "95" are not a ring)."""
         import numpy as np
         if not _BARE_INT.match(text):
             return False
         d = np.hypot(self.pts[:, 0] - cx, self.pts[:, 1] - cy)
-        ring = (d > 0.45 * th) & (d < 3.5 * th)
-        if ring.sum() < 8:
+        win = (d > 0.35 * th) & (d < 2.6 * th)
+        if win.sum() < 8:
             return False
-        r = d[ring]
-        med = np.median(r)
-        on = np.abs(r - med) < 0.12 * med
-        if on.sum() < 8:
-            return False
-        ang = np.degrees(np.arctan2(self.pts[ring][on, 1] - cy, self.pts[ring][on, 0] - cx))
-        return len(np.unique((ang // 30).astype(int))) >= 9          # >= 270 deg of coverage
+        r, p = d[win], self.pts[win]
+        for rad in np.unique(np.round(r / (0.1 * th)) * (0.1 * th)):
+            band = np.abs(r - rad) < 0.2 * rad
+            if band.sum() < 8:
+                continue
+            q = p[band]
+            # algebraic circle fit: x^2 + y^2 + D x + E y + F = 0
+            A = np.column_stack([q[:, 0], q[:, 1], np.ones(len(q))])
+            b = -(q[:, 0] ** 2 + q[:, 1] ** 2)
+            try:
+                (D, E, F), *_ = np.linalg.lstsq(A, b, rcond=None)
+            except np.linalg.LinAlgError:
+                continue
+            fx, fy = -D / 2, -E / 2
+            fr2 = fx * fx + fy * fy - F
+            if fr2 <= 0:
+                continue
+            fr = float(np.sqrt(fr2))
+            if not (0.4 * th <= fr <= 2.2 * th) or np.hypot(fx - cx, fy - cy) > 0.35 * fr:
+                continue
+            dq = np.hypot(q[:, 0] - fx, q[:, 1] - fy)
+            on = np.abs(dq - fr) < 0.04 * fr
+            if on.sum() < 8:
+                continue
+            ang = np.degrees(np.arctan2(q[on, 1] - fy, q[on, 0] - fx))
+            if len(np.unique((ang // 30).astype(int))) < 10:          # >= 300 deg of coverage
+                continue
+            inner = np.hypot(self.pts[:, 0] - fx, self.pts[:, 1] - fy) < 0.75 * fr
+            if inner.sum() <= 2:
+                return True
+        return False
 
     def diameter_glyph_left_of(self, box, th: float) -> bool:
         """SOLIDWORKS draws the ⌀ sign as vector graphics, not text: a small ring with a slash just
@@ -546,7 +577,8 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
                     tolerance=tol, state=ProvenanceState.PARSED, review=ReviewStatus.NEEDS_REVIEW,
                     source=SourceLocation(document=str(p), document_sha256=doc_sha, revision=revision,
                                           page=g.page, entity_handle=handle, entity_type="PDF_FRAME",
-                                          layer="", anchor_x=cx, anchor_y=cy),
+                                          layer="", anchor_x=cx, anchor_y=cy,
+                                          text_box=tuple(float(v) for v in g.box)),
                     limits=(0.0, zone))
                 c.record("extractor", "extracted",
                          f"zone {norm} inside a frame drawn as vector graphics; symbol {symbol} "
@@ -578,7 +610,8 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
                 tolerance=tol, state=ProvenanceState.PARSED, review=ReviewStatus.NEEDS_REVIEW,
                 source=SourceLocation(document=str(p), document_sha256=doc_sha, revision=revision,
                                       page=g.page, entity_handle=handle, entity_type="PDF_TEXT",
-                                      layer="", anchor_x=cx, anchor_y=cy),
+                                      layer="", anchor_x=cx, anchor_y=cy,
+                                      text_box=tuple(float(v) for v in g.box)),
                 limits=(0.0, tol.zone))
             c.record("extractor", "extracted", f"PDF text run(s) {handle} read as a frame")
             for note in frame.notes:
@@ -612,7 +645,8 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
             state=ProvenanceState.PARSED, review=ReviewStatus.NEEDS_REVIEW,
             source=SourceLocation(document=str(p), document_sha256=doc_sha, revision=revision,
                                   page=g.page, entity_handle=handle, entity_type="PDF_TEXT",
-                                  layer="", anchor_x=cx, anchor_y=cy),
+                                  layer="", anchor_x=cx, anchor_y=cy,
+                                  text_box=tuple(float(v) for v in g.box)),
             limits=resolve_limits(parsed.nominal, parsed.tolerance, unit))
         c.record("extractor", "extracted",
                  f"PDF text run(s) {handle} on page {g.page}, angle {g.angle:g} deg")
@@ -672,4 +706,5 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
         unit=unit, extents=extents, content_extents=content_extents, notes=notes,
         page_count=len(pdf), characteristics=characteristics, uninterpreted=uninterpreted,
         census=census, warnings=warnings, feature_support=feature_support,
-        dxf_version="", dimstyle_notes=[])
+        dxf_version="", dimstyle_notes=[],
+        page_frames={i: (0.0, 0.0, w, h) for i, (w, h) in enumerate(page_sizes, start=1)})
