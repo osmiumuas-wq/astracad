@@ -35,10 +35,16 @@ class Workspace:
     """Everything the pages read. Separate from HTTP so it can be tested without a socket."""
 
     def __init__(self, db: str | Path, runs: list[str | Path], orchestrator_factory=None,
-                 status_ttl_s: float = 30.0):
+                 status_ttl_s: float = 30.0, projects: str | Path | None = None):
         self.db = Path(db)
         self.runs = [Path(r).resolve() for r in runs]
         self.runs[0].mkdir(parents=True, exist_ok=True)
+        # projects: preserved source documents + their runs; the root is also a run folder, so
+        # project runs appear in every list and their files resolve through the same keys
+        from astracad_core.projects import ProjectStore
+        self.projects = ProjectStore(projects) if projects else None
+        if self.projects is not None and self.projects.root not in self.runs:
+            self.runs.append(self.projects.root)
         self._orch_factory = orchestrator_factory
         self._status: tuple[float, list] | None = None
         self._status_ttl = status_ttl_s
@@ -133,6 +139,7 @@ class Workspace:
                 "approvable": plan.get("approvable"), "gate": plan.get("gate"),
                 "exports_passed": sum(1 for c in ver if c.get("outcome") == "passed"),
                 "exports_total": len(ver), "created_utc": prov.get("created_utc"),
+                "project": self._project_of(plan_path),
                 "modified": plan_path.stat().st_mtime,
             })
         return sorted(out, key=lambda r: -r["modified"])
@@ -166,7 +173,14 @@ class Workspace:
                                   "height_px": pg["height_px"], "key": self.key_for(img)})
         for lp in sorted(plan_path.parent.glob(f"{stem}_layout_p*.png")):
             files[lp.stem[len(stem) + 1:]] = self.key_for(lp)
-        return {"key": key, "name": stem, "plan": {k: plan.get(k) for k in (
+        pid = self._project_of(plan_path)
+        project = None
+        if pid and self.projects is not None:
+            try:
+                project = {"id": pid, "name": self.projects.get(pid).name}
+            except (OSError, ValueError, KeyError):
+                project = None
+        return {"key": key, "name": stem, "project": project, "plan": {k: plan.get(k) for k in (
                     "source_document", "source_sha256", "revision", "unit", "rows", "checks",
                     "uninterpreted", "gate", "approvable", "warnings", "feature_support",
                     "layout", "title_block", "coverage", "open_gaps")},
@@ -210,6 +224,62 @@ class Workspace:
         except Exception:  # noqa: BLE001 - the static layout image remains; nothing else depends on it
             return
 
+    # ---- projects ----------------------------------------------------------------------------
+    def _project_of(self, path: Path) -> str | None:
+        if self.projects is None:
+            return None
+        try:
+            rel = path.resolve().relative_to(self.projects.root).parts
+        except ValueError:
+            return None
+        return rel[0] if len(rel) > 2 and rel[1] == "runs" else None
+
+    def _need_projects(self):
+        if self.projects is None:
+            raise FileNotFoundError("projects are not enabled (start with --projects DIR)")
+        return self.projects
+
+    def projects_list(self) -> list[dict]:
+        if self.projects is None:
+            return []
+        runs = self.inspections()
+        out = []
+        for p in self.projects.list():
+            mine = [r for r in runs if r.get("project") == p.id]
+            out.append({"id": p.id, "name": p.name, "description": p.description,
+                        "created_utc": p.created_utc, "sources": len(p.sources), "runs": len(mine),
+                        "releasable": sum(1 for r in mine if r["approvable"]),
+                        "last_run": max((r["modified"] for r in mine), default=None)})
+        return out
+
+    def project(self, pid: str) -> dict:
+        ps = self._need_projects()
+        p = ps.get(pid)
+        d = p.to_dict()
+        for s in d["sources"]:
+            s["key"] = self.key_for(ps.root / pid / s["relpath"])
+        d["runs"] = [r for r in self.inspections() if r.get("project") == pid]
+        return d
+
+    def create_project(self, body: dict) -> dict:
+        return self._need_projects().create(str(body.get("name", "")),
+                                            str(body.get("description") or "")).to_dict()
+
+    def upload(self, pid: str, filename: str, stream, length: int, by: str = "") -> dict:
+        from dataclasses import asdict
+        rec = self._need_projects().add_source(pid, filename, stream, length, by)
+        return {**asdict(rec), "relpath": rec.relpath}
+
+    def inspect_source(self, body: dict) -> dict:
+        """Inspect a preserved source: its hash is re-checked first, the run goes into the project,
+        and run.json names the project and the exact bytes (SHA-256) it was made from."""
+        ps = self._need_projects()
+        pid, sha = str(body.get("project", "")), str(body.get("source", ""))
+        src = ps.source_path(pid, sha, verify=True)
+        return self.run_inspection(str(src), body.get("units"), body.get("revision"),
+                                   body.get("general_tolerance"), runs_root=ps.runs_dir(pid),
+                                   origin={"project": pid, "source_sha256": sha})
+
     def changes(self) -> list[dict]:
         out = []
         for _, p in self._walk("*.changes.json"):
@@ -227,7 +297,8 @@ class Workspace:
     # ---- the one action -----------------------------------------------------------------------
     def run_inspection(self, drawing: str, units: str | None, revision: str | None,
                        general_tolerance: str | None = None, overrides: str | None = None,
-                       parent: str | None = None, folder_name: str | None = None) -> dict:
+                       parent: str | None = None, folder_name: str | None = None,
+                       runs_root: Path | None = None, origin: dict | None = None) -> dict:
         from astracad_inspect.pipeline import inspect_drawing
         src = Path(drawing).expanduser()
         if not src.is_file():
@@ -238,15 +309,17 @@ class Workspace:
         # Stem + type + second is not unique (part.dxf and part.pdf in one second collided and the
         # second run overwrote the first), so a counter makes every run its own folder.
         base = folder_name or f"{src.stem}_{src.suffix.lower().lstrip('.')}_{time.strftime('%Y%m%d-%H%M%S')}"
-        out, n = self.runs[0] / base, 1
+        root = Path(runs_root) if runs_root else self.runs[0]
+        out, n = root / base, 1
         while out.exists():
             n += 1
-            out = self.runs[0] / f"{base}_{n}"
+            out = root / f"{base}_{n}"
         res = inspect_drawing(src, out, declared_unit=units or None, revision=revision or None,
                               general_tolerance=general_tolerance or None, overrides=overrides)
         meta = {"drawing": str(src.resolve()), "units": units or None, "revision": revision or None,
                 "general_tolerance": general_tolerance or None, "overrides": overrides,
-                "parent": parent, "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+                "parent": parent, "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                **(origin or {})}
         (out / f"{src.stem}.run.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
         return {"key": self.key_for(res.artifacts["plan_json"]), "delivered": res.delivered,
                 "approvable": res.plan.approvable, "folder": str(out)}
@@ -348,11 +421,14 @@ class Workspace:
             raise ValueError("the drawing changed since this plan was made; re-run and review again")
         n = 2
         base = plan_path.parent.name.split("_rev")[0]
-        while (self.runs[0] / f"{base}_rev{n}").exists():
+        root = plan_path.parent.parent
+        while (root / f"{base}_rev{n}").exists():
             n += 1
         res = self.run_inspection(str(drawing), meta.get("units") or plan.get("unit"),
                                   meta.get("revision"), meta.get("general_tolerance"),
-                                  overrides=str(rp), parent=key, folder_name=f"{base}_rev{n}")
+                                  overrides=str(rp), parent=key, folder_name=f"{base}_rev{n}",
+                                  runs_root=root, origin={k: meta[k] for k in ("project", "source_sha256")
+                                                          if k in meta})
         # the new run carries the decisions it was made from, so its own folder is the full record
         new_dir = Path(res["folder"])
         import shutil
@@ -452,6 +528,10 @@ def make_handler(ws: Workspace):
                 if u.path == "/api/inspection":
                     k = q.get("key", [""])[0]
                     return self._json({**ws.inspection(k), **ws.review_state(k)})
+                if u.path == "/api/projects":
+                    return self._json(ws.projects_list())
+                if u.path == "/api/project":
+                    return self._json(ws.project(q.get("id", [""])[0]))
                 if u.path == "/api/changes":
                     return self._json(ws.changes())
                 if u.path == "/file":
@@ -469,6 +549,56 @@ def make_handler(ws: Workspace):
             except Exception as ex:              # report, never crash the server
                 return self._error(HTTPStatus.INTERNAL_SERVER_ERROR, f"{type(ex).__name__}: {ex}")
 
+        def _drain(self, n: int, cap: int) -> None:
+            left = n if n <= cap else 0
+            while left > 0:
+                chunk = self.rfile.read(min(left, 1 << 20))
+                if not chunk:
+                    break
+                left -= len(chunk)
+
+        def _upload(self, n: int):
+            """Raw request body = the file (no multipart parsing). Checks first, and every refusal
+            drains the body before answering (see do_POST)."""
+            from astracad_core.projects import MAX_SOURCE_BYTES, SourceRejected
+            q = parse_qs(urlparse(self.path).query)
+            refuse = None
+            if not self._host_ok():
+                refuse = (HTTPStatus.FORBIDDEN, "host not allowed")
+            elif self.headers.get("X-AstraCAD") != "1":
+                refuse = (HTTPStatus.FORBIDDEN, "missing X-AstraCAD header")
+            elif n <= 0:
+                refuse = (HTTPStatus.LENGTH_REQUIRED, "Content-Length required")
+            elif n > MAX_SOURCE_BYTES:
+                refuse = (HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                          f"file larger than {MAX_SOURCE_BYTES // 2**20} MiB")
+            if refuse:
+                self._drain(n, MAX_SOURCE_BYTES)
+                self.close_connection = True
+                return self._error(*refuse)
+            class _Counted:                     # how much of the body the store consumed
+                def __init__(self, f):
+                    self.f, self.n = f, 0
+
+                def read(self, k):
+                    b = self.f.read(k)
+                    self.n += len(b)
+                    return b
+
+            body = _Counted(self.rfile)
+            try:
+                rec = ws.upload(q.get("project", [""])[0], q.get("name", [""])[0], body, n,
+                                q.get("by", [""])[0])
+                return self._json(rec, 201)
+            except (SourceRejected, PermissionError, FileNotFoundError, ValueError) as ex:
+                self._drain(n - body.n, MAX_SOURCE_BYTES)    # whatever the store did not read
+                self.close_connection = True
+                code = (HTTPStatus.UNSUPPORTED_MEDIA_TYPE if isinstance(ex, SourceRejected) else
+                        HTTPStatus.FORBIDDEN if isinstance(ex, PermissionError) else
+                        HTTPStatus.NOT_FOUND if isinstance(ex, FileNotFoundError) else
+                        HTTPStatus.BAD_REQUEST)
+                return self._error(code, str(ex))
+
         def do_POST(self):                      # noqa: N802
             # Read the request body BEFORE any reply: answering 403 with the client still sending
             # made Windows reset the connection (intermittent ConnectionAborted in tests).
@@ -476,6 +606,8 @@ def make_handler(ws: Workspace):
                 n = int(self.headers.get("Content-Length") or 0)
             except ValueError:
                 n = 0
+            if urlparse(self.path).path == "/api/upload":
+                return self._upload(n)
             if n > (1 << 16):
                 # discard (bounded) what the client is sending, then refuse: replying mid-upload
                 # made Windows abort the connection before the 413 could be read
@@ -495,6 +627,10 @@ def make_handler(ws: Workspace):
             u = urlparse(self.path)
             try:
                 body = json.loads(raw or b"{}")
+                if u.path == "/api/projects":
+                    return self._json(ws.create_project(body))
+                if u.path == "/api/inspect" and body.get("source"):
+                    return self._json(ws.inspect_source(body))
                 if u.path == "/api/inspect":
                     return self._json(ws.run_inspection(str(body.get("drawing", "")),
                                                         body.get("units"), body.get("revision"),

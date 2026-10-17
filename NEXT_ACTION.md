@@ -12,6 +12,15 @@ now inspects the part read-only and lists candidate dimensions with ready comman
 selected (exit 3). Verified live on SW 2026, including sketch dimensions: "change the diameter of
 shaft.SLDPRT to 30 mm" → pick D1@Sketch1 → edit → STEP re-read 30×30×100.
 
+## 0. Done 2026-10-17: projects, upload, preserved originals (Part 9 items 1-3)
+
+    py -m astracad_web --projects %USERPROFILE%\.astracad\projects --runs OUT
+    → Projects → New project → drop drawings → Inspect
+
+Uploads are checked by content, stored read-only by SHA-256 and re-hashed before each inspection;
+runs and re-issues stay inside the project. **Easiest way to give me the real-drawing corpus below:
+create a project and drop the drawings in** — they are preserved exactly as received.
+
 ## 1. Real-drawing corpus (M2) — highest priority
 
 **Why:** every inspection accuracy figure so far comes from two machine-generated drawings. No claim

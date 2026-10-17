@@ -327,6 +327,24 @@ table.dt { border-collapse: separate; border-spacing: 0; width: 100%; font-size:
 .esc .tx { font-family: var(--mono); font-weight: 600; overflow-wrap: anywhere; }
 .esc .why { font-size: 12.5px; color: var(--muted); }
 
+/* projects */
+.newproj { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 12px; align-items: end; }
+@media (max-width: 860px) { .newproj { grid-template-columns: minmax(0, 1fr); } }
+.projcard { text-align: left; width: 100%; color: inherit; font: inherit; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.projcard:hover { border-color: var(--accent-line); box-shadow: var(--shadow-lg); }
+.projcard .pt { font-weight: 650; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pstats { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 12.5px; color: var(--ink-2); }
+.pstats b { font-variant-numeric: tabular-nums; }
+.drop { display: flex; align-items: center; gap: 14px; padding: 22px; border: 1.5px dashed var(--line-strong); border-radius: var(--radius);
+  background: var(--surface-2); cursor: pointer; transition: border-color .15s, background .15s; }
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop .dic { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); flex: none; }
+.uplist { display: grid; gap: 8px; margin-top: 12px; }
+.uplist:empty { display: none; }
+@media (max-width: 520px) { .drop { flex-direction: column; text-align: center; } .uprow { grid-template-columns: 18px minmax(0, 1fr); } }
+.uprow { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.uprow .hbar i { transition: width .15s; }
+
 /* palette / toasts */
 dialog.pal { width: min(640px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--surface);
   color: var(--ink); box-shadow: var(--shadow-lg); margin-top: 12vh; }
@@ -395,6 +413,7 @@ pre.code { margin: 0; white-space: pre-wrap; word-break: break-word; font-family
       <span><b>ASTraCAD</b><small>Inspection workspace</small></span>
     </a>
     <div class="navlabel">Quality</div>
+    <button class="nav" data-tab="projects"><svg class="i" data-i="file"></svg><span class="lbl">Projects</span><span class="count" id="n-proj"></span></button>
     <button class="nav" data-tab="inspections"><svg class="i" data-i="scan"></svg><span class="lbl">Inspections</span><span class="count" id="n-insp"></span></button>
     <button class="nav" data-tab="changes"><svg class="i" data-i="diff"></svg><span class="lbl">Revision changes</span></button>
     <div class="navlabel">Automation</div>
@@ -577,6 +596,7 @@ const pal = document.getElementById("pal"), palq = document.getElementById("palq
 let palItems = [], palSel = 0;
 function palBase() {
   return [
+    { label: "Projects", group: "Page", icon: "file", run: () => location.hash = "#projects" },
     { label: "Inspections", group: "Page", icon: "scan", run: () => location.hash = "#inspections" },
     { label: "Revision changes", group: "Page", icon: "diff", run: () => location.hash = "#changes" },
     { label: "Tasks", group: "Page", icon: "tasks", run: () => location.hash = "#tasks" },
@@ -911,7 +931,8 @@ function createViewer({ sheet, layout, layoutKey, onPick }) {
 async function viewInspection(key, keepSel) {
   const d = await api("/api/inspection?key=" + encodeURIComponent(key));
   const p = d.plan, rows = p.rows || [], ev = d.evidence || {};
-  crumbs({ href: "#inspections", label: "Inspections" }, d.name);
+  if (d.project) crumbs({ href: "#projects", label: "Projects" }, { href: "#project=" + encodeURIComponent(d.project.id), label: d.project.name }, d.name);
+  else crumbs({ href: "#inspections", label: "Inspections" }, d.name);
   const decided = Object.fromEntries((d.review?.characteristics || []).map(e => [e.cid, e]));
   const annDecided = Object.fromEntries((d.review?.annotations || []).map(e => [e.text, e]));
   const esc = (p.uninterpreted || []).map((u, i) => ({ ...u, _i: i }));
@@ -1222,14 +1243,145 @@ async function viewCad() {
     h("p", { class: "muted", style: "margin-top:16px;font-size:13px" }, "Creating or editing parts is deliberately not offered here. It runs from the CLI with an explicit --authorize: py -m astracad_cad build | spec | edit …"));
 }
 
+// ---------- Projects ----------
+const fmtBytes = n => n < 1024 ? n + " B" : n < 1 << 20 ? (n / 1024).toFixed(1) + " KiB" : (n / (1 << 20)).toFixed(1) + " MiB";
+const ACCEPT = ".dxf,.pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp";
+const KIND = { "image/vnd.dxf": "DXF", "application/pdf": "PDF", "image/png": "Scan PNG", "image/jpeg": "Scan JPEG", "image/tiff": "Scan TIFF", "image/bmp": "Scan BMP" };
+const runsTable = (rows, opts = {}) => dataTable([
+  { k: "name", label: "Drawing", render: r => h("div", {}, h("div", { class: "title" }, r.name, /_rev\d+$/.test(r.folder || "") ? [" ", h("span", { class: "pill t-accent", title: "a new run made from a reviewed one" }, ic("link"), "re-issue " + r.folder.match(/_rev(\d+)$/)[1])] : ""), opts.short ? null : h("div", { class: "subline mono", title: r.document || r.folder }, r.document || r.folder)) },
+  { k: "route", label: "Source", render: r => routeTag(r.route) },
+  { k: "revision", label: "Rev", render: r => h("span", { class: "mono" }, r.revision ?? "–") },
+  { k: "rows", label: "Characteristics", num: true },
+  { k: "needs_review", label: "Findings", render: health, sort: r => (r.blocking || 0) * 1000 + (r.needs_review || 0) },
+  { k: "escalated", label: "Escalated", num: true },
+  { k: "exports_passed", label: "Exports", render: r => r.exports_total && r.exports_passed === r.exports_total ? pill("ok", "check", `${r.exports_passed}/${r.exports_total}`) : pill("bad", "x", `${r.exports_passed}/${r.exports_total}`) },
+  { k: "approvable", label: "Release gate", render: r => r.approvable ? pill("ok", "shield", "Releasable") : pill("warn", "alert", "Not releasable") },
+  { k: "modified", label: "Updated", render: r => h("span", { class: "muted nowrap", title: when(r.modified) }, ago(r.modified)) },
+], rows, { onRow: r => location.hash = "#inspection=" + encodeURIComponent(r.key), initial: { k: "modified", dir: -1 } });
+
+async function viewProjects() {
+  crumbs("Projects");
+  const list = await api("/api/projects");
+  const name = h("input", { class: "input", required: true, maxlength: 120, placeholder: "e.g. Pump housing, rev C", autocomplete: "off" });
+  const desc = h("input", { class: "input", maxlength: 400, placeholder: "optional" });
+  const go = h("button", { class: "btn primary", type: "submit" }, ic("plus"), "Create project");
+  const form = h("form", { class: "newproj", onsubmit: async ev => {
+      ev.preventDefault(); go.disabled = true;
+      try { const p = await post("/api/projects", { name: name.value, description: desc.value }); toast("Project created"); location.hash = "#project=" + p.id; }
+      catch (e) { toast("Not created: " + e.message, "bad"); go.disabled = false; }
+    } },
+    h("label", { class: "field" }, h("span", {}, "Project name"), name),
+    h("label", { class: "field" }, h("span", {}, "Description"), desc),
+    h("div", { class: "field" }, go));
+  const cards = list.map(p => h("button", { class: "card appcard projcard", onclick: () => location.hash = "#project=" + p.id },
+    h("div", { class: "nm" }, h("span", { class: "ic" }, ic("file", "i lg")), h("div", { style: "min-width:0;text-align:left" }, h("div", { class: "pt" }, p.name),
+      h("div", { class: "muted mono", style: "font-size:11.5px;font-weight:400" }, p.id))),
+    p.description ? h("div", { class: "muted", style: "font-size:13px;text-align:left" }, p.description) : null,
+    h("div", { class: "pstats" },
+      h("span", {}, h("b", {}, p.sources), " drawing" + (p.sources === 1 ? "" : "s")),
+      h("span", {}, h("b", {}, p.runs), " run" + (p.runs === 1 ? "" : "s")),
+      p.runs ? (p.releasable ? pill("ok", "shield", `${p.releasable} releasable`) : pill("warn", "alert", "none releasable")) : pill("na", "clock", "not inspected"),
+      h("span", { class: "muted", style: "margin-left:auto" }, p.last_run ? ago(p.last_run) : ago(p.created_utc)))));
+  main.replaceChildren(
+    h("div", { class: "ph" }, h("div", {}, h("h1", {}, "Projects"),
+      h("p", {}, "A project keeps the original drawings exactly as received — stored by SHA-256, read-only — and every inspection made from them."))),
+    h("div", { class: "stack" },
+      card("New project", null, null, h("div", { class: "body" }, form)),
+      list.length ? h("div", { class: "grid2" }, cards) : card(null, null, null, empty("file", "No projects yet", "Create one above, then add drawings to it."))));
+  if (!list.length) name.focus();
+}
+
+function uploadFile(pid, file, onProgress) {
+  // XMLHttpRequest for upload progress; the body is the file itself (no multipart)
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open("POST", `/api/upload?project=${encodeURIComponent(pid)}&name=${encodeURIComponent(file.name)}&by=${encodeURIComponent(store.get("astracad.reviewer"))}`);
+    x.setRequestHeader("X-AstraCAD", "1");
+    x.setRequestHeader("Content-Type", "application/octet-stream");
+    x.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+    x.onload = () => { let d = {}; try { d = JSON.parse(x.responseText); } catch (e) {}
+      x.status >= 200 && x.status < 300 ? resolve(d) : reject(new Error(d.error || x.statusText || ("HTTP " + x.status))); };
+    x.onerror = () => reject(new Error("the connection failed"));
+    x.send(file);
+  });
+}
+
+async function viewProject(pid) {
+  const d = await api("/api/project?id=" + encodeURIComponent(pid));
+  crumbs({ href: "#projects", label: "Projects" }, d.name);
+  const queue = h("div", { class: "uplist", "aria-live": "polite" });
+  const picker = h("input", { type: "file", accept: ACCEPT, multiple: true, hidden: true, onchange: () => { send([...picker.files]); picker.value = ""; } });
+  async function send(files) {
+    if (!files.length) return;
+    let ok = 0;
+    for (const f of files) {
+      const bar = h("i", { style: "width:0%" });
+      const st = h("span", { class: "muted" }, "uploading…");
+      const row = h("div", { class: "uprow" }, ic("file"), h("div", { style: "min-width:0" }, h("div", { class: "title", style: "overflow:hidden;text-overflow:ellipsis;white-space:nowrap" }, f.name),
+        h("div", { class: "hbar", style: "margin-top:5px" }, bar)), h("span", { class: "muted nowrap" }, fmtBytes(f.size)), st);
+      queue.append(row);
+      try {
+        const rec = await uploadFile(pid, f, p => { bar.style.width = (p * 100).toFixed(0) + "%"; bar.className = "info"; });
+        bar.style.width = "100%"; bar.className = "ok";
+        st.replaceChildren(rec.uploads > 1 ? pill("na", "check", "already in project") : pill("ok", "check", "preserved"));
+        ok++;
+      } catch (e) { bar.className = "bad"; bar.style.width = "100%"; st.replaceChildren(pill("bad", "x", e.message)); }
+    }
+    if (ok) { toast(`${ok} drawing(s) preserved`); setTimeout(() => viewProject(pid), 600); }
+  }
+  const drop = h("div", { class: "drop", tabindex: 0, role: "button", "aria-label": "Add drawings: drop files here or press Enter to choose",
+      onclick: () => picker.click(), onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); picker.click(); } },
+      ondragover: e => { e.preventDefault(); drop.classList.add("over"); }, ondragleave: () => drop.classList.remove("over"),
+      ondrop: e => { e.preventDefault(); drop.classList.remove("over"); send([...(e.dataTransfer?.files || [])]); } },
+    h("span", { class: "dic" }, ic("plus", "i lg")),
+    h("div", {}, h("b", {}, "Drop drawings here, or click to choose"),
+      h("div", { class: "muted", style: "font-size:12.5px" }, "DXF, vector PDF or a scan (PNG, JPEG, TIFF, BMP) · up to 100 MiB · checked by content, not just by name")), picker);
+
+  const inspectRow = s => {
+    const units = h("select", { class: "input sm", "aria-label": "Units", style: "width:auto" }, h("option", { value: "" }, s.media_type === "image/vnd.dxf" ? "Units: from drawing" : "Units: choose"), ...["mm", "in", "cm", "m"].map(u => h("option", { value: u }, u)));
+    // a PDF or scan does not state its units in a machine-readable way: the user says, nothing is assumed
+    const b = h("button", { class: "btn sm primary" }, ic("play"), "Inspect");
+    b.addEventListener("click", async ev => {
+      ev.stopPropagation();
+      b.disabled = true; const t0 = Date.now();
+      const tick = () => b.replaceChildren(h("span", { class: "spin" }), ` ${Math.round((Date.now() - t0) / 1000)} s`);
+      tick(); const timer = setInterval(tick, 1000);
+      try { const r = await post("/api/inspect", { project: pid, source: s.sha256, units: units.value }); toast("Inspection delivered"); location.hash = "#inspection=" + encodeURIComponent(r.key); }
+      catch (e) { toast("Not run: " + e.message, "bad"); b.disabled = false; b.replaceChildren(ic("play"), "Inspect"); }
+      finally { clearInterval(timer); }
+    });
+    return h("div", { style: "display:flex;gap:6px;align-items:center;justify-content:flex-end" }, units, b);
+  };
+  const sources = d.sources.length ? dataTable([
+    { k: "filename", label: "Drawing", render: s => h("div", {}, h("div", { class: "title" }, s.filename), h("div", { class: "subline mono", title: s.sha256 }, "sha256 " + s.sha256.slice(0, 16) + "…")) },
+    { k: "media_type", label: "Type", render: s => h("span", { class: "tag" }, KIND[s.media_type] || s.media_type) },
+    { k: "size", label: "Size", num: true, render: s => fmtBytes(s.size) },
+    { k: "added_utc", label: "Added", render: s => h("span", { class: "muted nowrap", title: s.added_utc + (s.added_by ? " by " + s.added_by : "") }, ago(s.added_utc), s.added_by ? " · " + s.added_by : "") },
+    { k: "runs", label: "Runs", num: true, sort: s => d.runs.filter(r => (r.document || "").includes(s.sha256)).length,
+      render: s => String(d.runs.filter(r => (r.document || "").includes(s.sha256)).length) },
+    { k: "dl", label: "", nosort: true, render: s => h("a", { class: "btn sm ghost", href: "/file?key=" + encodeURIComponent(s.key), download: s.filename, title: "Download the preserved original" }, ic("ext"), "Original") },
+    { k: "go", label: "", nosort: true, render: inspectRow },
+  ], d.sources, { initial: { k: "added_utc", dir: -1 } }) : empty("file", "No drawings yet", "Add the drawings for this project above. They are kept exactly as received.");
+  main.replaceChildren(
+    h("div", { class: "ph" }, h("div", {}, h("h1", {}, d.name), h("p", {}, d.description || "Created " + when(d.created_utc)),
+      h("div", { class: "meta", style: "display:flex;gap:6px;margin-top:6px" }, h("span", { class: "tag mono" }, d.id), h("span", { class: "tag" }, `${d.sources.length} drawing(s)`), h("span", { class: "tag" }, `${d.runs.length} run(s)`)))),
+    h("div", { class: "stack" },
+      card("Add drawings", "originals are preserved read-only by SHA-256; inspections read the preserved copy", null, h("div", { class: "body" }, drop, queue)),
+      card("Drawings", `${d.sources.length}`, null, sources),
+      card("Inspection runs", `${d.runs.length}`, null, d.runs.length ? runsTable(d.runs, { short: true }) : empty("scan", "No runs yet", "Press Inspect on a drawing above."))));
+  palExtra = d.sources.map(s => ({ label: `${s.filename} · ${KIND[s.media_type] || ""}`, group: "Drawing", icon: "file", run: () => document.querySelector(".dt")?.scrollIntoView() }));
+}
+
 // ---------- router ----------
 async function route() {
   const hash = location.hash.slice(1);
-  const tab = hash.startsWith("inspection=") ? "inspections" : (hash || "inspections");
+  const tab = hash.startsWith("inspection=") ? "inspections" : hash.startsWith("project=") ? "projects" : (hash || "inspections");
   document.querySelectorAll(".nav").forEach(b => { if (b.dataset.tab === tab) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   viewKeys = null; palExtra = [];
   try {
     if (hash.startsWith("inspection=")) await viewInspection(decodeURIComponent(hash.slice(11)));
+    else if (hash.startsWith("project=")) await viewProject(decodeURIComponent(hash.slice(8)));
+    else if (tab === "projects") await viewProjects();
     else if (tab === "tasks") await viewTasks();
     else if (tab === "changes") await viewChanges();
     else if (tab === "cad") await viewCad();
@@ -1242,6 +1394,7 @@ window.addEventListener("hashchange", route);
 route();
 cadStatus(false);
 api("/api/inspections").then(l => { runsCache = l; document.getElementById("n-insp").textContent = l.length || ""; }).catch(() => {});
+api("/api/projects").then(l => { document.getElementById("n-proj").textContent = l.length || ""; }).catch(() => {});
 </script>
 </body>
 </html>
