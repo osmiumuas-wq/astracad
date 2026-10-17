@@ -56,6 +56,7 @@ class Region:
     b_conf: float | None = None
     agreed: str | None = None
     notes: list[str] = field(default_factory=list)
+    skip: str | None = None          # border label / balloon / table cell (from sheet geometry)
 
 
 # ---- engines --------------------------------------------------------------------------------
@@ -225,10 +226,15 @@ def reread(img, region: Region, win: WindowsOcr, rapid: RapidOcrEngine,
     region.notes.append(f"no agreement after re-reading the region at {', '.join(f'{k}x' for k in scales)}")
 
 
-def regions_for(img, win: WindowsOcr, rapid: RapidOcrEngine, angles=(0, -90)) -> list[Region]:
-    """Read the page at each angle with both engines and pair their readings by position."""
+def regions_for(img, win: WindowsOcr, rapid: RapidOcrEngine, angles=(0, -90), geo=None,
+                dpi: float = DEFAULT_DPI) -> list[Region]:
+    """Read the page at each angle with both engines and pair their readings by position.
+    With sheet geometry, regions that are border labels, balloons or table cells are marked
+    (`skip`) before any re-read is spent on them."""
     W, H = img.size
+    mm = 25.4 / dpi
     regions: list[Region] = []
+    budget = REREAD_BUDGET
     for angle in angles:
         rot = img if angle == 0 else img.rotate(angle, expand=True)
         ww = [OcrBox(w.text, _unrotate(w.box, angle, W, H)) for w in win.words(rot)]
@@ -257,9 +263,18 @@ def regions_for(img, win: WindowsOcr, rapid: RapidOcrEngine, angles=(0, -90)) ->
             box = (min(g.box[0] for g in group), min(g.box[1] for g in group),
                    max(g.box[2] for g in group), max(g.box[3] for g in group))
             found.append(Region(box, _join(group), None, angle))
+        if geo is not None:
+            geo.centres = [((r.box[0] + r.box[2]) / 2 * mm, (H - (r.box[1] + r.box[3]) / 2) * mm)
+                           for r in regions + found]
         for f in found:
             f.agreed, f.notes = agree(f.a, f.b)
-            if f.agreed is None and _NUMBER.search((f.a or "") + (f.b or "")) and                     not any(_overlap(f.box, g.box) > 0.5 for g in regions):
+            f.skip = _classify_region(geo, f.box, f.agreed or f.a or f.b or "", H, mm)
+            if f.skip is None and f.agreed is None and _NUMBER.search((f.a or "") + (f.b or "")) \
+                    and budget <= 0:
+                f.notes.append(f"re-read budget of {REREAD_BUDGET} per page exhausted")
+            if f.skip is None and budget > 0 and f.agreed is None and _NUMBER.search((f.a or "") + (f.b or "")) and \
+                    not any(_overlap(f.box, g.box) > 0.5 for g in regions):
+                budget -= 1
                 first = (f.a, f.b)
                 reread(img, f, win, rapid)
                 if f.agreed is not None:
@@ -270,6 +285,63 @@ def regions_for(img, win: WindowsOcr, rapid: RapidOcrEngine, angles=(0, -90)) ->
                 continue
             regions.append(f)
     return regions
+
+
+# ---- sheet geometry from pixels -------------------------------------------------------------
+REREAD_BUDGET = 40          # per page: a cluttered sheet took 572 s without a cap (measured)
+
+
+def raster_geometry(img, dpi: float):
+    """Rules and circles recovered from the image, in page mm (y up), wrapped in the same
+    SheetGeometry the vector-PDF route uses: so border labels, balloons and table cells are told
+    apart from callouts the same way on a scan as on a vector sheet."""
+    import cv2
+    import numpy as np
+
+    from .pdf import SheetGeometry
+    g = np.asarray(img.convert("L"))
+    H, W = g.shape
+    mm = 25.4 / dpi
+    bw = (g < 160).astype(np.uint8) * 255
+    L = max(5, int(3.0 / mm))                   # rules at least 3 mm long
+    segs = []
+    for kernel, horiz in (((L, 1), True), ((1, L), False)):
+        lines = cv2.morphologyEx(bw, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, kernel))
+        n, _, stats, _ = cv2.connectedComponentsWithStats(lines)
+        for x, y, w, h, area in stats[1:]:
+            if horiz:
+                yc = (H - (y + h / 2)) * mm
+                segs.append((x * mm, yc, (x + w) * mm, yc))
+            else:
+                xc = (x + w / 2) * mm
+                segs.append((xc, (H - y - h) * mm, xc, (H - y) * mm))
+    circles = cv2.HoughCircles(cv2.GaussianBlur(g, (5, 5), 1.2), cv2.HOUGH_GRADIENT, dp=1.5,
+                               minDist=int(4 / mm), param1=120, param2=40,
+                               minRadius=int(2.0 / mm), maxRadius=int(10.0 / mm))
+    if circles is not None:
+        for cx, cy, r in circles[0]:
+            pts = [((cx + r * np.cos(t)) * mm, (H - (cy + r * np.sin(t))) * mm)
+                   for t in np.linspace(0, 2 * np.pi, 25)]
+            segs += [(a[0], a[1], b[0], b[1]) for a, b in zip(pts, pts[1:])]
+    return SheetGeometry(segs, W * mm, H * mm)
+
+
+def _classify_region(geo, box_px, text: str, img_h: int, mm: float) -> str | None:
+    if geo is None or not text:
+        return None
+    from ..callouts import normalise
+    t = normalise(text).strip()
+    x0, y0, x1, y1 = box_px
+    box = (x0 * mm, (img_h - y1) * mm, x1 * mm, (img_h - y0) * mm)
+    cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+    th = max(box[3] - box[1], 1.0)
+    if geo.is_border_label(t, cx, cy):
+        return "border zone label"
+    if geo.is_balloon(t, cx, cy, th):
+        return "balloon item number"
+    if geo.is_table_cell(box, th):
+        return "table cell"
+    return None
 
 
 # ---- page loading ----------------------------------------------------------------------------
@@ -321,6 +393,8 @@ def read_raster(path: str | Path, declared_unit: str | None = None,
     if len(pages) > 1:
         warnings.append(f"{len(pages)} pages: every page is read; layout image shows page 1")
     characteristics, uninterpreted, notes = [], [], []
+    from collections import Counter
+    skipped: Counter = Counter()
     n_regions = n_agreed = n_disagree = n_single = 0
     page_w = page_h = 0.0
     for pno, (img, dpi, stated) in enumerate(pages, start=1):
@@ -330,8 +404,16 @@ def read_raster(path: str | Path, declared_unit: str | None = None,
         mm = 25.4 / dpi
         if pno == 1:
             page_w, page_h = img.width * mm, img.height * mm
-        for i, r in enumerate(regions_for(img, win, rapid, angles)):
+        try:
+            geo = raster_geometry(img, dpi)
+        except Exception as ex:                 # geometry is an aid, not a requirement
+            geo = None
+            warnings.append(f"page {pno}: sheet geometry not recovered ({type(ex).__name__}: {ex})")
+        for i, r in enumerate(regions_for(img, win, rapid, angles, geo, dpi)):
             n_regions += 1
+            if r.skip:
+                skipped[r.skip] += 1
+                continue
             cx = (r.box[0] + r.box[2]) / 2 * mm
             cy = (img.height - (r.box[1] + r.box[3]) / 2) * mm
             handle = f"P{pno}-R{i:03d}@{r.angle}"
@@ -408,6 +490,9 @@ def read_raster(path: str | Path, declared_unit: str | None = None,
     extents = (0.0, 0.0, page_w, page_h)
     census = [EntityCensusRow("OCR_REGION", n_regions, len(characteristics),
                               f"{n_agreed} agreed, {n_disagree} disagreed, {n_single} one-engine")]
+    for why, k in sorted(skipped.items()):
+        census.append(EntityCensusRow(f"OCR_REGION:{why}", k, 0, f"{k} region(s) classified as {why} "
+                                      "from the sheet's rules and circles; not treated as callouts"))
     feature_support = {
         "dimension.linear": "partial - OCR text with two-engine agreement; no geometry cross-check",
         "dimension.diameter": "partial - ⌀ from either engine when the other read 0/O at that place",

@@ -62,3 +62,37 @@ def test_scan_pipeline_delivers_but_is_never_releasable(tmp_path):
     from astracad_inspect.pipeline import inspect_drawing
     res = inspect_drawing(FIX / "plate_synthetic_scan300.png", tmp_path, declared_unit="mm")
     assert res.delivered and not res.plan.approvable and res.record.route == "raster-ocr"
+
+
+@needs_ocr
+def test_scan_balloons_and_border_labels_are_not_callouts(tmp_path):
+    """Measured on a SOLIDWORKS mould base: balloons and zone labels were most OCR false rows."""
+    from matplotlib import font_manager
+    from PIL import Image, ImageDraw, ImageFont
+
+    from astracad_inspect.ingest.raster import read_raster
+    dpi = 300
+    px = lambda v_mm: int(v_mm / 25.4 * dpi)            # noqa: E731
+    img = Image.new("RGB", (px(297), px(210)), "white")
+    d = ImageDraw.Draw(img)
+    font = ImageFont.truetype(font_manager.findfont("DejaVu Sans"), px(4.5))
+    d.rectangle([px(10), px(10), px(287), px(200)], outline="black", width=3)
+    d.text((px(148), px(3)), "4", fill="black", font=font)                 # zone label in the margin
+    cx, cy, r = px(100), px(60), px(5)
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline="black", width=3)   # balloon
+    d.text((cx - px(1.4), cy - px(2.6)), "7", fill="black", font=font)
+    d.line([px(60), px(150), px(120), px(150)], fill="black", width=3)     # a real dimension
+    d.text((px(84), px(143)), "60", fill="black", font=font)
+    p = tmp_path / "scan.png"
+    img.save(p, dpi=(dpi, dpi))
+    b = read_raster(p, "mm")
+    assert [c.nominal for c in b.characteristics] == [60.0]
+    # the classifier itself, on the known text boxes (whether an engine reads a lone digit is the
+    # engines' business; what a read digit in a circle means is ours)
+    from astracad_inspect.ingest.raster import _classify_region, raster_geometry
+    geo = raster_geometry(img, dpi)
+    mm = 25.4 / dpi
+    balloon_box = (cx - px(1.6), cy - px(2.6), cx + px(1.6), cy + px(2.6))
+    assert _classify_region(geo, balloon_box, "7", img.height, mm) == "balloon item number"
+    assert _classify_region(geo, (px(148), px(3), px(151), px(8)), "4", img.height, mm)         == "border zone label"
+    assert _classify_region(geo, (px(84), px(143), px(92), px(149)), "60", img.height, mm) is None
