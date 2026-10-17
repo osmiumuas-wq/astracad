@@ -481,6 +481,9 @@ def _holes(it: Interpretation, low: str, face: str, w: float, h: float,
                 return None
             centres = [(cx + p / 2 * math.cos(math.radians(a0 + 360 * k / n)),
                         cy + p / 2 * math.sin(math.radians(a0 + 360 * k / n))) for k in range(n)]
+            extra = [{"$op": "feature.pattern.circular", "id": "bolt_circle",
+                      "args": {"feature": "hole1", "count": n, "axis": "Z",
+                               "center": [round(cx, 9), round(cy, 9)]}}]
             tag = f"_{n}x{dh:g}_pcd{p:g}"
         elif pitch:
             s = _to_mm(pitch.group(1), _norm_unit(pitch.group(2)), "hole_pitch", it,

@@ -1,5 +1,28 @@
 # NEXT ACTION
 
+## Done 2026-10-17: Circular pattern op in mac & bolt circles (C-18)
+
+**What was changed:**
+- `mecagent-alternative/src/MecAgent.Core/Operations.cs`: Added `feature.pattern.circular` to `OperationRegistry.All` as an implemented feature producing a solid. Added dependency and validation tracking for `CircularPattern` in `Planner.Build`.
+- `mecagent-alternative/src/MecAgent.Core/Specs.cs`: Added `[JsonDerivedType(typeof(CircularPattern), "feature.pattern.circular")]` and `CircularPattern` class supporting `feature`, `count`, `axis` (X/Y/Z/named), `center` ([cx, cy]), `angle`, `equal_spacing`, and `reversed`.
+- `mecagent-alternative/src/MecAgent.Core/Verification.cs`: Added analytic closed-form expectation derivation for `CircularPattern` (`required.Add("CirPattern")`, `volume = vol + (cp.Count - 1) * dv`, `area = ar0 + (cp.Count - 1) * da`).
+- `mecagent-alternative/src/MecAgent.SolidWorks/SwExecutor.cs`: Implemented `ApplyCircularPattern` in SolidWorks executor: creates or selects reference axis along the requested direction/center (`InsertAxis2` via plane intersections/offsets) and calls `FeatureManager.FeatureCircularPattern5`. Preserved 100% CRLF line endings.
+- `mecagent-alternative/src/Mac/Program.cs`: Added polymorphic selftests for circular pattern plan validation, closed-form analytic volume verification (`cpexp.VolumeMm3 == discV`), and registry coverage. Selftest baseline expanded from 36/36 to **38/38**.
+- `astracad/src/astracad_cad/adapters/solidworks.py`: Added `"feature.pattern.circular"` to `MAC_KINDS` validator and updated `declaration()`. Preserved 100% CRLF line endings.
+- `astracad/src/astracad_core/requests.py`: Updated `_holes()` to emit `feature.pattern.circular` for bolt circle requests instead of generating N separate hole features.
+- `astracad/tests/test_text_to_cad.py`: Updated bolt circle assertions to check for seed hole + circular pattern feature operation.
+- Documentation: Updated `CURRENT_STATE.md` (38/38 selftest), `parity-matrix.md` (C-18), and `known-limitations.md` (section H).
+
+**What was verified and how:**
+- Mac .NET build: `dotnet build -c Release` succeeded with 0 warnings, 0 errors.
+- Mac selftest: `bin\Release\net10.0-windows\mac.exe selftest` passed completely: **38/38 passed** (0 failed).
+- Targeted Python test suite: `py -m pytest -q tests/test_text_to_cad.py tests/test_cad_contract.py tests/test_cad_spec.py tests/test_web_text_to_cad.py` passed (51 passed in 1.30s).
+- Full Python test suite: `py -m pytest -q` passed completely: **523 passed**, 0 failed (209.15s).
+- Line endings verified with Python byte checks: 100% compliant across all 8 modified files in both repositories.
+
+**What could not be verified:**
+- Live CAD run against a running GUI SOLIDWORKS session with active documents: SOLIDWORKS was not actively running in the user desktop session during this run (`ConnectionState.NOT_CONNECTED`). All CAD geometry derivation, polymorphic parsing, plan validation, and expectation engine checks were verified via `mac selftest` (38/38) and the test suite.
+
 ## Done 2026-10-17: CMM mapping profile per program (C-09)
 
 **What was changed:**

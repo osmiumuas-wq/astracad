@@ -30,7 +30,7 @@ Every number below was produced by a command run on 2026-10-17. Detail: `docs/ar
 | Windows | `py tools/regression.py` | 3 labelled synthetic fixtures (incl. GD&T): 20/20 characteristics, 0 wrong fields, 0 invented, 57/57 export checks |
 | Windows | `py -m astracad_inspect run tests\fixtures\bracket_gdt_synthetic.dxf` | 5 frame rows (position ⌀0.05 MMC A\|B\|C, 2-row ⊥/∥, flatness, profile) + 3 dims; malformed frame escalated; frames drawn in the layout; 19/19 exports |
 | Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic_scan300.png --units mm` | 3 of 9 callouts accepted (all correct: 100 ±0.1, ⌀20 H7, 45°), 7 escalated with both engines' readings, **0 wrong values**; ~25 s/page |
-| Windows | `mac selftest` | 36/36 (Pappus revolve vs closed-form cylinder, pattern = seed × count, profile refusals, non-finite kernel values written as null) |
+| Windows | `mac selftest` | 38/38 (Pappus revolve vs closed-form cylinder, linear & circular patterns = seed × count, profile refusals, non-finite kernel values written as null) |
 | Cloud workspace (Python 3.13) | `python3 -m pytest -q` | 224 passed, 29 skipped (ISO-table rebuild sources only on the PC) |
 | Windows | `py -m astracad_inspect selftest` | 34/34 |
 | Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic.dxf` | 19/19 export reopen checks, exit 3 (delivered, correctly NOT releasable) |

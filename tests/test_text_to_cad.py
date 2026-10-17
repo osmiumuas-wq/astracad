@@ -78,7 +78,9 @@ def test_bolt_circle_on_a_plate_needs_centre_and_start_angle():
     assert not bad.executable and len(bad.ambiguities) == 2
     ok = interpret("solidworks 80 x 80 x 10 mm plate with 4 x 8 mm holes on a 50 mm bolt "
                    "circle, centred, starting at 45 deg")
-    assert ok.executable and [f["$op"] for f in ok.spec["features"]].count("feature.hole") == 4
+    assert ok.executable and ops(ok) == ["sketch.rectangle", "feature.extrude", "feature.hole",
+                                         "feature.pattern.circular"]
+    assert ok.spec["features"][-1]["args"]["count"] == 4
     c = ok.fact("hole_centres_mm")
     assert c[0] == pytest.approx([40 + 25 / math.sqrt(2), 40 + 25 / math.sqrt(2)])
 
@@ -87,6 +89,8 @@ def test_bolt_circle_on_a_disc_needs_no_angle_and_says_why():
     it = interpret("solidworks flange disc diameter 120 mm thick 12 mm with 6 x 10 mm holes "
                    "on a 90 mm PCD")
     assert it.executable
+    assert ops(it) == ["sketch.circle", "feature.extrude", "feature.hole", "feature.pattern.circular"]
+    assert it.spec["features"][-1]["args"] == {"feature": "hole1", "count": 6, "axis": "Z", "center": [0.0, 0.0]}
     ang = next(f for f in it.facts if f.name == "first_hole_angle_deg")
     assert ang.provenance == "AI_PROPOSED" and "volume" in ang.source_text
     assert it.expect["volume_mm3"] == pytest.approx(math.pi * 3600 * 12 - 6 * math.pi * 25 * 12)

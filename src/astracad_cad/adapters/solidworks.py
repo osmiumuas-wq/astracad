@@ -28,8 +28,8 @@ from ..step_check import read_step
 WORKSPACE = Path(__file__).resolve().parents[4]          # ...\New folder (4)
 MAC_PROJECT = WORKSPACE / "mecagent-alternative" / "src" / "Mac" / "Mac.csproj"
 MAC_KINDS = {"sketch.rectangle", "sketch.circle", "sketch.profile", "feature.extrude",
-             "feature.cut", "feature.revolve", "feature.pattern.linear", "feature.fillet",
-             "feature.chamfer", "feature.hole", "feature.parameter",
+             "feature.cut", "feature.revolve", "feature.pattern.linear", "feature.pattern.circular",
+             "feature.fillet", "feature.chamfer", "feature.hole", "feature.parameter",
              "doc.note"}                                   # = OperationRegistry Implemented set
 _NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _OUTCOME = {0: "passed", 1: "failed", 2: "not_verifiable"}
@@ -156,7 +156,7 @@ class SolidWorksAdapter(Adapter):
             Op.CREATE_FEATURE: OperationSupport(
                 Support.PARTIAL, Evidence.END_TO_END_VERIFIED,
                 "new part from a typed spec: rectangle/circle/profile sketch, extrude, cut, hole, "
-                "revolve, linear pattern, fillet, chamfer, note; mirror/shell/circular pattern are "
+                "revolve, linear pattern, circular pattern, fillet, chamfer, note; mirror/shell are "
                 "not implemented. Live 2026-10-17: request/spec -> SOLIDWORKS -> kernel checks -> "
                 "STEP -> independent re-read: block, shaft, holed block, stepped shaft (revolve), "
                 "plate with 4-hole pattern all SUCCEEDED"),

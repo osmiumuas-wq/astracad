@@ -267,8 +267,8 @@ covered by a check that now fails if it regresses.
   builds without them only if nothing in it is missing - check the facts table, which lists what was read.
 - Patterns are interpreted from fixed phrasings ("4 x 6 mm holes at 20 mm pitch along the width,
   centred", "6 x 10 mm holes on a 90 mm PCD starting at 30 deg"). Anything else is reported missing.
-- Bolt circles are built as N separate hole features (`mac` has no circular pattern), so a later edit of
-  the hole size touches N dimensions.
+- Bolt circles are built using circular patterns in mac (eature.pattern.circular) from a seed
+  hole around the rotation axis, so driving dimensions control the pattern count and seed hole.
 - On a round part the start angle of a bolt circle is AI_PROPOSED (0°) without blocking the build, because
   it does not change size or volume; it does change where the holes are. Say "starting at A deg" if it matters.
 - Only SOLIDWORKS executes. Builds run one at a time in the workspace; the page waits for the build
