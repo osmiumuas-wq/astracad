@@ -225,11 +225,19 @@ def interpret(request: str, default_app: str | None = None) -> Interpretation:
         it = Interpretation(text, "create_part", app, exports=exports)
         if app is None:
             it.missing.append("target CAD application")
-        dm = re.search(r"\b(?:diameter|dia|od)\b\s*(?:of\s*)?" + _NUM + _UNIT, low) or \
-            re.search(_NUM + _UNIT + r"\s*(?:diameter|dia|od)\b", low)
+        da = re.search(r"\b(?:diameter|dia|od)\b\s*(?:of\s*)?" + _NUM + _UNIT, low)
+        db = re.search(_NUM + _UNIT + r"\s*(?:diameter|dia|od)\b", low)
         rm = re.search(r"\bradius\b\s*(?:of\s*)?" + _NUM + _UNIT, low)
-        lm = re.search(r"\b(?:length|long|height|thick(?:ness)?)\b\s*(?:of\s*)?" + _NUM + _UNIT,
-                       low) or re.search(_NUM + _UNIT + r"\s*(?:long|length|thick|high)\b", low)
+        la = re.search(r"\b(?:length|long|height|thick(?:ness)?)\b\s*(?:of\s*)?" + _NUM + _UNIT, low)
+        lb = re.search(_NUM + _UNIT + r"\s*(?:long|length|thick|high)\b", low)
+        # A number between the two words ("25 mm diameter 100 mm long", "dia 100 mm thick 12 mm") is
+        # claimed by both; it belongs to the one that has no other number. Before this, the first
+        # request built a 100 mm diameter shaft.
+        dm, lm = da or db, la or lb
+        if da and lb and da.start(1) == lb.start(1):
+            dm, lm = (da, la) if la else (db, lb) if db else (da, None)
+        elif la and db and la.start(1) == db.start(1):
+            dm, lm = (da, la) if da else (db, lb) if lb else (None, la)
         if dm and rm:
             it.ambiguities.append("both a diameter and a radius were given")
             return it

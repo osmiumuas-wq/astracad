@@ -193,3 +193,16 @@ def test_pocket_on_disc_and_disc_breakout():
     assert not breaks_disc.executable
     assert any("breaks out of the disc" in a for a in breaks_disc.ambiguities)
 
+
+
+def test_number_between_diameter_and_length_words_goes_to_the_right_one():
+    # Found live 2026-10-18: "25 mm diameter 100 mm long" was read as diameter 100 and was executable
+    def dl(q):
+        it = interpret(q)
+        return it.executable, it.fact("diameter"), it.fact("length")
+    assert dl("SolidWorks shaft 25 mm diameter 100 mm long") == (True, 25.0, 100.0)
+    assert dl("SolidWorks disc 100 mm diameter 12 mm thick") == (True, 100.0, 12.0)
+    assert dl("SolidWorks disc dia 100 mm thick 12 mm") == (True, 100.0, 12.0)
+    assert dl("SolidWorks disc thick 12 mm diameter 100 mm") == (True, 100.0, 12.0)
+    it = interpret("SolidWorks shaft diameter 100 mm long")          # one number, two words
+    assert not it.executable and "length with a unit" in it.missing
