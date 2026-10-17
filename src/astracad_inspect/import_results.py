@@ -90,8 +90,13 @@ def _balloon_index(plan: dict) -> tuple[dict, dict]:
 def resolve_balloon(ref: str, plan: dict, mapping: dict | None = None) -> dict | None:
     by_no, by_cid = _balloon_index(plan)
     t = str(ref or "").strip()
-    if mapping and t in mapping:
-        t = str(mapping[t])
+    if mapping:
+        if t in mapping:
+            t = str(mapping[t])
+        else:
+            lower_map = {str(k).lower(): v for k, v in mapping.items()}
+            if t.lower() in lower_map:
+                t = str(lower_map[t.lower()])
     if t.upper() in by_cid:
         return by_cid[t.upper()]
     m = re.fullmatch(r"(?:b|#|balloon|bal|char|item)?\s*[-.:#]?\s*(\d{1,4})(?:\.0+)?", t, re.I)
@@ -160,7 +165,7 @@ def parse(name: str, data: bytes, plan: dict, *, default_sample: str | None = No
 
 def preview(name: str, data: bytes, plan: dict, *, inspector: str, register: dict | None,
             instrument: str = "", unit: str = "", default_sample: str | None = None,
-            mapping: dict | None = None) -> dict:
+            mapping: dict | None = None, profile: str = "") -> dict:
     from .measure import build_entry, verdict
     sha = hashlib.sha256(data).hexdigest()
     cands, refused, layout = parse(name, data, plan, default_sample=default_sample, mapping=mapping)
@@ -169,19 +174,25 @@ def preview(name: str, data: bytes, plan: dict, *, inspector: str, register: dic
     for c in cands:
         where = f"row {c['row']}" + (f", column {c['col']}" if c.get("col") else "")
         if c.get("duplicate_of"):
-            refused.append({"row": c["row"], "ref": c["ref"], "reason": f"{c['sample']} / balloon "
+            refused.append({"row": c["row"], "ref": c["ref"], "where": where, "sha256": sha,
+                            "reason": f"{c['sample']} / balloon "
                             f"{rows[c['cid']].get('balloon_no')} appears again (first at row {c['duplicate_of']}): "
                             "which value is right is not guessed"})
             continue
         body = {"inspector": inspector, "sample": c["sample"], "cid": c["cid"],
                 "instrument": c["instrument"] or instrument, "note": c["note"],
                 "source": {"file": name, "sha256": sha, "where": where}}
+        if c.get("ref"):
+            body["source"]["feature_name"] = c["ref"]
+        if profile:
+            body["source"]["mapping_profile"] = profile
         if c["measured_at"]:
             body["measured_at"] = c["measured_at"][:40]
         try:
             x = float(str(c["value"]).replace(",", "."))
         except ValueError:
-            refused.append({"row": c["row"], "ref": c["ref"], "reason": f"value {c['value']!r} is not a number"})
+            refused.append({"row": c["row"], "ref": c["ref"], "where": where, "sha256": sha,
+                            "reason": f"value {c['value']!r} is not a number"})
             continue
         u = (c["unit"] or unit or "").strip().lower()
         want = (rows[c["cid"]].get("unit") or "").lower()
@@ -190,29 +201,36 @@ def preview(name: str, data: bytes, plan: dict, *, inspector: str, register: dic
                 body["converted_from"] = {"value": x, "unit": u}
                 x = x * TO_MM[u] / TO_MM[want]
             else:
-                refused.append({"row": c["row"], "ref": c["ref"],
+                refused.append({"row": c["row"], "ref": c["ref"], "where": where, "sha256": sha,
                                 "reason": f"unit {u!r} for a characteristic in {want!r} is not converted"})
                 continue
         body["value"] = x
         try:
             e = build_entry(plan, body, register)
         except ValueError as ex:
-            refused.append({"row": c["row"], "ref": c["ref"], "reason": str(ex)})
+            refused.append({"row": c["row"], "ref": c["ref"], "where": where, "sha256": sha,
+                            "reason": str(ex)})
             continue
         v, why = verdict(rows[c["cid"]], e["value"])
-        accepted.append({"entry": e, "verdict": v, "why": why, "where": where,
-                         "balloon_no": rows[c["cid"]].get("balloon_no")})
+        is_mapped = bool(mapping and (c["ref"] in mapping or c["ref"].lower() in {str(k).lower(): v for k, v in mapping.items()}))
+        accepted.append({"entry": e, "verdict": v, "why": why, "where": where, "sha256": sha,
+                         "ref": c["ref"], "cid": c["cid"],
+                         "balloon_no": rows[c["cid"]].get("balloon_no"),
+                         "mapped": is_mapped})
     refused.sort(key=lambda r: r["row"])
     return {"file": name, "sha256": sha, "layout": layout, "accepted": accepted, "refused": refused,
             "samples": sorted({a["entry"]["sample"] for a in accepted}),
+            "mapping_profile": profile or None,
+            "mapping": mapping or {},
             "summary": {"accepted": len(accepted), "refused": len(refused),
                         "fail": sum(1 for a in accepted if a["verdict"] == "FAIL")}}
 
 
 def commit(plan_path: Path, name: str, data: bytes, plan: dict, *, inspector: str, register: dict | None,
-           skip_rejected: bool = False, **kw) -> dict:
+           skip_rejected: bool = False, mapping: dict | None = None, profile: str = "", **kw) -> dict:
     from .measure import append
-    pv = preview(name, data, plan, inspector=inspector, register=register, **kw)
+    pv = preview(name, data, plan, inspector=inspector, register=register, mapping=mapping,
+                 profile=profile, **kw)
     if not pv["accepted"]:
         raise ValueError("nothing to import: no row was accepted")
     if pv["refused"] and not skip_rejected:
@@ -233,7 +251,87 @@ def commit(plan_path: Path, name: str, data: bytes, plan: dict, *, inspector: st
     stem = plan_path.name[:-len(".plan.json")]
     rec = {"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "by": inspector, "file": name,
            "sha256": pv["sha256"], "kept_as": f"imports/{keep.name}", "layout": pv["layout"],
-           "imported": len(entries), "refused": len(pv["refused"]), "skip_rejected": bool(skip_rejected)}
+           "imported": len(entries), "refused": len(pv["refused"]), "skip_rejected": bool(skip_rejected),
+           "mapping_profile": profile or None}
     with plan_path.with_name(f"{stem}.imports.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     return {**pv, "committed": rec}
+
+
+# ---- CMM mapping profiles per program -----------------------------------------------------
+
+_PROGRAM_RE = re.compile(r"^[\w .'-]{1,64}$")
+
+
+def mapping_profiles_path(project_dir: Path) -> Path:
+    return Path(project_dir) / "cmm_mappings.json"
+
+
+def load_mapping_profiles(project_dir: Path) -> dict[str, dict]:
+    """Load all saved CMM mapping profiles for a project or run directory."""
+    p = mapping_profiles_path(project_dir)
+    if not p.is_file():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_mapping_profile(project_dir: Path, program: str, mappings: dict[str, Any], by: str = "") -> dict:
+    """Save or update a CMM mapping profile (feature name -> balloon reference) for a program."""
+    prog = str(program or "").strip()
+    if not _PROGRAM_RE.fullmatch(prog):
+        raise ValueError("program name must be 1 to 64 characters (letters, numbers, space, . ' - _)")
+    if not isinstance(mappings, dict) or not mappings:
+        raise ValueError("mappings must be a non-empty dictionary of feature name to balloon reference")
+    cleaned_mappings: dict[str, str | int] = {}
+    for k, v in mappings.items():
+        k_str = str(k or "").strip()
+        if not k_str:
+            raise ValueError("mapping feature name cannot be empty")
+        if isinstance(v, int):
+            cleaned_mappings[k_str] = v
+        else:
+            v_str = str(v or "").strip()
+            if not v_str:
+                raise ValueError(f"mapping for {k_str!r} cannot be empty")
+            if v_str.isdigit():
+                cleaned_mappings[k_str] = int(v_str)
+            else:
+                cleaned_mappings[k_str] = v_str
+
+    project_dir = Path(project_dir)
+    project_dir.mkdir(parents=True, exist_ok=True)
+    profiles = load_mapping_profiles(project_dir)
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    rec = {
+        "program": prog,
+        "created_utc": profiles.get(prog, {}).get("created_utc", now),
+        "updated_utc": now,
+        "updated_by": str(by or "").strip()[:64],
+        "mappings": cleaned_mappings,
+    }
+    profiles[prog] = rec
+    p = mapping_profiles_path(project_dir)
+    tmp = p.with_name("cmm_mappings.json.tmp")
+    tmp.write_text(json.dumps(profiles, indent=1, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, p)
+    return rec
+
+
+def delete_mapping_profile(project_dir: Path, program: str) -> bool:
+    """Delete a CMM mapping profile by program name."""
+    project_dir = Path(project_dir)
+    profiles = load_mapping_profiles(project_dir)
+    prog = str(program or "").strip()
+    if prog not in profiles:
+        return False
+    del profiles[prog]
+    p = mapping_profiles_path(project_dir)
+    tmp = p.with_name("cmm_mappings.json.tmp")
+    tmp.write_text(json.dumps(profiles, indent=1, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, p)
+    return True
+

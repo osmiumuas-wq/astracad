@@ -276,11 +276,15 @@ covered by a check that now fails if it regresses.
 
 ## G. Measurement results (2026-10-17)
 
-- Values are typed by the inspector; nothing reads a CMM or gauge file yet. The instrument register
-  is enforced once it has an entry; while it is empty, instrument IDs are free text and flagged.
+- Tabular CMM and gauge export files (CSV/XLSX) are imported via `astracad_inspect.import_results`
+  with preview/commit gates, SHA-256 and row-level traceability, and saved CMM mapping profiles per program
+  (with case-insensitive fallback). Vendor-specific binary CMM report formats (PC-DMIS `.cad`/`.pcd`,
+  Calypso `.chr`/`.dfq` binary) are not parsed natively — files must be exported as tabular CSV/XLSX.
+  Values can also be typed manually by the inspector. The instrument register is enforced once it has an entry;
+  while it is empty, instrument IDs are free text and flagged.
 - Calibration is judged by the due date alone (no certificate verification, no measurement
   uncertainty); the 10:1 rule is a rule of thumb shown as a warning, not a decision rule.
-- Values are taken in the characteristic's unit; a value in another unit is not converted.
+- Values are converted between inch and mm if needed with original preserved; unrecognized units are refused.
 - Cp/Cpk from a few samples is an indication only; the label states n. No control charts.
 - GD&T rows are judged as a measured deviation against 0..zone; MMC/LMC bonus is not applied.
 

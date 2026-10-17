@@ -1287,12 +1287,35 @@ async function viewInspection(key, keepSel, focusId) {
     const box = h("div");
     const unitSel = h("select", { class: "input sm", style: "width:auto", "aria-label": "Unit of the values in the file" },
       h("option", { value: "" }, "units: as the drawing"), h("option", { value: "mm" }, "file in mm"), h("option", { value: "in" }, "file in inches"));
+    const profSel = h("select", { class: "input sm", style: "width:auto", "aria-label": "CMM mapping profile" },
+      h("option", { value: "" }, "CMM profile: none / auto"));
+    api("/api/cmm_mappings?key=" + encodeURIComponent(key)).then(profs => {
+      for (const [name, p] of Object.entries(profs || {})) {
+        profSel.append(h("option", { value: name }, `CMM: ${name} (${Object.keys(p.mappings || {}).length} features)`));
+      }
+    }).catch(() => {});
+    const saveProfBtn = h("button", { class: "btn sm ghost", title: "Save a new CMM feature name → balloon mapping profile for this project", onclick: async () => {
+      const prog = prompt("CMM Program name (e.g. Zeiss-Op10):");
+      if (!prog || !prog.trim()) return;
+      const jsonMap = prompt("Feature to balloon mapping as JSON (e.g. {\"FEATURE_1\": 1, \"CIRCLE_2\": 2}):");
+      if (!jsonMap) return;
+      try {
+        const mappings = JSON.parse(jsonMap);
+        await post("/api/cmm_mappings", { key, program: prog.trim(), mappings, by: reviewer.value.trim() });
+        toast(`Saved mapping profile '${prog.trim()}'`);
+        const profs = await api("/api/cmm_mappings?key=" + encodeURIComponent(key));
+        profSel.replaceChildren(h("option", { value: "" }, "CMM profile: none / auto"));
+        for (const [name, p] of Object.entries(profs || {})) {
+          profSel.append(h("option", { value: name, selected: name === prog.trim() }, `CMM: ${name} (${Object.keys(p.mappings || {}).length} features)`));
+        }
+      } catch (err) { toast("Invalid mapping: " + err.message, "bad"); }
+    } }, ic("link"), "New CMM profile");
     const picker = h("input", { type: "file", accept: ".csv,.tsv,.txt,.xlsx", hidden: true, onchange: () => { const f = picker.files[0]; picker.value = ""; if (f) run(f, "preview"); } });
     let file = null;
     async function run(f, mode, skip) {
       file = f;
       if (!reviewer.value.trim()) { toast("Enter your name in the bar first — imported values are signed by the importer.", "warn"); reviewer.focus(); return; }
-      const qs = new URLSearchParams({ key, name: f.name, inspector: reviewer.value.trim(), instrument: instrIn.value.trim(), unit: unitSel.value, sample: curSample(), mode, skip_rejected: skip ? "1" : "" });
+      const qs = new URLSearchParams({ key, name: f.name, inspector: reviewer.value.trim(), instrument: instrIn.value.trim(), unit: unitSel.value, profile: profSel.value, sample: curSample(), mode, skip_rejected: skip ? "1" : "" });
       box.replaceChildren(h("div", { class: "runstate" }, h("span", { class: "spin" }), mode === "commit" ? "Importing…" : "Reading and checking every row…"));
       try {
         const r = await fetch("/api/import_results?" + qs, { method: "POST", headers: { "X-AstraCAD": "1", "Content-Type": "application/octet-stream" }, body: f });
@@ -1307,16 +1330,19 @@ async function viewInspection(key, keepSel, focusId) {
       skip.addEventListener("change", () => { go.disabled = !d.accepted.length || (d.refused.length > 0 && !skip.checked); });
       box.replaceChildren(h("div", { class: "stack", style: "margin-top:12px" },
         h("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap" }, h("b", {}, d.file), h("span", { class: "tag" }, d.layout + " table"),
+          d.mapping_profile ? pill("info", "link", "CMM: " + d.mapping_profile) : null,
           pill("ok", "check", `${d.summary.accepted} accepted`), d.summary.fail ? pill("bad", "x", `${d.summary.fail} out of tolerance`) : null,
           d.refused.length ? pill("warn", "alert", `${d.refused.length} refused`) : null, h("span", { class: "mono muted", style: "font-size:11.5px" }, "sha256 " + d.sha256.slice(0, 16) + "…"),
           h("span", { style: "margin-left:auto;display:flex;gap:8px;align-items:center" },
             d.refused.length ? h("label", { style: "display:flex;gap:6px;align-items:center;font-size:12.5px" }, skip, "import the accepted rows, skip refused ones") : null,
             h("button", { class: "btn sm ghost", onclick: () => box.replaceChildren() }, "Cancel"), go)),
         d.refused.length ? card("Refused rows", "nothing from these rows is imported", null, dataTable([
-          { k: "row", label: "Row", num: true }, { k: "ref", label: "Reference", render: x => h("span", { class: "mono" }, x.ref) },
+          { k: "where", label: "Where", render: x => h("span", { class: "mono nowrap" }, x.where || ("row " + x.row)) },
+          { k: "ref", label: "Reference", render: x => h("span", { class: "mono" }, x.ref) },
           { k: "reason", label: "Why", render: x => h("span", { class: "c-bad" }, x.reason) }], d.refused)) : null,
         d.accepted.length ? card("Accepted rows (preview — not yet written)", null, null, dataTable([
           { k: "where", label: "Where", render: a => h("span", { class: "mono nowrap" }, a.where) },
+          { k: "ref", label: "CMM Feature / Ref", render: a => h("span", { class: "mono" }, a.ref || "–", a.mapped ? pill("info sm", "check", "mapped") : null) },
           { k: "balloon_no", label: "#", num: true },
           { k: "sample", label: "Sample", sort: a => a.entry.sample, render: a => h("span", { class: "mono" }, a.entry.sample) },
           { k: "value", label: "Value", sort: a => a.entry.value, render: a => h("span", { class: "mono" }, fmt(a.entry.value, 6), a.entry.converted_from ? h("span", { class: "muted" }, ` (from ${a.entry.converted_from.value} ${a.entry.converted_from.unit})`) : null) },
@@ -1324,7 +1350,7 @@ async function viewInspection(key, keepSel, focusId) {
           { k: "inst", label: "Instrument", render: a => h("span", {}, a.entry.instrument || "–", (a.entry.warnings || []).length ? h("div", { class: "c-warn", style: "font-size:12px" }, a.entry.warnings.join("; ")) : null) }], d.accepted)) : null));
     }
     return h("div", {}, h("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap" },
-      h("button", { class: "btn sm", onclick: () => picker.click() }, ic("plus"), "Import results (CSV / XLSX)"), unitSel, picker,
+      h("button", { class: "btn sm", onclick: () => picker.click() }, ic("plus"), "Import results (CSV / XLSX)"), unitSel, profSel, saveProfBtn, picker,
       h("span", { class: "muted", style: "font-size:12px" }, "long table (sample, balloon, value) or wide (balloon × samples); instrument from the file or the bar")), box);
   };
   const measPane = () => {

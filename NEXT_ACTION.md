@@ -1,5 +1,24 @@
 # NEXT ACTION
 
+## Done 2026-10-17: CMM mapping profile per program (C-09)
+
+**What was changed:**
+- `src/astracad_inspect/import_results.py`: Added `save_mapping_profile()`, `load_mapping_profiles()`, `delete_mapping_profile()`, and `mapping_profiles_path()`. Profiles are persisted in `cmm_mappings.json` (inside `.astracad` or target directory) with atomic `.tmp` rename to prevent corruption. Added case-insensitive name matching fallback to `resolve_balloon()`. Updated `preview()` and `commit()` to accept named `profile` or explicit mapping dictionary, and record mapping metadata (`where`, `sha256`, `ref`, `mapped`, `feature_name`, `mapping_profile`) on imported measurements.
+- `src/astracad_web/server.py`: Added workspace mapping directory helpers `_cmm_mappings_dir()`, `cmm_mappings()`, `save_cmm_mapping()`, `delete_cmm_mapping()`. Added endpoints `GET /api/cmm_mappings` and `POST /api/cmm_mappings` (`save` or `delete`). Updated `import_results()` endpoint to resolve profile mappings from workspace or project directories.
+- `src/astracad_web/index.html`: Added CMM profile selector dropdown and "New CMM profile" creation dialog button in `importPane`. In the preview table, added columns for `where`, `ref` (with a distinct "mapped" badge), and target balloon number. Preserved 100% CRLF line endings.
+- `tests/test_import_results.py`: Added 3 tests (`test_cmm_mapping_profile_persistence`, `test_cmm_mapping_profile_in_project_and_repeat_import`, `test_cmm_mappings_http_api`) verifying profile save/load/delete, repeated import across serials, case-insensitive feature name resolution, and HTTP API integration.
+- `CURRENT_STATE.md`, `parity-matrix.md`, `known-limitations.md`: Updated capability row C-09, known limitations section G, and test baseline (523 passed).
+
+**What was verified and how:**
+- Baseline test suite before changes: 520 passed.
+- Web frontend syntax check: `py -m pytest -q tests/test_web.py` passed (14 passed, Node.js syntax check on `index.html`).
+- Import results test suite: `py -m pytest -q tests/test_import_results.py` passed (9 passed in 0.58s).
+- Full test suite: `py -m pytest -q` passed completely: **523 passed**, 0 failed, 0 skipped (215.00s).
+- Line ending integrity verified: `server.py`, `index.html`, `CURRENT_STATE.md`, `NEXT_ACTION.md`, `parity-matrix.md` 100% CRLF; `import_results.py` and `test_import_results.py` 100% LF.
+
+**What could not be verified:**
+- Live browser click on the new CMM profile prompt dialog in a running browser session with human interaction (verified via headless HTTP API integration test and Node.js frontend syntax test).
+
 ## Done 2026-10-17: Project-level quality dossier (C-33)
 
 **What was changed:**

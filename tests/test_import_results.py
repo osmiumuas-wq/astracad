@@ -112,3 +112,120 @@ def test_http_import_preview_and_oversize(run):
     st, d = post(f"/api/import_results?key={quote(key)}&name=r.csv&inspector=K%20M", b"x" * (10 * 1024 * 1024 + 1))
     assert st == 413
     httpd.shutdown()
+
+
+def test_cmm_mapping_profile_persistence(tmp_path):
+    from astracad_inspect.import_results import delete_mapping_profile, load_mapping_profiles, save_mapping_profile
+    profs = load_mapping_profiles(tmp_path)
+    assert profs == {}
+
+    rec = save_mapping_profile(tmp_path, "Zeiss-Op10", {"CIRCLE_1": 3, "PLANE_A": "CH-001", "HOLE_2": "5"}, by="KM")
+    assert rec["program"] == "Zeiss-Op10"
+    assert rec["mappings"] == {"CIRCLE_1": 3, "PLANE_A": "CH-001", "HOLE_2": 5}
+    assert rec["updated_by"] == "KM"
+
+    loaded = load_mapping_profiles(tmp_path)
+    assert "Zeiss-Op10" in loaded
+    assert loaded["Zeiss-Op10"]["mappings"] == {"CIRCLE_1": 3, "PLANE_A": "CH-001", "HOLE_2": 5}
+
+    with pytest.raises(ValueError, match="program name"):
+        save_mapping_profile(tmp_path, "Invalid/Name?", {"C": 1})
+    with pytest.raises(ValueError, match="mappings must be a non-empty dictionary"):
+        save_mapping_profile(tmp_path, "Valid", {})
+
+    deleted = delete_mapping_profile(tmp_path, "Zeiss-Op10")
+    assert deleted is True
+    assert load_mapping_profiles(tmp_path) == {}
+    assert delete_mapping_profile(tmp_path, "Zeiss-Op10") is False
+
+
+def test_cmm_mapping_profile_in_project_and_repeat_import(tmp_path):
+    dxf_bytes = (FIX / "plate_synthetic.dxf").read_bytes()
+    w = Workspace(tmp_path / "t.db", [tmp_path / "runs"], projects=tmp_path / "projects")
+    p = w.create_project({"name": "CMM Project"})
+    rec = w.projects.add_source(p["id"], "plate.dxf", io.BytesIO(dxf_bytes), len(dxf_bytes), "KM")
+    insp = w.inspect_source({"project": p["id"], "source": rec.sha256})
+    key = insp["key"]
+    plan_path = w.resolve_key(key)
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    b = {r["callout"]: r["balloon_no"] for r in plan["rows"]}
+
+    w.save_instrument({"by": "Q Lab", "id": "CMM-01", "kind": "CMM", "unit": "mm", "range_min": 0,
+                       "range_max": 1000, "resolution": 0.0001, "calibration_due": FUTURE, "calibration_ref": "CMM-2026"})
+
+    # Save mapping profile for the project
+    w.save_cmm_mapping({"project": p["id"], "program": "Zeiss-Prismo-01",
+                        "mappings": {"LENGTH_100": b["100 ±0.1"], "DIA_25": b["25"]}, "by": "KM"})
+    assert "Zeiss-Prismo-01" in w.cmm_mappings(key=key)
+
+    cmm_csv = (f"Sample,Feature,Value,Instrument\n"
+               f"SN-1,LENGTH_100,100.02,CMM-01\n"
+               f"SN-1,DIA_25,25.01,CMM-01\n").encode()
+
+    # 1. Preview without profile: CMM feature names are unknown and refused
+    pv_no_prof = w.import_results(key, "cmm.csv", cmm_csv, {"inspector": "KM"})
+    assert pv_no_prof["summary"]["accepted"] == 0
+    assert len(pv_no_prof["refused"]) == 2
+
+    # 2. Preview with profile: both accepted, showing mapping and source (hash + row)
+    pv = w.import_results(key, "cmm.csv", cmm_csv, {"inspector": "KM", "profile": "Zeiss-Prismo-01"})
+    assert pv["summary"]["accepted"] == 2
+    assert pv["mapping_profile"] == "Zeiss-Prismo-01"
+    row1 = pv["accepted"][0]
+    assert row1["ref"] == "LENGTH_100" and row1["balloon_no"] == b["100 ±0.1"]
+    assert row1["mapped"] is True
+    assert row1["where"] == "row 2" and row1["sha256"] == pv["sha256"]
+
+    # 3. Commit with profile: writes to log with traceable CMM feature and profile name
+    out = w.import_results(key, "cmm.csv", cmm_csv, {"inspector": "KM", "profile": "Zeiss-Prismo-01", "mode": "commit"})
+    assert out["committed"]["imported"] == 2
+    log = read_log(plan_path)
+    assert len(log) == 2
+    assert log[0]["source"]["feature_name"] == "LENGTH_100"
+    assert log[0]["source"]["mapping_profile"] == "Zeiss-Prismo-01"
+    assert log[0]["source"]["where"] == "row 2"
+
+    # 4. Repeat import: second run / file with different sample uses same profile with no renaming
+    cmm_csv_2 = (f"Sample,Feature,Value,Instrument\n"
+                 f"SN-2,LENGTH_100,99.99,CMM-01\n"
+                 f"SN-2,DIA_25,24.98,CMM-01\n").encode()
+    out2 = w.import_results(key, "cmm_run2.csv", cmm_csv_2, {"inspector": "KM", "profile": "Zeiss-Prismo-01", "mode": "commit"})
+    assert out2["committed"]["imported"] == 2
+    log2 = read_log(plan_path)
+    assert len(log2) == 4
+    assert log2[2]["sample"] == "SN-2" and log2[2]["source"]["feature_name"] == "LENGTH_100"
+
+
+def test_cmm_mappings_http_api(run):
+    w, key, plan_path, plan, b = run
+    httpd = serve(w, "127.0.0.1", 0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    port = httpd.server_address[1]
+
+    def req(method, path, body=None):
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=60)
+        headers = {"Host": "127.0.0.1", "X-AstraCAD": "1", "Content-Type": "application/json"}
+        c.request(method, path, body=json.dumps(body).encode() if body else None, headers=headers)
+        r = c.getresponse()
+        return r.status, json.loads(r.read())
+
+    from urllib.parse import quote
+    # Save profile via POST
+    st, d = req("POST", "/api/cmm_mappings", {"key": key, "program": "Mitutoyo-01",
+                                              "mappings": {"FEAT_1": 1, "FEAT_2": 2}, "by": "Inspector Q"})
+    assert st == 200 and d["program"] == "Mitutoyo-01"
+
+    # Query profiles via GET
+    st, d = req("GET", f"/api/cmm_mappings?key={quote(key)}")
+    assert st == 200 and "Mitutoyo-01" in d
+    assert d["Mitutoyo-01"]["mappings"] == {"FEAT_1": 1, "FEAT_2": 2}
+
+    # Delete profile via POST
+    st, d = req("POST", "/api/cmm_mappings", {"key": key, "program": "Mitutoyo-01", "action": "delete"})
+    assert st == 200 and d["deleted"] is True
+
+    st, d = req("GET", f"/api/cmm_mappings?key={quote(key)}")
+    assert st == 200 and "Mitutoyo-01" not in d
+
+    httpd.shutdown()
+

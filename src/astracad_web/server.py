@@ -615,6 +615,34 @@ class Workspace:
         return self.ncr.act(str(body.get("number", "")), body)
 
     # ---- results import -------------------------------------------------------------------------
+    def _cmm_mappings_dir(self, key: str | None = None, pid: str | None = None) -> Path:
+        if pid and self.projects is not None:
+            return self.projects.root / pid
+        if key:
+            plan_path = self._plan_path(key)
+            proj = self._project_of(plan_path)
+            if proj and self.projects is not None:
+                return self.projects.root / proj
+            return plan_path.parent
+        if self.projects is not None:
+            return self.projects.root
+        return self.runs[0]
+
+    def cmm_mappings(self, key: str | None = None, pid: str | None = None) -> dict[str, dict]:
+        from astracad_inspect.import_results import load_mapping_profiles
+        return load_mapping_profiles(self._cmm_mappings_dir(key, pid))
+
+    def save_cmm_mapping(self, body: dict) -> dict:
+        from astracad_inspect.import_results import save_mapping_profile
+        d = self._cmm_mappings_dir(body.get("key"), body.get("project"))
+        return save_mapping_profile(d, body.get("program", ""), body.get("mappings") or {}, by=body.get("by", ""))
+
+    def delete_cmm_mapping(self, body: dict) -> dict:
+        from astracad_inspect.import_results import delete_mapping_profile
+        d = self._cmm_mappings_dir(body.get("key"), body.get("project"))
+        ok = delete_mapping_profile(d, body.get("program", ""))
+        return {"deleted": ok, "program": body.get("program", "")}
+
     def import_results(self, key: str, name: str, data: bytes, opts: dict) -> dict:
         """Preview (default) or commit an imported results file for a run."""
         from astracad_inspect.import_results import commit, preview
@@ -626,6 +654,25 @@ class Workspace:
                   default_sample=str(opts.get("sample") or "") or None)
         if not kw["inspector"]:
             raise ValueError("the person importing must be named (inspector)")
+        mapping = None
+        if opts.get("mapping"):
+            m = opts["mapping"]
+            if isinstance(m, str):
+                try:
+                    mapping = json.loads(m)
+                except Exception:
+                    mapping = None
+            elif isinstance(m, dict):
+                mapping = m
+        profile = str(opts.get("profile") or "").strip()
+        if profile and not mapping:
+            profs = self.cmm_mappings(key=key)
+            if profile in profs:
+                mapping = profs[profile].get("mappings")
+            else:
+                raise ValueError(f"no CMM mapping profile named {profile!r}")
+        kw["mapping"] = mapping
+        kw["profile"] = profile
         if opts.get("mode") == "commit":
             return commit(plan_path, name, data, plan, skip_rejected=opts.get("skip_rejected") in ("1", "true"), **kw)
         return preview(name, data, plan, **kw)
@@ -895,6 +942,9 @@ def make_handler(ws: Workspace):
                     return self._json(ws.project(q.get("id", [""])[0]))
                 if u.path == "/api/changes":
                     return self._json(ws.changes())
+                if u.path == "/api/cmm_mappings":
+                    return self._json(ws.cmm_mappings(q.get("key", [""])[0] or None,
+                                                       q.get("project", [""])[0] or None))
                 if u.path == "/file":
                     p = ws.resolve_key(q.get("key", [""])[0])
                     ctype = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
@@ -1049,6 +1099,10 @@ def make_handler(ws: Workspace):
                     return self._json(ws.measure(str(body.get("key", "")), body))
                 if u.path == "/api/export_results":
                     return self._json(ws.export_results(str(body.get("key", "")), body.get("sample") or None))
+                if u.path == "/api/cmm_mappings":
+                    if body.get("action") == "delete":
+                        return self._json(ws.delete_cmm_mapping(body))
+                    return self._json(ws.save_cmm_mapping(body))
                 if u.path == "/api/reissue":
                     return self._json(ws.reissue(str(body.get("key", ""))))
                 return self._error(HTTPStatus.NOT_FOUND, "not found")
