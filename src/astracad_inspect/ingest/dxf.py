@@ -716,6 +716,26 @@ def read_dxf(path: str | Path, declared_unit: str | None = None,
         elif len(norm) > 3 and re.search(r"\d", norm):
             notes.append(norm)
 
+    # Title blocks and notes often live inside block references (SOLIDWORKS: SW_NOTE_*, table
+    # blocks). General-tolerance statements there govern every untoleranced dimension, so lines
+    # that state one are collected; other block text is left alone.
+    for ins in msp.query("INSERT"):
+        try:
+            blk = doc.blocks.get(ins.dxf.name)
+        except Exception:
+            blk = None
+        for e in (blk or []):
+            if e.dxftype() not in ("TEXT", "MTEXT", "ATTDEF"):
+                continue
+            raw = e.plain_text() if e.dxftype() == "MTEXT" else e.dxf.get("text", "")
+            line = normalise(raw.replace("%%p", "±").replace("%%P", "±"))
+            if re.search(r"2768|PLACE\s+DECIMAL|X\.X+\s*±", line, re.I):
+                notes.append(line)
+        for att in getattr(ins, "attribs", []):
+            line = normalise(att.dxf.get("text", ""))
+            if re.search(r"2768|PLACE\s+DECIMAL|X\.X+\s*±", line, re.I):
+                notes.append(line)
+
     extents, unreadable = _measurable_extents(msp)
     for what in unreadable:
         warnings.append(f"{what} could not be measured, so the drawing extents cover the entities "

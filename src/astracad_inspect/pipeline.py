@@ -43,6 +43,26 @@ def _write_json(path: Path, payload) -> Path:
     return path
 
 
+def apply_general_tolerance(bundle, declared: str | None = None) -> dict:
+    """The user's declaration wins; otherwise a statement found in the drawing's own text; with
+    neither, nothing is applied and untoleranced rows keep no limits."""
+    from .general_tol import apply, detect, parse_user
+    if declared:
+        spec = parse_user(declared)
+    else:
+        texts = list(bundle.notes) + [u.text for u in bundle.uninterpreted] + \
+            [str(v) for v in (bundle.title_block or {}).values()]
+        spec = detect(texts)
+    counts = apply(bundle.characteristics, spec, bundle.unit)
+    if not spec.empty:
+        bundle.warnings.append(
+            f"general tolerance {('ISO 2768-' + spec.iso_class) if spec.iso_class else ''}"
+            f"{' places ' + str(spec.places) if spec.places else ''} ({spec.source}: "
+            f"{spec.evidence or 'declared'}) applied to {counts['applied']} untoleranced row(s), "
+            f"not applicable to {counts['refused']}")
+    return counts
+
+
 def read_drawing(path: str | Path, declared_unit: str | None = None,
                  revision: str | None = None):
     """Pick the ingestion route from the file type: DXF (vector, with dimension entities) or
@@ -70,6 +90,7 @@ def read_drawing(path: str | Path, declared_unit: str | None = None,
 def inspect_drawing(drawing_path: str | Path, out_dir: str | Path, *,
                     declared_unit: str | None = None, revision: str | None = None,
                     overrides: str | Path | None = None,
+                    general_tolerance: str | None = None,
                     balloon_radius: float = 4.0) -> RunResult:
     src = Path(drawing_path)
     out = Path(out_dir)
@@ -78,6 +99,7 @@ def inspect_drawing(drawing_path: str | Path, out_dir: str | Path, *,
 
     bundle, route = read_drawing(src, declared_unit, revision)
     inputs = [src]
+    apply_general_tolerance(bundle, general_tolerance)
     if overrides:
         apply_overrides(bundle, overrides)
         inputs.append(Path(overrides))

@@ -231,3 +231,9 @@ covered by a check that now fails if it regresses.
   user-stated MRR; no CAM-based time. Fixturing, tool wear, finishing, inspection and logistics are excluded.
 - **No prices are shipped.** The example rate book is placeholders labelled EXAMPLE; real use needs the
   user's own sourced, dated figures. Inputs older than 90 days are flagged, not refreshed.
+
+## Added 2026-10-17 (general tolerances)
+
+- ISO 2768-1 values are transcribed from widely reproduced tables, not read from a licensed copy of
+  the standard; verify before acceptance use. Angular general tolerances are not applied (need the
+  shorter leg length). ISO 2768-2 (geometrical, H/K/L) classes are recorded in the note but not applied.

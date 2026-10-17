@@ -129,9 +129,20 @@ class FitClass:
     kind: str = "fit_class"
 
 
+@dataclass(frozen=True)
+class GeneralTolerance:
+    """± from a general-tolerance rule (ISO 2768 class or a title-block decimal-place rule), not
+    stated on the dimension itself. Kept distinct from Symmetric so a derived limit is never
+    reported as if the drawing had printed it."""
+    plus_minus: float
+    basis: str            # e.g. "ISO 2768-m", "2-place decimal rule"
+    kind: str = "general"
+
+
 from .gdt import GeometricTolerance  # noqa: E402  (frame rows; no model import inside gdt)
 
-Tolerance = NoTolerance | Symmetric | Deviations | LimitPair | FitClass | GeometricTolerance
+Tolerance = (NoTolerance | Symmetric | Deviations | LimitPair | FitClass | GeometricTolerance
+             | GeneralTolerance)
 
 
 @dataclass

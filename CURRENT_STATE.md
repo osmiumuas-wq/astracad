@@ -18,7 +18,7 @@ Every number below was produced by a command run on 2026-10-17. Detail: `docs/ar
 
 | Where | Command | Result |
 |---|---|---|
-| Windows PC (Python 3.14.7) | `py -m pytest -q` | **333 passed**, 0 failed, 0 skipped (after the real-drawing benchmark fixes) |
+| Windows PC (Python 3.14.7) | `py -m pytest -q` | **360 passed**, 0 failed, 0 skipped (after general tolerances) |
 | Windows | `py tools/regression.py` | 3 labelled synthetic fixtures (incl. GD&T): 20/20 characteristics, 0 wrong fields, 0 invented, 57/57 export checks |
 | Windows | `py -m astracad_inspect run tests\fixtures\bracket_gdt_synthetic.dxf` | 5 frame rows (position ⌀0.05 MMC A\|B\|C, 2-row ⊥/∥, flatness, profile) + 3 dims; malformed frame escalated; frames drawn in the layout; 19/19 exports |
 | Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic_scan300.png --units mm` | 3 of 9 callouts accepted (all correct: 100 ±0.1, ⌀20 H7, 45°), 7 escalated with both engines' readings, **0 wrong values**; ~25 s/page |
@@ -41,6 +41,11 @@ food-processor housing, weldments), scored against dimensions read from the SOLI
 | OCR (scan @300 dpi) | 26.2% | 79.4% | — | 30.1% / 28.4% |
 
 Found a real drafting error in a SOLIDWORKS sample (prints 15 for a 150 mm span) — now a blocking finding.
+
+**General tolerances** (`--general-tolerance iso2768-m` or a statement read from the drawing, incl. title-block
+notes inside block references): untoleranced linear/diameter/radius rows get limits from ISO 2768-1 or a
+decimal-place rule, as a distinct `general` tolerance; angles, inch drawings (ISO), off-table sizes and
+unstated place counts are refused with the reason. Blank template lines ("TWO PLACE DECIMAL ±") state nothing.
 
 ## Real-application evidence (SOLIDWORKS 2026 SP04.1, 2026-10-17)
 

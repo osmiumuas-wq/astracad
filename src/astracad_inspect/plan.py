@@ -27,6 +27,7 @@ from .model import (
     Characteristic,
     Deviations,
     FitClass,
+    GeneralTolerance,
     GeometricTolerance,
     Issue,
     LimitPair,
@@ -72,6 +73,8 @@ def describe_tolerance(tol, limits: tuple[float, float] | None = None) -> str:
         return f"+{tol.upper:g}/-{abs(tol.lower):g}"
     if isinstance(tol, LimitPair):
         return f"{tol.maximum:g}/{tol.minimum:g}"
+    if isinstance(tol, GeneralTolerance):
+        return f"±{tol.plus_minus:g} (general: {tol.basis})"
     if isinstance(tol, GeometricTolerance):
         from .gdt import describe
         return describe(tol)
@@ -306,7 +309,7 @@ def _check_limits(c: Characteristic, unit: str, failures: list[str]) -> bool:
             failures.append(f"{c.cid}: fit class limits {c.limits} do not rebuild from the "
                             f"published deviations ({rebuilt})")
             return False
-    if isinstance(c.tolerance, (Symmetric, Deviations)):
+    if isinstance(c.tolerance, (Symmetric, Deviations, GeneralTolerance)):
         if abs((hi - lo) - band) > 1e-9:
             failures.append(f"{c.cid}: limit span {hi - lo:g} does not equal the tolerance "
                             f"band {band:g}")

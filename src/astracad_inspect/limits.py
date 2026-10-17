@@ -8,7 +8,8 @@ substituting the nominal, which would turn "not stated" into "stated as exact".
 from __future__ import annotations
 
 from . import iso286
-from .model import (Deviations, FitClass, GeometricTolerance, LimitPair, NoTolerance, Symmetric,
+from .model import (Deviations, FitClass, GeneralTolerance, GeometricTolerance, LimitPair,
+                    NoTolerance, Symmetric,
                     Tolerance)
 from .units import UnitError, assert_same_unit, to_mm
 
@@ -40,6 +41,8 @@ def deviation_band(tolerance: Tolerance, unit: str) -> float:
         if tolerance.maximum < tolerance.minimum:
             raise ValueError("limit pair has maximum below minimum")
         return tolerance.maximum - tolerance.minimum
+    if isinstance(tolerance, GeneralTolerance):
+        return 2 * tolerance.plus_minus
     if isinstance(tolerance, GeometricTolerance):
         if tolerance.zone < 0:
             raise ValueError("a geometric tolerance zone cannot be negative")
@@ -109,7 +112,7 @@ def resolve_limits(nominal: float | None, tolerance: Tolerance, unit: str
 
     if nominal is None:
         return None
-    if isinstance(tolerance, Symmetric):
+    if isinstance(tolerance, (Symmetric, GeneralTolerance)):
         return (_round_limit(nominal - tolerance.plus_minus),
                 _round_limit(nominal + tolerance.plus_minus))
     if isinstance(tolerance, Deviations):

@@ -65,6 +65,8 @@ def _print_plan(plan, *, rows: bool = True) -> None:
 
 def cmd_extract(a) -> int:
     bundle, _ = read_drawing(a.drawing, a.units, a.revision)
+    from .pipeline import apply_general_tolerance
+    apply_general_tolerance(bundle, getattr(a, "general_tolerance", None))
     if a.overrides:
         apply_overrides(bundle, a.overrides)
     plan = build_plan(bundle, balloon_radius=a.balloon_radius)
@@ -79,6 +81,7 @@ def cmd_extract(a) -> int:
 
 def cmd_run(a) -> int:
     res = inspect_drawing(a.drawing, a.out, declared_unit=a.units, revision=a.revision,
+                          general_tolerance=a.general_tolerance,
                           overrides=a.overrides, balloon_radius=a.balloon_radius)
     _print_plan(res.plan)
     for k, v in sorted(res.artifacts.items()):
@@ -163,6 +166,9 @@ def build_parser() -> argparse.ArgumentParser:
                        help="override the revision letter; by default it is taken from the "
                             "drawing's title block, and a value this build falls back to is "
                             "recorded as a default rather than as read content")
+        sp.add_argument("--general-tolerance", dest="general_tolerance", default=None,
+                        help="iso2768-<f|m|c|v> or places:2=0.01,3=0.005 for rows that state no "
+                             "tolerance (default: a statement found on the drawing, else none)")
         sp.add_argument("--overrides", default=None,
                         help="JSON correction file from an engineer")
         sp.add_argument("--balloon-radius", type=float, default=4.0, dest="balloon_radius",
