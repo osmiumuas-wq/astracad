@@ -1,0 +1,4 @@
+# Test-only additions. Install with:  py -m pip install -r requirements-dev.txt
+# Runtime is locked separately in requirements.lock; pytest's own dependencies are left
+# unpinned (they are not part of any produced artefact).
+pytest==9.1.1           # measured on this machine; 59 tests, run as `py -m pytest -q`

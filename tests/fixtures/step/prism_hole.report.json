@@ -1,0 +1,221 @@
+{
+  "spec": "prism_hole",
+  "session": {
+    "process_id": 36372,
+    "base_version": "sw2026_SP04",
+    "service_pack": "d260814.002",
+    "open_documents": 0,
+    "started_by_this_process": false
+  },
+  "execution": {
+    "title": "Part11",
+    "success": true,
+    "failures": [],
+    "log": [
+      "document: Part11 from C:\\ProgramData\\SOLIDWORKS\\SOLIDWORKS 2026\\templates\\Part.PRTDOT",
+      "outline: rectangle 60x40 at (0,0) on front; segments=4",
+      "body: kernel returned no feature on the first attempt; re-selecting Sketch1 and retrying",
+      "body: Boss-Extrude1 depth=20",
+      "bore: kernel returned no feature on the first attempt; re-selecting Sketch2 and retrying",
+      "bore: Cut-Extrude1 dia=10 depth=through-all of 20",
+      "saved prism_hole.sldprt 56092 B",
+      "saved prism_hole.step 25140 B"
+    ],
+    "artifacts": [
+      "C:\\New folder (4)\\mecagent-alternative\\work\\prism_hole.sldprt",
+      "C:\\New folder (4)\\mecagent-alternative\\work\\prism_hole.step"
+    ],
+    "notes": {}
+  },
+  "measured": {
+    "document_title": "prism_hole",
+    "document_type": 1,
+    "solid_bodies": 1,
+    "surface_bodies": 0,
+    "volume_mm3": 46429.28888852463,
+    "surface_area_mm2": 9271.265217612894,
+    "mass_grams": 46.42928888852463,
+    "center_of_mass_mm": [
+      29.999993749497413,
+      20.00000055822801,
+      9.999986201145864
+    ],
+    "bounding_box_mm": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "feature_tree": [
+      "Comments [CommentsFolder]",
+      "Favorites [FavoriteFolder]",
+      "History [HistoryFolder]",
+      "Selection Sets [SelectionSetFolder]",
+      "Sensors [SensorFolder]",
+      "Design Binder [DocsFolder]",
+      "Annotations [DetailCabinet]",
+      "Surface Bodies [SurfaceBodyFolder]",
+      "Solid Bodies [SolidBodyFolder]",
+      "Lights and Cameras [EnvFolder]",
+      "Markups [InkMarkupFolder]",
+      "Equations [EqnFolder]",
+      "Material \u003Cnot specified\u003E [MaterialFolder]",
+      "Front Plane [RefPlane]",
+      "Top Plane [RefPlane]",
+      "Right Plane [RefPlane]",
+      "Origin [OriginProfileFeature]",
+      "Sketch1 [ProfileFeature]",
+      "Boss-Extrude1 [Extrusion]",
+      "Sketch2 [ProfileFeature]",
+      "Cut-Extrude1 [ICE]"
+    ],
+    "dimensions": {
+      "d1@boss-extrude1@prism_hole.part": 20
+    },
+    "material": null,
+    "errors": [],
+    "template_units": null
+  },
+  "verification": {
+    "spec_name": "prism_hole",
+    "checks": [
+      {
+        "name": "solid_body_count",
+        "kind": 1,
+        "outcome": 0,
+        "expected": "1.000000",
+        "actual": "1.000000",
+        "delta": 0,
+        "tolerance": 0,
+        "why": null
+      },
+      {
+        "name": "volume_mm3",
+        "kind": 0,
+        "outcome": 1,
+        "expected": "46429.203673",
+        "actual": "46429.288889",
+        "delta": 0.08521531952283112,
+        "tolerance": 0.046429203673205105,
+        "why": null
+      },
+      {
+        "name": "surface_area_mm2",
+        "kind": 0,
+        "outcome": 1,
+        "expected": "8800.000000",
+        "actual": "9271.265218",
+        "delta": 471.26521761289405,
+        "tolerance": 0.008799999999999999,
+        "why": null
+      },
+      {
+        "name": "feature:Sketch",
+        "kind": 1,
+        "outcome": 0,
+        "expected": "contains \u0027Sketch\u0027",
+        "actual": "Comments [CommentsFolder], Favorites [FavoriteFolder], History [HistoryFolder], Selection Sets [SelectionSetFolder], Sensors [SensorFolder], Design Binder [DocsFolder], Annotations [DetailCabinet], Surface Bodies [SurfaceBodyFolder], Solid Bodies [SolidBodyFolder], Lights and Cameras [EnvFolder], Markups [InkMarkupFolder], Equations [EqnFolder], Material \u003Cnot specified\u003E [MaterialFolder], Front Plane [RefPlane], Top Plane [RefPlane], Right Plane [RefPlane], Origin [OriginProfileFeature], Sketch1 [ProfileFeature], Boss-Extrude1 [Extrusion], Sketch2 [ProfileFeature], Cut-Extrude1 [ICE]",
+        "delta": null,
+        "tolerance": 0,
+        "why": null
+      },
+      {
+        "name": "feature:Extrusion",
+        "kind": 1,
+        "outcome": 0,
+        "expected": "contains \u0027Extrusion\u0027",
+        "actual": "Comments [CommentsFolder], Favorites [FavoriteFolder], History [HistoryFolder], Selection Sets [SelectionSetFolder], Sensors [SensorFolder], Design Binder [DocsFolder], Annotations [DetailCabinet], Surface Bodies [SurfaceBodyFolder], Solid Bodies [SolidBodyFolder], Lights and Cameras [EnvFolder], Markups [InkMarkupFolder], Equations [EqnFolder], Material \u003Cnot specified\u003E [MaterialFolder], Front Plane [RefPlane], Top Plane [RefPlane], Right Plane [RefPlane], Origin [OriginProfileFeature], Sketch1 [ProfileFeature], Boss-Extrude1 [Extrusion], Sketch2 [ProfileFeature], Cut-Extrude1 [ICE]",
+        "delta": null,
+        "tolerance": 0,
+        "why": null
+      },
+      {
+        "name": "feature:Cut",
+        "kind": 1,
+        "outcome": 0,
+        "expected": "contains \u0027Cut\u0027",
+        "actual": "Comments [CommentsFolder], Favorites [FavoriteFolder], History [HistoryFolder], Selection Sets [SelectionSetFolder], Sensors [SensorFolder], Design Binder [DocsFolder], Annotations [DetailCabinet], Surface Bodies [SurfaceBodyFolder], Solid Bodies [SolidBodyFolder], Lights and Cameras [EnvFolder], Markups [InkMarkupFolder], Equations [EqnFolder], Material \u003Cnot specified\u003E [MaterialFolder], Front Plane [RefPlane], Top Plane [RefPlane], Right Plane [RefPlane], Origin [OriginProfileFeature], Sketch1 [ProfileFeature], Boss-Extrude1 [Extrusion], Sketch2 [ProfileFeature], Cut-Extrude1 [ICE]",
+        "delta": null,
+        "tolerance": 0,
+        "why": null
+      },
+      {
+        "name": "artifact:prism_hole.sldprt",
+        "kind": 2,
+        "outcome": 0,
+        "expected": "non-empty file",
+        "actual": "56092 B sha256=3a3a07bca5ff8ac2f19b131ee0b1e9d42fd83ee34cbba4d94b6ede331450ab10",
+        "delta": null,
+        "tolerance": 0,
+        "why": "ok"
+      },
+      {
+        "name": "artifact:prism_hole.step",
+        "kind": 2,
+        "outcome": 0,
+        "expected": "non-empty file",
+        "actual": "25140 B sha256=dd7d5522fb2ca61a2e56b16d621e96dd0678821149cd91ba87b9029b01b3d1ec",
+        "delta": null,
+        "tolerance": 0,
+        "why": "ok"
+      }
+    ],
+    "measured": {
+      "document_title": "prism_hole",
+      "document_type": 1,
+      "solid_bodies": 1,
+      "surface_bodies": 0,
+      "volume_mm3": 46429.28888852463,
+      "surface_area_mm2": 9271.265217612894,
+      "mass_grams": 46.42928888852463,
+      "center_of_mass_mm": [
+        29.999993749497413,
+        20.00000055822801,
+        9.999986201145864
+      ],
+      "bounding_box_mm": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "feature_tree": [
+        "Comments [CommentsFolder]",
+        "Favorites [FavoriteFolder]",
+        "History [HistoryFolder]",
+        "Selection Sets [SelectionSetFolder]",
+        "Sensors [SensorFolder]",
+        "Design Binder [DocsFolder]",
+        "Annotations [DetailCabinet]",
+        "Surface Bodies [SurfaceBodyFolder]",
+        "Solid Bodies [SolidBodyFolder]",
+        "Lights and Cameras [EnvFolder]",
+        "Markups [InkMarkupFolder]",
+        "Equations [EqnFolder]",
+        "Material \u003Cnot specified\u003E [MaterialFolder]",
+        "Front Plane [RefPlane]",
+        "Top Plane [RefPlane]",
+        "Right Plane [RefPlane]",
+        "Origin [OriginProfileFeature]",
+        "Sketch1 [ProfileFeature]",
+        "Boss-Extrude1 [Extrusion]",
+        "Sketch2 [ProfileFeature]",
+        "Cut-Extrude1 [ICE]"
+      ],
+      "dimensions": {
+        "d1@boss-extrude1@prism_hole.part": 20
+      },
+      "material": null,
+      "errors": [],
+      "template_units": null
+    },
+    "all_passed": false,
+    "passed": 6,
+    "failed": 2,
+    "unknown": 0
+  }
+}

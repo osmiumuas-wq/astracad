@@ -1,0 +1,96 @@
+# ASTraCAD Ω — CURRENT STATE (2026-10-17)
+
+Every number below was produced by a command run on 2026-10-17. Detail: `docs/architecture/current-state.md`.
+
+## Modules (one modular monolith, `src/`)
+
+| Package | What it does | Maturity |
+|---|---|---|
+| `astracad_inspect` | DXF, vector PDF **or a scan (two-engine OCR)** → characteristics incl. **GD&T frames** → ISO 286 limits → balloons → PDF/XLSX/JSON → reopen-and-verify; revision comparison | Prototype, verified on 2 synthetic drawings (+ a vector-PDF rendering of one) |
+| `astracad_cad` | Versioned CAD adapter contract (12 connection states, 16 ops, risk classes), permission-gated orchestrator, **SOLIDWORKS adapter over `mac`**, discovery-only Creo/Fusion/AutoCAD, kernel-independent **STEP re-reader** | SOLIDWORKS create: END_TO_END_VERIFIED on the real app; others discovery only |
+| `astracad_core` | Persistent SQLite task engine (8 states, bounded retry, irreversible-step guard, restart recovery); deterministic request interpreter with provenance per fact | Tested |
+| `astracad_web` | Local workspace (stdlib HTTP, 127.0.0.1 only): CAD status, task history, inspection runs, change sets; one action = run an inspection | Tested (9 tests incl. host/CSRF/traversal refusals); viewed live |
+| `astracad_tol` | Worst-case / RSS / Monte Carlo stacks with explicit distributions, ISO 286 fits, selective assembly (plan + measured matching) | Tested against closed-form references |
+| `mecagent-alternative/` (C#, sibling tree) | `mac` runtime: live SOLIDWORKS COM automation; now **revolve** (`sketch.profile` + `feature.revolve`) and **linear pattern** | Executed on SW 2026 SP04.1; `mac selftest` 34/34 |
+
+## Test baseline
+
+| Where | Command | Result |
+|---|---|---|
+| Windows PC (Python 3.14.7) | `py -m pytest -q` | **309 passed**, 0 failed, 0 skipped (after GD&T frames + scan/OCR route) |
+| Windows | `py tools/regression.py` | 3 labelled synthetic fixtures (incl. GD&T): 20/20 characteristics, 0 wrong fields, 0 invented, 57/57 export checks |
+| Windows | `py -m astracad_inspect run tests\fixtures\bracket_gdt_synthetic.dxf` | 5 frame rows (position ⌀0.05 MMC A\|B\|C, 2-row ⊥/∥, flatness, profile) + 3 dims; malformed frame escalated; frames drawn in the layout; 19/19 exports |
+| Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic_scan300.png --units mm` | 3 of 9 callouts accepted (all correct: 100 ±0.1, ⌀20 H7, 45°), 7 escalated with both engines' readings, **0 wrong values**; ~25 s/page |
+| Windows | `mac selftest` | 34/34 (Pappus revolve vs closed-form cylinder, pattern = seed × count, profile refusals) |
+| Cloud workspace (Python 3.13) | `python3 -m pytest -q` | 224 passed, 29 skipped (ISO-table rebuild sources only on the PC) |
+| Windows | `py -m astracad_inspect selftest` | 34/34 |
+| Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic.dxf` | 19/19 export reopen checks, exit 3 (delivered, correctly NOT releasable) |
+| Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic.pdf --units mm` | every callout the DXF route resolves (9) read with the same kind, nominal and limits; stacked + rotated tolerances joined; 19/19 export checks; every row needs review (no geometry cross-check from a PDF) |
+
+## Real-application evidence (SOLIDWORKS 2026 SP04.1, 2026-10-17)
+
+`astracad_cad build "<request>" --out _win\sw2 --authorize KM`:
+
+| Request | Task | Kernel | Independent STEP re-read |
+|---|---|---|---|
+| 60 x 40 x 20 mm block | SUCCEEDED | V = 48000.000000 mm³ | size 60×40×20, V = 48000.000000 (polyhedral) |
+| shaft Ø25 x 100 mm | SUCCEEDED | V = 49087.385212 mm³ | size 25×25×100 exact; volume not_verifiable (curved) |
+| block + Ø10 centred hole | SUCCEEDED | V = 46429.288889 (mac's own ~2 ppm through-all allowance) | size ok; volume not_verifiable |
+
+**Editing existing parts** (`astracad_cad edit` → `mac edit`, which edits a copy):
+
+| Edit | Task | Original file | Kernel read-back | Independent STEP re-read |
+|---|---|---|---|---|
+| block D1@Boss-Extrude1 20 → 35 mm | SUCCEEDED | SHA-256 unchanged | 35 mm; V = 84000.000000 mm³ | 60×40×35; V = 84000.000000 |
+| shaft D1@Boss-Extrude1 100 → 120 mm | SUCCEEDED | unchanged | 120 mm | 25×25×120 exact |
+| unknown name D9@NoSuchFeature | FAILED | unchanged | — | copy discarded, no file left |
+| shaft **D1@Sketch1 Ø25 → 30 mm** (sketch dim, picked from a "diameter" proposal) | SUCCEEDED | unchanged | 30 mm | 30×30×100 exact |
+
+**New features** (`astracad_cad spec <json> --authorize KM` → orchestrator → `mac run`):
+
+| Spec | Task | Kernel vs independent expectation | Independent STEP re-read |
+|---|---|---|---|
+| stepped shaft, revolved profile Ø35×40 + Ø25×20 | SUCCEEDED | V 48301.987049 = Pappus 48301.987049 (Δ 0); A Δ 2.7e-12 | 35×35×60 exact; volume not_verifiable (curved) |
+| 100×40×10 plate, Ø6 hole × linear pattern 4 @ 20 mm | SUCCEEDED | V 38869.026645 = seed×4 38869.026645 (Δ 0); A Δ 3.6e-12 | 10×40×100 exact |
+
+Status probe observed NOT_CONNECTED (SW closed) and CONNECTED (SW open). Creo, Fusion, AutoCAD: NOT_INSTALLED on this PC.
+
+**Word → dimension proposal** (live, 2026-10-17): `build "change the length of \"…shaft_d25_l100.SLDPRT\" to 120 mm"` →
+read-only inspect task, 1 candidate `D1@Boss-Extrude1` (100 mm, hint only), `auto_selected: false`, exit 3,
+source SHA-256 unchanged, no output written. Nothing is ever selected for the user.
+`mac` now dimensions what it sketches (rectangle W and H, circle and hole Ø) and `mac inspect` walks
+sub-features, so sketch dimensions are listed: shaft → D1@Boss-Extrude1 100, D1@Sketch1 25; holed block →
+60, 40, Ø10, 20. Rebuilt volumes identical to the earlier runs (49087.385212 / 46429.288889 mm³).
+Angular dimensions are skipped (radians are never reported as mm).
+Each dimension now carries its kernel type (`IDisplayDimension.Type2`). Live "diameter" proposals:
+shaft → D1@Sketch1 25 diameter **match**, D1@Boss-Extrude1 linear mismatch; holed block → D1@Sketch2 Ø10
+**match**, three linear mismatches listed after it. A diameter requested on a radius dimension is halved (CALCULATED).
+
+## Defects found by the live runs and fixed (each with a regression test)
+
+1. Adapter accepted `not_verifiable`, task store rejected it → exception left a task RUNNING. Policy unified (no failed + ≥1 passed); orchestrator can no longer leave a task RUNNING.
+2. SOLIDWORKS writes circles as two arcs → bounding box was flagged approximate. Exact arc extents now.
+3. Holed and plain blocks shared a file name → second run overwrote the first. Distinct names; adapter refuses to overwrite.
+4. A failed edit (unknown dimension) still saved and exported an unedited copy that looked like a result. `mac` now discards it; the adapter reports FAILED whenever any requested dimension was not set.
+5. `mac inspect` reported a pattern's instance count as a length (`D1@LPattern1` = "4000 mm"). Only length-type dimensions are reported now; the pattern spacing (20 mm) still is.
+6. `CreateLine` does not open a sketch the way rectangle/circle creation does (0 lines made) — the profile path opens it explicitly.
+Earlier this session: pipeline crashed when PyMuPDF was absent → pluggable reader. pypdfium2 is now the declared reader; PyMuPDF is an optional extra.
+
+## Known limitations (top)
+
+- Inspection accuracy measured only on synthetic DXF; no real-drawing corpus (M2).
+- Scans: OCR recall is low on cluttered text (3/9 on the synthetic scan — circles/lines crossing text, stacked
+  tolerances, vertical text); precision is the gate (both engines must agree). Windows-only (Windows.Media.Ocr).
+- GD&T: frames read from DXF TOLERANCE entities and Unicode text; MMC/LMC bonus not computed; datum feature
+  symbols not linked; frames drawn as graphics in PDFs are missed. No title block from PDF/scans.
+- SOLIDWORKS: existing parts can have named dimensions changed (on a copy) but not new features;
+  dimension names must be given to edit; a word ("diameter") only yields a candidate list, and
+  `mac inspect` reports each dimension's kernel type (diameter/radius/linear; angular skipped), which
+  orders a word's candidates but never selects one; parts `mac` built before this change have undimensioned sketches;
+  revolve and linear pattern exist for new parts (revolve profile sketches carry no driving dimensions yet);
+  no shell/mirror/circular pattern, assemblies or drawings (.SLDDRW).
+- Creo/Fusion/AutoCAD: not installed here, so no automation exists — discovery only.
+- Local web workspace is read-mostly; CAD creation/editing stays CLI-only. No costing, CAM, simulation.
+- No parity or superiority vs MecAgent/Pre6 is demonstrated (MecAgent not run; Lens run only on its own sample, no shared labelled drawings). Pre6 Lens's own manual
+  lists PDF/JPG/PNG/TIFF input (no DXF) and OCR; its public example (observed, P6-23…31) ballooned 73 dims + GD&T on a raster in ~10 s.
+Full list: `docs/engineering/known-limitations.md`.

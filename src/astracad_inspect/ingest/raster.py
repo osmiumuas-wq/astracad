@@ -1,0 +1,430 @@
+"""Raster / scanned drawing route: two independent OCR engines, accepted only where they agree.
+
+A scan has no text layer and no geometry, so every number on it comes from OCR, and OCR fails in
+confident ways (measured on this PC: Windows OCR read "45°" as "450"; RapidOCR reads "Ø20" as
+"020"). One engine's output is therefore never accepted on its own:
+
+* **Windows.Media.Ocr** (built into Windows 10/11, word boxes) and **RapidOCR** (PaddleOCR models
+  on onnxruntime, line boxes + confidence) read the same page independently;
+* a region becomes a characteristic only when both engines read the same text there. The one
+  tolerated difference is the diameter sign read as "0"/"O" by one engine where the other read
+  "Ø" — recorded on the row;
+* a disagreement, or text seen by only one engine, is escalated with both readings;
+* every accepted row still needs review: there are no definition points to cross-check against.
+
+The page is read upright and turned 90° clockwise (vertical dimension text reads bottom-to-top),
+and boxes are mapped back to the upright page. Positions are page millimetres (from the image
+DPI; 300 assumed and stated when the file carries none). Units are never assumed: --units is
+required, exactly as for PDF.
+"""
+from __future__ import annotations
+
+import asyncio
+import io
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from .. import iso286
+from ..callouts import normalise, parse_callout
+from ..gdt import parse_unicode_frame
+from ..model import (CharKind, Characteristic, Check, CheckOutcome, ProvenanceState,
+                     ReviewStatus, SourceLocation, UninterpretedAnnotation)
+from ..units import UnitError
+from .dxf import DrawingBundle, EntityCensusRow, sha256_file
+
+RASTER_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
+DEFAULT_DPI = 300.0
+_NUMBER = re.compile(r"\d")
+_CALLOUT_START = re.compile(r"^(?:\d+\s*x\s*)?(?:⌀|R\s*\d|M\d|\d|\.\d)", re.I)
+_DEVIATION_ONLY = re.compile(r"^[+-]\s*\d*\.?\d+$")
+
+
+@dataclass
+class OcrBox:
+    text: str
+    box: tuple[float, float, float, float]          # x0, y0, x1, y1 in upright image pixels
+    conf: float | None = None
+
+
+@dataclass
+class Region:
+    box: tuple[float, float, float, float]
+    a: str | None                                   # Windows reading
+    b: str | None                                   # RapidOCR reading
+    angle: int
+    b_conf: float | None = None
+    agreed: str | None = None
+    notes: list[str] = field(default_factory=list)
+
+
+# ---- engines --------------------------------------------------------------------------------
+class WindowsOcr:
+    name = "windows-media-ocr"
+
+    def __init__(self, language: str = "en-US"):
+        from winrt.windows.globalization import Language
+        from winrt.windows.media.ocr import OcrEngine
+        self._engine = OcrEngine.try_create_from_language(Language(language))
+        if self._engine is None:
+            raise RuntimeError(f"Windows OCR has no recogniser for {language}")
+        self.max_dim = OcrEngine.max_image_dimension
+
+    def words(self, img) -> list[OcrBox]:
+        return asyncio.run(self._words(img))
+
+    async def _words(self, img) -> list[OcrBox]:
+        from winrt.windows.graphics.imaging import BitmapDecoder
+        from winrt.windows.storage.streams import DataWriter, InMemoryRandomAccessStream
+        scale = 1.0
+        if max(img.size) > self.max_dim:
+            scale = self.max_dim / max(img.size)
+            img = img.resize((int(img.width * scale), int(img.height * scale)))
+        buf = io.BytesIO()
+        img.save(buf, "PNG")
+        stream = InMemoryRandomAccessStream()
+        w = DataWriter(stream)
+        w.write_bytes(buf.getvalue())
+        await w.store_async()
+        await w.flush_async()
+        stream.seek(0)
+        bmp = await (await BitmapDecoder.create_async(stream)).get_software_bitmap_async()
+        res = await self._engine.recognize_async(bmp)
+        out = []
+        for line in res.lines:
+            for wd in line.words:
+                r = wd.bounding_rect
+                out.append(OcrBox(wd.text, (r.x / scale, r.y / scale, (r.x + r.width) / scale,
+                                            (r.y + r.height) / scale)))
+        return out
+
+
+class RapidOcrEngine:
+    name = "rapidocr-onnxruntime"
+
+    def __init__(self):
+        from rapidocr_onnxruntime import RapidOCR
+        self._engine = RapidOCR()
+
+    def lines(self, img) -> list[OcrBox]:
+        import numpy as np
+        res, _ = self._engine(np.asarray(img))
+        out = []
+        for pts, text, conf in res or []:
+            xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+            out.append(OcrBox(text, (min(xs), min(ys), max(xs), max(ys)), float(conf)))
+        return out
+
+
+def engines_available() -> dict[str, str]:
+    """Which engines import here, and why not when they do not."""
+    got = {}
+    for cls in (RapidOcrEngine, WindowsOcr):        # RapidOCR first - see read_raster
+        try:
+            cls()
+            got[cls.name] = "available"
+        except Exception as ex:          # noqa: BLE001 - report, do not fail
+            got[cls.name] = f"unavailable: {type(ex).__name__}: {ex}"
+    return got
+
+
+# ---- geometry helpers ------------------------------------------------------------------------
+def _unrotate(box, angle: int, w: int, h: int):
+    """Map a box from an image rotated by `angle` (PIL, CCW, expand=True) back to upright pixels."""
+    x0, y0, x1, y1 = box
+    if angle == 0:
+        return box
+    if angle == -90:          # rotated clockwise: upright (x, y) -> (h - y, x)
+        pts = [(yy, h - xx) for xx, yy in ((x0, y0), (x1, y1))]
+    elif angle == 90:         # rotated counter-clockwise: upright (x, y) -> (y, w - x)
+        pts = [(w - yy, xx) for xx, yy in ((x0, y0), (x1, y1))]
+    else:
+        raise ValueError(angle)
+    xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
+def _overlap(a, b) -> float:
+    """Intersection over the smaller box (containment counts as full overlap)."""
+    ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    small = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1])) or 1.0
+    return inter / small
+
+
+# ---- agreement -------------------------------------------------------------------------------
+_DIA = "⌀Øø∅"
+
+
+def _key(t: str) -> str:
+    t = normalise(t or "")
+    return re.sub(r"\s+", "", t)
+
+
+def agree(a: str | None, b: str | None) -> tuple[str | None, list[str]]:
+    """The agreed text, or None. Only the diameter-sign confusion is tolerated, and only when one
+    engine actually read a diameter sign at that place."""
+    if not a or not b:
+        return None, []
+    ka, kb = _key(a), _key(b)
+    if ka == kb:
+        return normalise(a), []
+    if len(ka) == len(kb):
+        merged, notes = [], []
+        for ca, cb in zip(ka, kb):
+            if ca == cb:
+                merged.append(ca)
+            elif ca in _DIA and cb in "0Oo":
+                merged.append("⌀")
+                notes.append(f"RapidOCR read the diameter sign as {cb!r}; Windows OCR read ⌀")
+            elif cb in _DIA and ca in "0Oo":
+                merged.append("⌀")
+                notes.append(f"Windows OCR read the diameter sign as {ca!r}; RapidOCR read ⌀")
+            elif {ca, cb} & {"°"} and ({ca, cb} - {"°"}) <= set("0Oo"):
+                # Measured: Windows OCR reads "45°" as "450" at every scale. Accepted only when the
+                # other engine explicitly read the degree sign at that position.
+                merged.append("°")
+                other = cb if ca == "°" else ca
+                notes.append(f"one engine read the degree sign as {other!r}; the other read °")
+            else:
+                return None, []
+        return "".join(merged), notes
+    return None, []
+
+
+def _join(words: list[OcrBox]) -> str:
+    words = sorted(words, key=lambda w: (round((w.box[1] + w.box[3]) / 2 / 8), w.box[0]))
+    return " ".join(w.text for w in words)
+
+
+def reread(img, region: Region, win: WindowsOcr, rapid: RapidOcrEngine,
+           scales=(2, 3)) -> None:
+    """Second look at a region the engines did not agree on: crop it (with margin), turn it the
+    way it was read, upscale, and let BOTH engines read it again. Agreement is still required;
+    the re-read only gives each engine more pixels."""
+    from PIL import Image
+    x0, y0, x1, y1 = region.box
+    h = max(8.0, y1 - y0) if region.angle == 0 else max(8.0, x1 - x0)
+    pad = 0.6 * h
+    crop = img.crop((max(0, int(x0 - pad)), max(0, int(y0 - pad)),
+                     min(img.width, int(x1 + pad)), min(img.height, int(y1 + pad))))
+    if region.angle:
+        crop = crop.rotate(region.angle, expand=True)
+    for k in scales:
+        big = crop.resize((crop.width * k, crop.height * k), Image.LANCZOS)
+        a = _join(win.words(big)) or None
+        bl = rapid.lines(big)
+        b = " ".join(x.text for x in sorted(bl, key=lambda x: (x.box[1], x.box[0]))) or None
+        text, notes = agree(a, b)
+        if text is not None:
+            region.a, region.b, region.agreed = a, b, text
+            region.notes = notes + [f"agreed on a {k}x re-read of the region (first read: "
+                                    f"Windows {region.a!r}, RapidOCR {region.b!r})"]
+            return
+    region.notes.append(f"no agreement after re-reading the region at {', '.join(f'{k}x' for k in scales)}")
+
+
+def regions_for(img, win: WindowsOcr, rapid: RapidOcrEngine, angles=(0, -90)) -> list[Region]:
+    """Read the page at each angle with both engines and pair their readings by position."""
+    W, H = img.size
+    regions: list[Region] = []
+    for angle in angles:
+        rot = img if angle == 0 else img.rotate(angle, expand=True)
+        ww = [OcrBox(w.text, _unrotate(w.box, angle, W, H)) for w in win.words(rot)]
+        rr = [OcrBox(r.text, _unrotate(r.box, angle, W, H), r.conf) for r in rapid.lines(rot)]
+        used = set()
+        found: list[Region] = []
+        for r in rr:
+            mine = [i for i, w in enumerate(ww) if i not in used and _overlap(w.box, r.box) > 0.5]
+            used.update(mine)
+            a = _join([ww[i] for i in mine]) if mine else None
+            box = r.box
+            for i in mine:
+                b = ww[i].box
+                box = (min(box[0], b[0]), min(box[1], b[1]), max(box[2], b[2]), max(box[3], b[3]))
+            found.append(Region(box, a, r.text, angle, r.conf))
+        # Windows words no RapidOCR line covered: one-engine readings, grouped by line proximity
+        rest = [ww[i] for i in range(len(ww)) if i not in used]
+        while rest:
+            seed = rest.pop(0)
+            group = [seed]
+            for w in rest[:]:
+                if abs((w.box[1] + w.box[3]) - (seed.box[1] + seed.box[3])) / 2 < 0.6 * (seed.box[3] - seed.box[1]) \
+                        and min(abs(w.box[0] - g.box[2]) for g in group) < 1.5 * (seed.box[3] - seed.box[1]):
+                    group.append(w)
+                    rest.remove(w)
+            box = (min(g.box[0] for g in group), min(g.box[1] for g in group),
+                   max(g.box[2] for g in group), max(g.box[3] for g in group))
+            found.append(Region(box, _join(group), None, angle))
+        for f in found:
+            f.agreed, f.notes = agree(f.a, f.b)
+            if f.agreed is None and _NUMBER.search((f.a or "") + (f.b or "")) and                     not any(_overlap(f.box, g.box) > 0.5 for g in regions):
+                first = (f.a, f.b)
+                reread(img, f, win, rapid)
+                if f.agreed is not None:
+                    f.notes[-1] = (f"agreed on a re-read of the region (first read: Windows "
+                                   f"{first[0]!r}, RapidOCR {first[1]!r})")
+            # a later (rotated) pass re-reads text already read upright as noise: keep the first
+            if any(_overlap(f.box, g.box) > 0.5 for g in regions):
+                continue
+            regions.append(f)
+    return regions
+
+
+# ---- page loading ----------------------------------------------------------------------------
+def load_pages(path: Path) -> list[tuple[object, float, bool]]:
+    """(RGB image, dpi, dpi_was_stated) per page."""
+    from PIL import Image, ImageSequence
+    if path.suffix.lower() == ".pdf":
+        import pypdfium2 as pdfium
+        pdf = pdfium.PdfDocument(str(path))
+        return [(pdf[i].render(scale=DEFAULT_DPI / 72.0).to_pil().convert("RGB"), DEFAULT_DPI, True)
+                for i in range(len(pdf))]
+    im = Image.open(path)
+    pages = []
+    for frame in ImageSequence.Iterator(im):
+        dpi = frame.info.get("dpi")
+        stated = bool(dpi and dpi[0] and dpi[0] > 1)
+        pages.append((frame.convert("RGB"), float(dpi[0]) if stated else DEFAULT_DPI, stated))
+    return pages
+
+
+# ---- bundle ----------------------------------------------------------------------------------
+def read_raster(path: str | Path, declared_unit: str | None = None,
+                revision: str | None = None, *, engines=None,
+                angles=(0, -90)) -> DrawingBundle:
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"drawing not found: {p}")
+    if not declared_unit:
+        raise UnitError("a scanned drawing does not declare the unit its callouts are written in. "
+                        "Pass --units explicitly; nothing is assumed.")
+    if engines is None:
+        # Order matters: creating RapidOCR (onnxruntime) after WinRT has been initialised in the
+        # process segfaults (measured on this PC); created first, both coexist.
+        rapid = RapidOcrEngine()
+        win = WindowsOcr()
+    else:
+        win, rapid = engines
+    doc_sha = sha256_file(p)
+    unit = declared_unit
+    warnings: list[str] = []
+    if revision:
+        revision, revision_source = revision.strip() or "A", "user-specified"
+    else:
+        revision, revision_source = "A", ("default - title blocks are not read from scans by "
+                                          "this route; confirm before issuing")
+        warnings.append("revision defaults to A: this route does not read title blocks")
+
+    pages = load_pages(p)
+    if len(pages) > 1:
+        warnings.append(f"{len(pages)} pages: every page is read; layout image shows page 1")
+    characteristics, uninterpreted, notes = [], [], []
+    n_regions = n_agreed = n_disagree = n_single = 0
+    page_w = page_h = 0.0
+    for pno, (img, dpi, stated) in enumerate(pages, start=1):
+        if not stated:
+            warnings.append(f"page {pno}: the image states no DPI; {DEFAULT_DPI:g} assumed for "
+                            "positions only (values are unaffected)")
+        mm = 25.4 / dpi
+        if pno == 1:
+            page_w, page_h = img.width * mm, img.height * mm
+        for i, r in enumerate(regions_for(img, win, rapid, angles)):
+            n_regions += 1
+            cx = (r.box[0] + r.box[2]) / 2 * mm
+            cy = (img.height - (r.box[1] + r.box[3]) / 2) * mm
+            handle = f"P{pno}-R{i:03d}@{r.angle}"
+            readings = f"Windows OCR: {r.a!r}; RapidOCR: {r.b!r}"
+            text = r.agreed
+            if text is None:
+                seen = r.a or r.b or ""
+                if not _NUMBER.search(seen) or not (_CALLOUT_START.match(normalise(seen))
+                                                    or normalise(seen)[:1] in "+-±"):
+                    if _NUMBER.search(seen):
+                        notes.append(normalise(seen))
+                    continue
+                if r.a and r.b:
+                    n_disagree += 1
+                    why = "the two OCR engines disagree - " + readings
+                else:
+                    n_single += 1
+                    why = "read by one OCR engine only - " + readings
+                uninterpreted.append(UninterpretedAnnotation(
+                    str(p), handle, "", seen, why, pno, cx, cy))
+                continue
+            n_agreed += 1
+            if not _NUMBER.search(text):
+                continue
+            frame = parse_unicode_frame(text)
+            parsed = None if frame is not None else parse_callout(text, unit)
+            if frame is not None and frame.resolved:
+                tol, kind, nominal, limits, count = frame.tolerance, CharKind.GEOMETRIC, None, \
+                    (0.0, frame.tolerance.zone), 1
+            elif parsed is not None and parsed.resolved and (
+                    parsed.nominal is not None or parsed.tolerance.kind == "limit_pair") \
+                    and not _DEVIATION_ONLY.match(_key(text)):
+                from ..limits import resolve_limits
+                tol, nominal, count = parsed.tolerance, parsed.nominal, parsed.count
+                kind = parsed.kind if parsed.kind is not CharKind.UNKNOWN else CharKind.LINEAR
+                limits = resolve_limits(nominal, tol, unit)
+            else:
+                if _CALLOUT_START.match(normalise(text)) or normalise(text)[:1] in "+-±":
+                    why = (frame.unresolved_reason if frame is not None else
+                           (parsed.unresolved_reason or "not a recognised callout"))
+                    uninterpreted.append(UninterpretedAnnotation(
+                        str(p), handle, "", text, f"both engines read {text!r}, but it does not "
+                        f"parse as a callout: {why}", pno, cx, cy))
+                elif _NUMBER.search(text):
+                    notes.append(text)
+                continue
+            c = Characteristic(
+                cid=f"CH-{len(characteristics) + 1:03d}", kind=kind, raw_callout=text, unit=unit,
+                nominal=nominal, tolerance=tol, count=count, state=ProvenanceState.PARSED,
+                review=ReviewStatus.NEEDS_REVIEW,
+                source=SourceLocation(document=str(p), document_sha256=doc_sha, revision=revision,
+                                      page=pno, entity_handle=handle, entity_type="OCR_REGION",
+                                      layer="", anchor_x=cx, anchor_y=cy),
+                limits=limits)
+            c.record("extractor", "extracted", f"OCR consensus at {handle}: {readings}"
+                     + (f", RapidOCR confidence {r.b_conf:.3f}" if r.b_conf is not None else ""))
+            for note in r.notes:
+                c.record("ocr", "noted", note)
+            c.checks.append(Check("ocr_two_engine_agreement", CheckOutcome.PASSED,
+                                  "two independent OCR engines read the same text", text))
+            c.checks.append(Check("geometry_cross_check", CheckOutcome.NOT_VERIFIABLE,
+                                  "callout matches drawn geometry", "-",
+                                  "a scan has no definition points; the value is OCR-read only"))
+            c.fail("ocr_read", "read from a raster by OCR (two engines agree); confirm against "
+                               "the drawing before release", "warning")
+            if c.limits is None and kind is not CharKind.ANGULAR:
+                c.fail("no_limits", "no definite upper/lower limits could be derived from the "
+                                    "stated tolerance", "warning")
+            if kind is CharKind.GEOMETRIC and tol.modifier in ("MMC", "LMC"):
+                c.fail("gdt_bonus_tolerance_not_applied",
+                       f"{tol.symbol} at {tol.modifier}: bonus tolerance not computed", "warning")
+            characteristics.append(c)
+
+    extents = (0.0, 0.0, page_w, page_h)
+    census = [EntityCensusRow("OCR_REGION", n_regions, len(characteristics),
+                              f"{n_agreed} agreed, {n_disagree} disagreed, {n_single} one-engine")]
+    feature_support = {
+        "dimension.linear": "partial - OCR text with two-engine agreement; no geometry cross-check",
+        "dimension.diameter": "partial - ⌀ from either engine when the other read 0/O at that place",
+        "dimension.radius": "partial - R prefix in OCR text",
+        "dimension.angular": "partial - ° must be read by both engines (\"450\" vs \"45°\" escalates)",
+        "tolerance.symmetric_deviations": "inline only; stacked deviations are usually split by OCR "
+                                          "and escalated",
+        "tolerance.limit_pair": "supported when both engines agree",
+        "tolerance.iso_fit_class": iso286.support_statement(),
+        "gdt.feature_control_frame": "partial - only frames whose symbols OCR reads as text",
+        "title_block": "NOT read by this route",
+        "raster_ocr": "Windows.Media.Ocr + RapidOCR (PaddleOCR models), consensus required",
+    }
+    return DrawingBundle(
+        path=str(p), sha256=doc_sha, revision=revision, revision_source=revision_source,
+        unit=unit, extents=extents, content_extents=(page_w * 0.05, page_h * 0.05,
+                                                     page_w * 0.95, page_h * 0.95),
+        notes=notes, page_count=len(pages), characteristics=characteristics,
+        uninterpreted=uninterpreted, census=census, warnings=warnings,
+        feature_support=feature_support)

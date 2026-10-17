@@ -1,0 +1,64 @@
+{
+  "command": "edit",
+  "source": {
+    "path": "C:\\New folder (4)\\astracad\\_win\\sw\\block_60x40x20.SLDPRT",
+    "sha256_before": "1727274f42b5aa7182d2a21ecb9f0fef642ce566fa3df6348244eec847a39a08",
+    "sha256_after": "1727274f42b5aa7182d2a21ecb9f0fef642ce566fa3df6348244eec847a39a08",
+    "unchanged": true
+  },
+  "copy": "C:\\New folder (4)\\astracad\\_win\\edit2\\block_depth35.SLDPRT",
+  "title": "block_depth35",
+  "edits": [
+    {
+      "target": "D1@Boss-Extrude1",
+      "requested_mm": 35,
+      "resolved": "D1@Boss-Extrude1@block_depth35.Part",
+      "before_mm": 20,
+      "after_mm": 35,
+      "ok": true
+    }
+  ],
+  "whats_wrong_before": 0,
+  "whats_wrong_after": 0,
+  "dimensions_before": [
+    {
+      "Name": "D1@Boss-Extrude1@block_depth35.Part",
+      "ValueMm": 20
+    }
+  ],
+  "dimensions_after": [
+    {
+      "Name": "D1@Boss-Extrude1@block_depth35.Part",
+      "ValueMm": 35
+    }
+  ],
+  "mass_before": {
+    "volume_mm3": 47999.99999999999,
+    "surface_area_mm2": 8799.999999999998,
+    "solid_bodies": 1
+  },
+  "mass_after": {
+    "volume_mm3": 84000.00000000001,
+    "surface_area_mm2": 11800,
+    "solid_bodies": 1
+  },
+  "artifacts": [
+    {
+      "path": "C:\\New folder (4)\\astracad\\_win\\edit2\\block_depth35.SLDPRT",
+      "bytes": 48111,
+      "sha256": "8168ad12977d5cd7b62be91ab61eca2140d6c3602408ea423e669cf9542ce12b"
+    },
+    {
+      "path": "C:\\New folder (4)\\astracad\\_win\\edit2\\block_depth35.step",
+      "bytes": 15882,
+      "sha256": "e6852ba8af1e0578b715d307eab21a336409150a04084fcd1939600bb5ee5102"
+    }
+  ],
+  "log": [
+    "copied C:\\New folder (4)\\astracad\\_win\\sw\\block_60x40x20.SLDPRT -\u003E C:\\New folder (4)\\astracad\\_win\\edit2\\block_depth35.SLDPRT",
+    "rebuild returned True; what\u0027s-wrong count 0 -\u003E 0",
+    "save copy: True err=0 warn=0"
+  ],
+  "failures": [],
+  "success": true
+}

@@ -1,0 +1,43 @@
+{
+  "label": "contradiction_synthetic",
+  "synthetic": true,
+  "notice": "SYNTHETIC TEST FIXTURE - machine-generated, not a real part or a real drawing",
+  "unit": "mm",
+  "drawn_extents": [
+    100.0,
+    20.0
+  ],
+  "expected_characteristics": [
+    {
+      "expect": "callout",
+      "raw_contains": "90 \u00b10.1",
+      "kind": "linear",
+      "nominal": 90.0,
+      "tolerance": "symmetric:0.1",
+      "resolved": true,
+      "limits": [
+        89.9,
+        90.1
+      ],
+      "drawn_value": 100.0,
+      "must_block": true
+    },
+    {
+      "expect": "callout",
+      "raw_contains": "20 \u00b10.1",
+      "kind": "linear",
+      "nominal": 20.0,
+      "tolerance": "symmetric:0.1",
+      "resolved": true,
+      "limits": [
+        19.9,
+        20.1
+      ],
+      "drawn_value": 20.0,
+      "must_block": false
+    }
+  ],
+  "expected_uninterpreted": [],
+  "expect_cross_check_failure_for": "90 \u00b10.1",
+  "expect_cross_check_pass_for": "20 \u00b10.1"
+}

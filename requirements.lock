@@ -1,0 +1,45 @@
+# ASTraCAD Inspect — locked dependency versions
+#
+# Every number below was READ OUT OF THIS MACHINE on 2026-10-15 with
+#   py -c "from importlib.metadata import version; print(version('<pkg>'))"
+# i.e. these are the versions actually importable here, not versions guessed from documentation.
+# The same values are recorded per run inside each report's provenance block
+# (astracad_inspect.provenance.tool_versions), so an artefact always carries the environment
+# that produced it.
+#
+# NOT pinned here: SHA-256 of the wheels. That would require a network fetch (`pip download
+# --require-hashes`), which has not been authorised. Reconstructing this file on another machine
+# therefore pins versions, not bytes - treat the hashes as an open task, not as satisfied.
+#
+# Licences: docs/licences/dependency-licences.md. PyMuPDF (AGPL-3.0) is no longer a run-time
+# dependency; it is the optional `table-rebuild` extra for tools/iso286_extract.py only.
+
+# --- direct dependencies (declared in pyproject.toml) ---
+ezdxf==1.4.4            # DXF/AcroRip reader, the only supported input route today
+matplotlib==3.11.2      # Agg rendering of the drawing + balloon overlay; also supplies DejaVuSans
+reportlab==5.0.1        # landscape A4 inspection report
+openpyxl==3.1.5         # inspection workbook (5 sheets)
+pypdfium2==5.14.0       # PDF read-back of our own reports + vector-PDF drawing ingestion (Apache-2.0/BSD-3)
+pillow==12.3.0          # raster measurement of the rendered layout (ink fraction), image embedding
+
+# --- transitive, non-optional, measured present in this environment ---
+typing_extensions==4.16.0
+pyparsing==3.3.3
+numpy==2.5.4
+fonttools==4.67.0
+contourpy==1.4.0
+cycler==0.12.1
+kiwisolver==1.5.1
+packaging==26.3
+python-dateutil==2.9.0.post0
+six==1.17.0
+charset-normalizer==3.5.2
+et-xmlfile==2.0.0
+
+# --- interpreter / platform this lock was measured on ---
+# python==3.14.7   (C:\Users\solid\AppData\Local\Python\pythoncore-3.14-64\python.exe)
+# Windows 11 (10.0.26200) AMD64
+#
+# Known upstream warning on this combination: ezdxf 1.4.4 sets `.shape` on NumPy arrays, which
+# NumPy 2.5 deprecates. It appears twice in `py -m pytest -q` output and is not caused by, or
+# fixable in, this code. Recorded rather than silenced.

@@ -1,0 +1,205 @@
+{
+  "spec": "prism",
+  "session": {
+    "process_id": 36372,
+    "base_version": "sw2026_SP04",
+    "service_pack": "d260814.002",
+    "open_documents": 0,
+    "started_by_this_process": false
+  },
+  "execution": {
+    "title": "Part7",
+    "success": true,
+    "failures": [],
+    "log": [
+      "document: Part7 from C:\\ProgramData\\SOLIDWORKS\\SOLIDWORKS 2026\\templates\\Part.PRTDOT",
+      "outline: rectangle 60x40 at (0,0) on front; segments=4",
+      "body: kernel returned no feature on the first attempt; re-selecting Sketch1 and retrying",
+      "body: Boss-Extrude1 depth=20",
+      "saved prism.sldprt 47128 B",
+      "saved prism.step 15844 B"
+    ],
+    "artifacts": [
+      "C:\\New folder (4)\\mecagent-alternative\\work\\prism.sldprt",
+      "C:\\New folder (4)\\mecagent-alternative\\work\\prism.step"
+    ],
+    "notes": {}
+  },
+  "measured": {
+    "document_title": "prism",
+    "document_type": 1,
+    "solid_bodies": 1,
+    "surface_bodies": 0,
+    "volume_mm3": 47999.99999999999,
+    "surface_area_mm2": 8799.999999999998,
+    "mass_grams": 47.99999999999999,
+    "center_of_mass_mm": [
+      30,
+      20,
+      10
+    ],
+    "bounding_box_mm": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "feature_tree": [
+      "Comments [CommentsFolder]",
+      "Favorites [FavoriteFolder]",
+      "History [HistoryFolder]",
+      "Selection Sets [SelectionSetFolder]",
+      "Sensors [SensorFolder]",
+      "Design Binder [DocsFolder]",
+      "Annotations [DetailCabinet]",
+      "Surface Bodies [SurfaceBodyFolder]",
+      "Solid Bodies [SolidBodyFolder]",
+      "Lights and Cameras [EnvFolder]",
+      "Markups [InkMarkupFolder]",
+      "Equations [EqnFolder]",
+      "Material \u003Cnot specified\u003E [MaterialFolder]",
+      "Front Plane [RefPlane]",
+      "Top Plane [RefPlane]",
+      "Right Plane [RefPlane]",
+      "Origin [OriginProfileFeature]",
+      "Sketch1 [ProfileFeature]",
+      "Boss-Extrude1 [Extrusion]"
+    ],
+    "dimensions": {
+      "d1@boss-extrude1@prism.part": 20
+    },
+    "material": null,
+    "errors": [],
+    "template_units": null
+  },
+  "verification": {
+    "spec_name": "prism",
+    "checks": [
+      {
+        "name": "solid_body_count",
+        "kind": 1,
+        "outcome": 0,
+        "expected": "1.000000",
+        "actual": "1.000000",
+        "delta": 0,
+        "tolerance": 0,
+        "why": null
+      },
+      {
+        "name": "volume_mm3",
+        "kind": 0,
+        "outcome": 0,
+        "expected": "48000.000000",
+        "actual": "48000.000000",
+        "delta": -7.275957614183426E-12,
+        "tolerance": 0.048,
+        "why": null
+      },
+      {
+        "name": "surface_area_mm2",
+        "kind": 0,
+        "outcome": 0,
+        "expected": "8800.000000",
+        "actual": "8800.000000",
+        "delta": -1.8189894035458565E-12,
+        "tolerance": 0.008799999999999999,
+        "why": null
+      },
+      {
+        "name": "feature:Sketch",
+        "kind": 1,
+        "outcome": 0,
+        "expected": "contains \u0027Sketch\u0027",
+        "actual": "Comments [CommentsFolder], Favorites [FavoriteFolder], History [HistoryFolder], Selection Sets [SelectionSetFolder], Sensors [SensorFolder], Design Binder [DocsFolder], Annotations [DetailCabinet], Surface Bodies [SurfaceBodyFolder], Solid Bodies [SolidBodyFolder], Lights and Cameras [EnvFolder], Markups [InkMarkupFolder], Equations [EqnFolder], Material \u003Cnot specified\u003E [MaterialFolder], Front Plane [RefPlane], Top Plane [RefPlane], Right Plane [RefPlane], Origin [OriginProfileFeature], Sketch1 [ProfileFeature], Boss-Extrude1 [Extrusion]",
+        "delta": null,
+        "tolerance": 0,
+        "why": null
+      },
+      {
+        "name": "feature:Extrusion",
+        "kind": 1,
+        "outcome": 0,
+        "expected": "contains \u0027Extrusion\u0027",
+        "actual": "Comments [CommentsFolder], Favorites [FavoriteFolder], History [HistoryFolder], Selection Sets [SelectionSetFolder], Sensors [SensorFolder], Design Binder [DocsFolder], Annotations [DetailCabinet], Surface Bodies [SurfaceBodyFolder], Solid Bodies [SolidBodyFolder], Lights and Cameras [EnvFolder], Markups [InkMarkupFolder], Equations [EqnFolder], Material \u003Cnot specified\u003E [MaterialFolder], Front Plane [RefPlane], Top Plane [RefPlane], Right Plane [RefPlane], Origin [OriginProfileFeature], Sketch1 [ProfileFeature], Boss-Extrude1 [Extrusion]",
+        "delta": null,
+        "tolerance": 0,
+        "why": null
+      },
+      {
+        "name": "artifact:prism.sldprt",
+        "kind": 2,
+        "outcome": 0,
+        "expected": "non-empty file",
+        "actual": "47128 B sha256=30851409a3ba30030e94ca794fa3e31a2a3c4ebbfeee40ed96faa4bc71a54079",
+        "delta": null,
+        "tolerance": 0,
+        "why": "ok"
+      },
+      {
+        "name": "artifact:prism.step",
+        "kind": 2,
+        "outcome": 0,
+        "expected": "non-empty file",
+        "actual": "15844 B sha256=673694bd07954aa3613dc97f5310b82ed021685a72600119809f87fd7db4bc49",
+        "delta": null,
+        "tolerance": 0,
+        "why": "ok"
+      }
+    ],
+    "measured": {
+      "document_title": "prism",
+      "document_type": 1,
+      "solid_bodies": 1,
+      "surface_bodies": 0,
+      "volume_mm3": 47999.99999999999,
+      "surface_area_mm2": 8799.999999999998,
+      "mass_grams": 47.99999999999999,
+      "center_of_mass_mm": [
+        30,
+        20,
+        10
+      ],
+      "bounding_box_mm": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "feature_tree": [
+        "Comments [CommentsFolder]",
+        "Favorites [FavoriteFolder]",
+        "History [HistoryFolder]",
+        "Selection Sets [SelectionSetFolder]",
+        "Sensors [SensorFolder]",
+        "Design Binder [DocsFolder]",
+        "Annotations [DetailCabinet]",
+        "Surface Bodies [SurfaceBodyFolder]",
+        "Solid Bodies [SolidBodyFolder]",
+        "Lights and Cameras [EnvFolder]",
+        "Markups [InkMarkupFolder]",
+        "Equations [EqnFolder]",
+        "Material \u003Cnot specified\u003E [MaterialFolder]",
+        "Front Plane [RefPlane]",
+        "Top Plane [RefPlane]",
+        "Right Plane [RefPlane]",
+        "Origin [OriginProfileFeature]",
+        "Sketch1 [ProfileFeature]",
+        "Boss-Extrude1 [Extrusion]"
+      ],
+      "dimensions": {
+        "d1@boss-extrude1@prism.part": 20
+      },
+      "material": null,
+      "errors": [],
+      "template_units": null
+    },
+    "all_passed": true,
+    "passed": 7,
+    "failed": 0,
+    "unknown": 0
+  }
+}

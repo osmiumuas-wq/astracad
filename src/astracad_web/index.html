@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ASTraCAD Workspace</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #5d6673; --line: #dfe3e8;
+  --accent: #1f5fbf; --ok: #1e7a3c; --ok-bg: #e5f4ea; --warn: #8a5a00; --warn-bg: #fdf1d8;
+  --bad: #b00020; --bad-bg: #fbe5e8; --na: #55606d; --na-bg: #eceff2; --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111418; --panel: #1a1f25; --ink: #e6e9ed; --muted: #9aa4b0; --line: #2c333b;
+    --accent: #6ea2ff; --ok: #6fd391; --ok-bg: #173323; --warn: #f2c46b; --warn-bg: #3a2c10;
+    --bad: #ff8094; --bad-bg: #3d1820; --na: #a9b3be; --na-bg: #262c33;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 16px; margin: 0; letter-spacing: .2px; }
+header h1 span { color: var(--muted); font-weight: 400; }
+nav { display: flex; gap: 4px; flex-wrap: wrap; }
+nav button { border: 1px solid transparent; background: none; color: var(--muted); padding: 6px 12px; border-radius: 6px; cursor: pointer; font: inherit; }
+nav button[aria-selected="true"] { color: var(--ink); background: var(--bg); border-color: var(--line); font-weight: 600; }
+#cadchips { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+main { padding: 16px 20px 40px; max-width: 1400px; margin: 0 auto; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+.panel h2 { font-size: 14px; margin: 0 0 10px; }
+.muted { color: var(--muted); }
+.nowrap { white-space: nowrap; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.ok { color: var(--ok); background: var(--ok-bg); } .warn { color: var(--warn); background: var(--warn-bg); }
+.bad { color: var(--bad); background: var(--bad-bg); } .na { color: var(--na); background: var(--na-bg); }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12.5px; }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--bg); }
+@media (max-width: 900px) { main { padding: 12px 16px 32px; } }
+img.layout { display: block; margin: 0 auto; width: 100%; max-width: 980px; height: auto; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+form.run { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+input, select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+input[name=drawing] { min-width: min(520px, 80vw); }
+button.primary { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+button.link { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font: inherit; }
+.banner { padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; font-weight: 600; }
+.files a { margin-right: 14px; color: var(--accent); }
+.empty { padding: 18px; text-align: center; color: var(--muted); }
+pre { white-space: pre-wrap; word-break: break-word; margin: 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ASTraCAD <span>workspace · local</span></h1>
+  <nav role="tablist">
+    <button data-tab="inspections" aria-selected="true">Inspections</button>
+    <button data-tab="tasks">Tasks</button>
+    <button data-tab="changes">Change sets</button>
+    <button data-tab="cad">CAD</button>
+  </nav>
+  <div id="cadchips" aria-live="polite"></div>
+</header>
+<main id="main"></main>
+<script>
+"use strict";
+// Every value from a drawing, task or file is inserted as text, never as HTML.
+const h = (tag, attrs = {}, ...kids) => {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat()) if (k != null && k !== false) el.append(k instanceof Node ? k : String(k));
+  return el;
+};
+const api = async (path, opts) => {
+  const r = await fetch(path, opts);
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || r.statusText);
+  return d;
+};
+const fmt = (v, n = 4) => v == null ? "–" : (typeof v === "number" ? (+v.toFixed(n)).toString() : String(v));
+// Display only: DXF control codes shown as the symbols they print as (stored text is untouched).
+const sym = t => t == null ? "–" : String(t).replace(/%%[cC]/g, "⌀").replace(/%%[dD]/g, "°").replace(/%%[pP]/g, "±");
+const when = s => s ? new Date(s).toLocaleString() : "–";
+const chip = (text, cls) => h("span", { class: "chip " + cls }, text);
+const stateCls = s => ({ SUCCEEDED: "ok", FAILED: "bad", CANCELLED: "na", WAITING_FOR_APPROVAL: "warn",
+  RUNNING: "warn", RECOVERING: "warn", PENDING: "na", EXECUTED_UNVERIFIED: "warn" }[s] || "na");
+const outcomeCls = o => ({ passed: "ok", failed: "bad", not_verifiable: "na" }[o] || "na");
+const main = document.getElementById("main");
+const table = (heads, rows) => h("div", { class: "tablewrap" },
+  h("table", {}, h("thead", {}, h("tr", {}, heads.map(x => h("th", {}, x)))), h("tbody", {}, rows)));
+const empty = msg => h("div", { class: "empty" }, msg);
+const panel = (title, ...kids) => h("section", { class: "panel" }, title ? h("h2", {}, title) : null, ...kids);
+
+async function cadChips(refresh) {
+  const box = document.getElementById("cadchips");
+  try {
+    const s = await api("/api/status" + (refresh ? "?refresh=1" : ""));
+    box.replaceChildren(...s.applications.map(a => chip(`${a.application}: ${a.state}`,
+      a.state === "CONNECTED" ? "ok" : a.state === "NOT_INSTALLED" ? "na" : "warn")));
+    return s;
+  } catch (e) { box.replaceChildren(chip("CAD status unavailable", "bad")); }
+}
+
+async function viewInspections() {
+  const status = h("div", { class: "muted", "aria-live": "polite" });
+  const form = h("form", { class: "run", onsubmit: async ev => {
+      ev.preventDefault();
+      const f = new FormData(form);
+      status.textContent = "Running inspection…";
+      try {
+        const r = await api("/api/inspect", { method: "POST",
+          headers: { "Content-Type": "application/json", "X-AstraCAD": "1" },
+          body: JSON.stringify({ drawing: f.get("drawing"), units: f.get("units"), revision: f.get("revision") }) });
+        status.textContent = r.delivered ? "Done." : "Finished, but the exports did not read back correctly.";
+        location.hash = "#inspection=" + encodeURIComponent(r.key);
+      } catch (e) { status.textContent = "Not run: " + e.message; }
+    } },
+    h("label", {}, "Drawing file (.dxf, .pdf, or a scan .png/.jpg/.tif — scans and PDFs need Units)", h("input", { name: "drawing", required: true, placeholder: "C:\\drawings\\part.dxf" })),
+    h("label", {}, "Units", h("select", { name: "units" },
+      h("option", { value: "" }, "from drawing (DXF)"), ...["mm", "in", "cm", "m"].map(u => h("option", { value: u }, u)))),
+    h("label", {}, "Revision", h("input", { name: "revision", size: 6, placeholder: "auto" })),
+    h("button", { class: "primary", type: "submit" }, "Inspect"));
+  const list = await api("/api/inspections");
+  const rows = list.map(r => h("tr", { class: "click", onclick: () => location.hash = "#inspection=" + encodeURIComponent(r.key) },
+    h("td", {}, r.name, h("div", { class: "muted mono" }, r.folder)),
+    h("td", {}, r.route), h("td", {}, r.revision ?? "–"),
+    h("td", { class: "num" }, r.rows), h("td", { class: "num" }, r.needs_review), h("td", { class: "num" }, r.escalated),
+    h("td", {}, chip(`${r.exports_passed}/${r.exports_total}`, r.exports_total && r.exports_passed === r.exports_total ? "ok" : "bad")),
+    h("td", {}, r.approvable ? chip("releasable", "ok") : chip("not releasable", "warn"))));
+  main.replaceChildren(
+    panel("Inspect a drawing", form, status),
+    panel(`Inspection runs (${list.length})`, list.length ? table(
+      ["Run", "Route", "Rev", "Rows", "Review", "Escalated", "Exports", "Gate"], rows) : empty("No runs yet in the run folders.")));
+}
+
+async function viewInspection(key) {
+  const d = await api("/api/inspection?key=" + encodeURIComponent(key));
+  const p = d.plan;
+  const files = h("div", { class: "files" }, Object.entries(d.files).map(([k, v]) =>
+    h("a", { href: "/file?key=" + encodeURIComponent(v), target: "_blank", rel: "noopener" }, k)));
+  const rows = (p.rows || []).map(r => h("tr", {},
+    h("td", { class: "num" }, r.balloon_no ?? "–"), h("td", {}, r.kind), h("td", { class: "mono" }, sym(r.callout)),
+    h("td", { class: "num" }, fmt(r.nominal)), h("td", { class: "mono" }, r.tolerance_text),
+    h("td", { class: "num" }, fmt(r.minimum)), h("td", { class: "num" }, fmt(r.maximum)),
+    h("td", {}, chip(r.status, r.blocking ? "bad" : r.status === "needs_review" ? "warn" : "ok"),
+      ...(r.issues || []).map(i => h("div", { class: "muted" }, i)))));
+  const checks = (p.checks || []).map(c => h("tr", {},
+    h("td", {}, chip(c.outcome, outcomeCls(c.outcome))), h("td", { class: "mono" }, c.name),
+    h("td", {}, c.expected), h("td", {}, c.actual), h("td", { class: "muted" }, c.why || "")));
+  const esc = (p.uninterpreted || []).map(u => h("tr", {}, h("td", { class: "mono" }, u.text), h("td", { class: "muted" }, u.reason)));
+  const ver = (d.provenance?.export_verification || []).map(c => h("tr", {},
+    h("td", {}, chip(c.outcome, outcomeCls(c.outcome))), h("td", { class: "mono" }, c.name), h("td", {}, c.actual)));
+  main.replaceChildren(
+    h("p", {}, h("button", { class: "link", onclick: () => location.hash = "" }, "← all runs")),
+    panel(d.name,
+      h("div", { class: "banner " + (p.approvable ? "ok" : "warn") }, p.gate || (p.approvable ? "releasable" : "not releasable")),
+      h("div", { class: "muted mono" }, `${p.source_document}  ·  rev ${p.revision}  ·  ${p.unit}  ·  route ${d.provenance?.route ?? "?"}`),
+      h("div", { class: "muted mono" }, "sha256 " + p.source_sha256), files),
+    panel("Layout", d.files.layout ? h("img", { class: "layout", alt: "drawing with inspection balloons", src: "/file?key=" + encodeURIComponent(d.files.layout) }) : empty("no layout image")),
+    panel(`Characteristics (${rows.length})`, rows.length ? table(["#", "Kind", "Callout", "Nominal", "Tolerance", "Min", "Max", "Status"], rows) : empty("none")),
+    panel("Plan checks", table(["", "Check", "Expected", "Actual", "Why"], checks)),
+    esc.length ? panel(`Escalated text (${esc.length})`, table(["Text", "Why it was not accepted"], esc)) : "",
+    panel("Export read-back", ver.length ? table(["", "Check", "Actual"], ver) : empty("no verification record")),
+    (p.warnings || []).length ? panel("Warnings", h("ul", {}, p.warnings.map(w => h("li", {}, w)))) : "");
+}
+
+async function viewTasks() {
+  const list = (await api("/api/tasks")).slice().reverse();   // newest first
+  const detail = h("div");
+  const rows = list.map(t => h("tr", { class: "click", onclick: async () => {
+      const d = await api("/api/tasks/" + encodeURIComponent(t.task_id));
+      detail.replaceChildren(panel(d.task_id + " — events",
+        table(["When", "Kind", "Payload"], (d.events || []).map(e => h("tr", {},
+          h("td", { class: "mono" }, e.at || e.created_utc || ""), h("td", {}, e.kind),
+          h("td", {}, h("pre", { class: "mono" }, JSON.stringify(e.payload ?? e, null, 1).slice(0, 4000))))))));
+      detail.scrollIntoView({ behavior: "smooth" });
+    } },
+    h("td", { class: "mono nowrap" }, t.task_id), h("td", {}, chip(t.state, stateCls(t.state))),
+    h("td", {}, t.request), h("td", { class: "muted" }, when(t.created_utc)), h("td", { class: "muted" }, t.outcome || "")));
+  main.replaceChildren(panel(`Tasks (${list.length})`, list.length ? table(["Task", "State", "Request", "Created", "Outcome"], rows) : empty("No tasks recorded in this database.")), detail);
+}
+
+async function viewChanges() {
+  const list = await api("/api/changes");
+  main.replaceChildren(panel(`Change sets (${list.length})`, list.length ? h("div", {}, list.map(c => h("div", { class: "panel" },
+    h("h2", {}, `${c.name}  `, c.needs_review ? chip("needs review", "warn") : chip("no review needed", "ok")),
+    h("div", { class: "muted mono" }, `${c.old_document} (rev ${c.old_revision}) → ${c.new_document} (rev ${c.new_revision})`),
+    h("p", {}, Object.entries(c.summary || {}).map(([k, v]) => chip(`${k}: ${v}`, "na")).flatMap(x => [x, " "])),
+    table(["Status", "Kind", "Old", "New", "Detail"], (c.changes || []).map(x => h("tr", {},
+      h("td", {}, chip(x.status, x.status === "UNCHANGED" ? "ok" : x.requires_review ? "warn" : "na")), h("td", {}, x.kind),
+      h("td", { class: "mono" }, sym(x.old?.callout)), h("td", { class: "mono" }, sym(x.new?.callout)),
+      h("td", { class: "muted" }, x.detail || ""))))))) : empty("No *.changes.json in the run folders. Create one with: py -m astracad_inspect compare OLD NEW --out DIR")));
+}
+
+async function viewCad() {
+  main.replaceChildren(panel("CAD applications", empty("Probing…")));
+  const s = await cadChips(true);
+  const rows = (s?.applications || []).map(a => h("tr", {},
+    h("td", {}, a.application), h("td", {}, chip(a.state, a.state === "CONNECTED" ? "ok" : a.state === "NOT_INSTALLED" ? "na" : "warn")),
+    h("td", { class: "mono" }, a.version || "–"), h("td", { class: "muted" }, a.detail)));
+  main.replaceChildren(panel("CAD applications (checked " + when(s?.checked_utc) + ")",
+    rows.length ? table(["Application", "State", "Version", "Detail"], rows) : empty("CAD probing is off (--no-cad-status)."),
+    h("p", { class: "muted" }, "Creating or editing parts is not offered here. Use the CLI with an explicit --authorize: py -m astracad_cad build|spec|edit …")));
+}
+
+async function route() {
+  const hash = location.hash.slice(1);
+  const tab = hash.startsWith("inspection=") ? "inspections" : (hash || "inspections");
+  document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
+  try {
+    if (hash.startsWith("inspection=")) await viewInspection(decodeURIComponent(hash.slice(11)));
+    else if (tab === "tasks") await viewTasks();
+    else if (tab === "changes") await viewChanges();
+    else if (tab === "cad") await viewCad();
+    else await viewInspections();
+  } catch (e) { main.replaceChildren(panel("Error", h("p", {}, e.message))); }
+}
+document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => location.hash = b.dataset.tab));
+window.addEventListener("hashchange", route);
+route();
+cadChips(false);
+</script>
+</body>
+</html>

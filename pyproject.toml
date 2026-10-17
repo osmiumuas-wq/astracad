@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "astracad-inspect"
+version = "0.1.0"
+description = "ASTraCAD Inspect - inspection layout generation from 2D engineering drawings"
+requires-python = ">=3.11"
+dependencies = [
+    "ezdxf==1.4.4",
+    "matplotlib==3.11.2",
+    "reportlab==5.0.1",
+    "openpyxl==3.1.5",
+    "pypdfium2==5.14.0",
+    "pillow==12.3.0",
+]
+
+[project.optional-dependencies]
+# PDF reading (read-back of our own reports and vector-PDF drawing ingestion) uses pypdfium2
+# (Apache-2.0 / BSD-3). PyMuPDF (AGPL-3.0) is needed ONLY by tools/iso286_extract.py, the offline
+# rebuild of the ISO 286-2 table, and is never imported at run time.
+table-rebuild = ["PyMuPDF==1.28.2"]
+# Scanned drawings: two OCR engines that must agree. Windows-only (Windows.Media.Ocr ships with
+# Windows 10/11); without this extra the raster route reports the engines as unavailable.
+ocr = ["rapidocr_onnxruntime==1.2.3", "winrt-runtime==3.2.1", "winrt-Windows.Media.Ocr==3.2.1",
+       "winrt-Windows.Graphics.Imaging==3.2.1", "winrt-Windows.Storage.Streams==3.2.1",
+       "winrt-Windows.Globalization==3.2.1", "winrt-Windows.Foundation==3.2.1",
+       "winrt-Windows.Foundation.Collections==3.2.1"]
+
+[project.scripts]
+inspect = "astracad_inspect.cli:main"
+astracad-cad = "astracad_cad.cli:main"
+astracad-web = "astracad_web.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# The ISO 286-2 deviation table is read with importlib.resources at run time, so it has to be
+# inside the wheel; a package that ships without it silently resolves no fit class.
+[tool.setuptools.package-data]
+astracad_inspect = ["data/*.json"]
+astracad_web = ["*.html"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "tools"]
+testpaths = ["tests"]
+# This machine's %TEMP%\pytest-of-solid is not accessible (WinError 5), so tmp_path is rooted
+# inside the project instead. Relative basetemp is resolved against the pytest root directory.
+addopts = ["--basetemp=.pytest_tmp"]

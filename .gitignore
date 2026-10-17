@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_tmp/
+.pytest_cache/
+_out/
+_out_regression/
+out/
+work/
+_sources/
+_win/
+*.sqlite3
+*.db

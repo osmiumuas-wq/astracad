@@ -1,0 +1,209 @@
+{
+  "spec": "shaft_d25_l100",
+  "session": {
+    "process_id": 10288,
+    "base_version": "sw2026_SP04",
+    "service_pack": "d260814.002",
+    "open_documents": 0,
+    "started_by_this_process": false
+  },
+  "execution": {
+    "title": "Part2",
+    "success": true,
+    "failures": [],
+    "log": [
+      "document: Part2 from C:\\ProgramData\\SOLIDWORKS\\SOLIDWORKS 2026\\templates\\Part.PRTDOT",
+      "disc: circle r=12.5 at (0,0) on front; segments=1",
+      "body: kernel returned no feature on the first attempt; re-selecting Sketch1 and retrying",
+      "body: Boss-Extrude1 depth=100",
+      "saved shaft_d25_l100.sldprt 64475 B",
+      "saved shaft_d25_l100.step 11874 B"
+    ],
+    "artifacts": [
+      "C:\\New folder (4)\\astracad\\_win\\sw\\shaft_d25_l100.sldprt",
+      "C:\\New folder (4)\\astracad\\_win\\sw\\shaft_d25_l100.step"
+    ],
+    "notes": {}
+  },
+  "measured": {
+    "document_title": "shaft_d25_l100",
+    "document_type": 1,
+    "solid_bodies": 1,
+    "surface_bodies": 0,
+    "volume_mm3": 49087.38521234052,
+    "surface_area_mm2": 8835.729338221296,
+    "mass_grams": 49.087385212340514,
+    "density_g_per_cm3": 0.9999999999999998,
+    "center_of_mass_mm": [
+      -2.4363573953246105E-16,
+      0,
+      50.000000000000014
+    ],
+    "bounding_box_mm": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "feature_tree": [
+      "Comments [CommentsFolder]",
+      "Favorites [FavoriteFolder]",
+      "History [HistoryFolder]",
+      "Selection Sets [SelectionSetFolder]",
+      "Sensors [SensorFolder]",
+      "Design Binder [DocsFolder]",
+      "Annotations [DetailCabinet]",
+      "Surface Bodies [SurfaceBodyFolder]",
+      "Solid Bodies [SolidBodyFolder]",
+      "Lights and Cameras [EnvFolder]",
+      "Markups [InkMarkupFolder]",
+      "Equations [EqnFolder]",
+      "Material \u003Cnot specified\u003E [MaterialFolder]",
+      "Front Plane [RefPlane]",
+      "Top Plane [RefPlane]",
+      "Right Plane [RefPlane]",
+      "Origin [OriginProfileFeature]",
+      "Sketch1 [ProfileFeature]",
+      "Boss-Extrude1 [Extrusion]"
+    ],
+    "dimensions": {
+      "d1@boss-extrude1@shaft_d25_l100.part": 100
+    },
+    "material": "Steel",
+    "material_database": null,
+    "errors": [],
+    "template_units": null
+  },
+  "verification": {
+    "spec_name": "shaft_d25_l100",
+    "checks": [
+      {
+        "name": "solid_body_count",
+        "kind": 1,
+        "outcome": 0,
+        "expected": "1.000000",
+        "actual": "1.000000",
+        "delta": 0,
+        "tolerance": 0,
+        "why": null
+      },
+      {
+        "name": "volume_mm3",
+        "kind": 0,
+        "outcome": 0,
+        "expected": "49087.385212",
+        "actual": "49087.385212",
+        "delta": 7.275957614183426E-12,
+        "tolerance": 0.04908738521234051,
+        "why": null
+      },
+      {
+        "name": "surface_area_mm2",
+        "kind": 0,
+        "outcome": 0,
+        "expected": "8835.729338",
+        "actual": "8835.729338",
+        "delta": 1.8189894035458565E-12,
+        "tolerance": 0.008835729338221293,
+        "why": null
+      },
+      {
+        "name": "feature:Sketch",
+        "kind": 1,
+        "outcome": 0,
+        "expected": "contains \u0027Sketch\u0027",
+        "actual": "Comments [CommentsFolder], Favorites [FavoriteFolder], History [HistoryFolder], Selection Sets [SelectionSetFolder], Sensors [SensorFolder], Design Binder [DocsFolder], Annotations [DetailCabinet], Surface Bodies [SurfaceBodyFolder], Solid Bodies [SolidBodyFolder], Lights and Cameras [EnvFolder], Markups [InkMarkupFolder], Equations [EqnFolder], Material \u003Cnot specified\u003E [MaterialFolder], Front Plane [RefPlane], Top Plane [RefPlane], Right Plane [RefPlane], Origin [OriginProfileFeature], Sketch1 [ProfileFeature], Boss-Extrude1 [Extrusion]",
+        "delta": null,
+        "tolerance": 0,
+        "why": null
+      },
+      {
+        "name": "feature:Extrusion",
+        "kind": 1,
+        "outcome": 0,
+        "expected": "contains \u0027Extrusion\u0027",
+        "actual": "Comments [CommentsFolder], Favorites [FavoriteFolder], History [HistoryFolder], Selection Sets [SelectionSetFolder], Sensors [SensorFolder], Design Binder [DocsFolder], Annotations [DetailCabinet], Surface Bodies [SurfaceBodyFolder], Solid Bodies [SolidBodyFolder], Lights and Cameras [EnvFolder], Markups [InkMarkupFolder], Equations [EqnFolder], Material \u003Cnot specified\u003E [MaterialFolder], Front Plane [RefPlane], Top Plane [RefPlane], Right Plane [RefPlane], Origin [OriginProfileFeature], Sketch1 [ProfileFeature], Boss-Extrude1 [Extrusion]",
+        "delta": null,
+        "tolerance": 0,
+        "why": null
+      },
+      {
+        "name": "artifact:shaft_d25_l100.sldprt",
+        "kind": 2,
+        "outcome": 0,
+        "expected": "non-empty file",
+        "actual": "64475 B sha256=5880e4c0dfc6200b0f8237d1a9f8701061f2f17b0c514f09a207f17fbedd6478",
+        "delta": null,
+        "tolerance": 0,
+        "why": "ok"
+      },
+      {
+        "name": "artifact:shaft_d25_l100.step",
+        "kind": 2,
+        "outcome": 0,
+        "expected": "non-empty file",
+        "actual": "11874 B sha256=148bb802da7b0ea0fc9b6750ef58ff41047a5b4a46b961a122573e586137192f",
+        "delta": null,
+        "tolerance": 0,
+        "why": "ok"
+      }
+    ],
+    "measured": {
+      "document_title": "shaft_d25_l100",
+      "document_type": 1,
+      "solid_bodies": 1,
+      "surface_bodies": 0,
+      "volume_mm3": 49087.38521234052,
+      "surface_area_mm2": 8835.729338221296,
+      "mass_grams": 49.087385212340514,
+      "density_g_per_cm3": 0.9999999999999998,
+      "center_of_mass_mm": [
+        -2.4363573953246105E-16,
+        0,
+        50.000000000000014
+      ],
+      "bounding_box_mm": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "feature_tree": [
+        "Comments [CommentsFolder]",
+        "Favorites [FavoriteFolder]",
+        "History [HistoryFolder]",
+        "Selection Sets [SelectionSetFolder]",
+        "Sensors [SensorFolder]",
+        "Design Binder [DocsFolder]",
+        "Annotations [DetailCabinet]",
+        "Surface Bodies [SurfaceBodyFolder]",
+        "Solid Bodies [SolidBodyFolder]",
+        "Lights and Cameras [EnvFolder]",
+        "Markups [InkMarkupFolder]",
+        "Equations [EqnFolder]",
+        "Material \u003Cnot specified\u003E [MaterialFolder]",
+        "Front Plane [RefPlane]",
+        "Top Plane [RefPlane]",
+        "Right Plane [RefPlane]",
+        "Origin [OriginProfileFeature]",
+        "Sketch1 [ProfileFeature]",
+        "Boss-Extrude1 [Extrusion]"
+      ],
+      "dimensions": {
+        "d1@boss-extrude1@shaft_d25_l100.part": 100
+      },
+      "material": "Steel",
+      "material_database": null,
+      "errors": [],
+      "template_units": null
+    },
+    "all_passed": true,
+    "passed": 7,
+    "failed": 0,
+    "unknown": 0
+  }
+}

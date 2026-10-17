@@ -1,0 +1,121 @@
+{
+  "label": "plate_synthetic",
+  "synthetic": true,
+  "notice": "SYNTHETIC TEST FIXTURE - machine-generated, not a real part or a real drawing",
+  "unit": "mm",
+  "expected_characteristics": [
+    {
+      "expect": "callout",
+      "raw_contains": "100 \u00b10.1",
+      "kind": "linear",
+      "nominal": 100.0,
+      "tolerance": "symmetric:0.1",
+      "resolved": true,
+      "limits": [
+        99.9,
+        100.1
+      ]
+    },
+    {
+      "expect": "callout",
+      "raw_contains": "50 +0.2/-0",
+      "kind": "linear",
+      "nominal": 50.0,
+      "tolerance": "deviations:0.2:0.0",
+      "resolved": true,
+      "limits": [
+        50.0,
+        50.2
+      ]
+    },
+    {
+      "expect": "callout",
+      "raw_contains": "%%c10 +0.05/-0.02",
+      "kind": "diameter",
+      "nominal": 10.0,
+      "tolerance": "deviations:0.05:0.02",
+      "resolved": true,
+      "limits": [
+        9.98,
+        10.05
+      ]
+    },
+    {
+      "expect": "callout",
+      "raw_contains": "%%c10.05/10.00",
+      "kind": "diameter",
+      "nominal": null,
+      "tolerance": "limit_pair:10.0:10.05",
+      "resolved": true,
+      "limits": [
+        10.0,
+        10.05
+      ]
+    },
+    {
+      "expect": "callout",
+      "raw_contains": "R10",
+      "kind": "radius",
+      "nominal": 10.0,
+      "tolerance": "none",
+      "resolved": true,
+      "limits": null
+    },
+    {
+      "expect": "callout",
+      "raw_contains": "25",
+      "kind": "linear",
+      "nominal": 25.0,
+      "tolerance": "none",
+      "resolved": true,
+      "limits": null
+    },
+    {
+      "expect": "callout",
+      "raw_contains": "%%c20 H7",
+      "kind": "diameter",
+      "nominal": 20.0,
+      "tolerance": "fit_class:H7:20.0:20.021",
+      "resolved": true,
+      "limits": [
+        20.0,
+        20.021
+      ]
+    },
+    {
+      "expect": "callout",
+      "raw_contains": "45\u00b0",
+      "kind": "angular",
+      "nominal": 45.0,
+      "tolerance": "none",
+      "resolved": true,
+      "limits": null
+    },
+    {
+      "expect": "callout",
+      "raw_contains": "2X %%c20 THRU",
+      "kind": "diameter",
+      "nominal": 20.0,
+      "tolerance": "none",
+      "count": 2,
+      "resolved": true,
+      "limits": null
+    },
+    {
+      "expect": "callout",
+      "raw_contains": "%%c10 H7/g6",
+      "kind": "diameter",
+      "nominal": 10.0,
+      "tolerance": "fit_class:H7/g6:none",
+      "resolved": false,
+      "limits": null,
+      "must_block": true
+    }
+  ],
+  "expected_uninterpreted": [
+    {
+      "text_contains": "86.98 87.05"
+    }
+  ],
+  "expected_minimum_characteristic_count": 10
+}

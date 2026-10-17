@@ -1,0 +1,2 @@
+# Engineering files are byte-exact evidence (hashes are recorded): never convert line endings.
+* -text
