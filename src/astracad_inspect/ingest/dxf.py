@@ -277,11 +277,23 @@ def _callout_text(doc, entity) -> tuple[str, str]:
     override = ""
     if entity.dxf.hasattr("text"):
         override = (entity.dxf.text or "").strip()
-    if override and override != "<>":
+    if override and "<>" not in override:
         return override, "the dimension's text override"
+    # "<>" anywhere (e.g. "%%c<>", "(<>)" — SOLIDWORKS writes these) means "the measured value
+    # here". The rendered block is what the sheet shows, prefix and tolerance pieces included.
     shown = _block_callout(doc, entity)
     if shown:
         return shown, f"the dimension's rendered text in block {entity.dxf.geometry}"
+    if override:
+        try:
+            o = entity.override()
+            value = float(entity.get_measurement()) * float(o.get("dimlfac", 1.0) or 1.0)
+            dec = int(o.get("dimdec", 4) if o.get("dimdec", None) is not None else 4)
+            return (override.replace("<>", f"{value:.{dec}f}"),
+                    f"the override with <> filled from the measurement at DIMDEC {dec} (no rendered "
+                    "block to read)")
+        except Exception:
+            return override, "the dimension's text override (its <> could not be evaluated)"
     return "", ""
 
 
@@ -640,8 +652,37 @@ def read_dxf(path: str | Path, declared_unit: str | None = None,
                                   printed_precision)
         if projection_warning:
             c.fail("geometry_projection_undocumented", projection_warning, "warning")
+        c._lfac = lfac          # compared across the drawing below
+        try:
+            c._raw_measurement = float(e.get_measurement())
+        except Exception:
+            c._raw_measurement = None
         characteristics.append(c)
         row.used_for_characteristics += 1
+
+    # A scale factor is a property of a view, so dimensions drawn in one view share it. A dimension
+    # whose factor differs from every other dimension's agrees with its geometry only through that
+    # factor - observed in the SOLIDWORKS foodprocessor sample: a 1:1 sheet printing "15" for a
+    # 150 mm span (DIMLFAC 0.1). The file is self-consistent, so only this comparison can expose it.
+    from collections import Counter
+    lfacs = Counter(round(getattr(c, "_lfac", 1.0), 9) for c in characteristics
+                    if c.kind is not CharKind.ANGULAR)
+    if len(lfacs) > 1:
+        usual, n_usual = lfacs.most_common(1)[0]
+        for c in characteristics:
+            f = round(getattr(c, "_lfac", 1.0), 9)
+            if c.kind is CharKind.ANGULAR or f == usual or n_usual < 2:
+                continue
+            raw = getattr(c, "_raw_measurement", None)
+            c.fail("dimension_scale_factor_outlier",
+                   f"printed {c.raw_callout!r} agrees with the geometry only through a scale factor "
+                   f"of {f:g}, while {n_usual} other dimension(s) on this drawing use {usual:g}; at "
+                   f"{usual:g} this feature measures {raw * usual:.4f}" if raw is not None else
+                   f"scale factor {f:g} differs from the drawing's usual {usual:g}", "blocking")
+    for c in characteristics:
+        for attr in ("_lfac", "_raw_measurement"):
+            if hasattr(c, attr):
+                delattr(c, attr)
 
     # Loose text that reads like a dimension: escalate for review, never invent a characteristic.
     notes: list[str] = []
@@ -683,7 +724,8 @@ def read_dxf(path: str | Path, declared_unit: str | None = None,
     # Balloons ring the part, not the title block: content extents come from geometry entities
     # only, so text placed far from the outline does not stretch the balloon band.
     geo_only = [e for e in msp if e.dxftype() in _GEOMETRY_TYPES]
-    content_extents, _ = _measurable_extents(geo_only) if geo_only else extents
+    # a drawing of dimensions only (no geometry entities) has no separate content box
+    content_extents, _ = _measurable_extents(geo_only) if geo_only else (extents, [])
     # ezdxf cannot measure a TOLERANCE entity, so a frame placed beside the part would sit outside
     # the balloon ring and get covered. Its box is estimated from its rows and cells.
     for e in msp.query("TOLERANCE"):

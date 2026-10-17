@@ -60,6 +60,7 @@ class TextRun:
     box: tuple[float, float, float, float]        # page mm, axis aligned
     local: tuple[float, float, float, float] = (0, 0, 0, 0)   # in the run's own frame
     parts: list[int] = field(default_factory=list)
+    quad: tuple | None = None          # exact rotated outline, page mm (4 corners)
 
     @property
     def centre(self) -> tuple[float, float]:
@@ -79,7 +80,7 @@ def _local_box(box, deg: float):
 def _read_runs(page, page_no: int, start: int):
     import pypdfium2.raw as raw
     tp = page.get_textpage()
-    runs, paths, images = [], [], 0
+    runs, paths, images, segs = [], [], 0, []
     for o in page.get_objects(textpage=tp):
         if o.type == raw.FPDF_PAGEOBJ_TEXT:
             text = (o.extract() or "").replace("\x00", "").strip()
@@ -89,15 +90,157 @@ def _read_runs(page, page_no: int, start: int):
             angle = round(math.degrees(math.atan2(b, a)), 3) % 360
             l, bt, r, t = o.get_bounds()
             scale = math.hypot(a, b) or 1.0
+            try:
+                quad = tuple((x * PT_TO_MM, y * PT_TO_MM) for x, y in o.get_quad_points())
+            except Exception:
+                quad = None
             runs.append(TextRun(start + len(runs), page_no, text, angle,
                                 o.get_font_size() * scale * PT_TO_MM,
-                                (l * PT_TO_MM, bt * PT_TO_MM, r * PT_TO_MM, t * PT_TO_MM)))
+                                (l * PT_TO_MM, bt * PT_TO_MM, r * PT_TO_MM, t * PT_TO_MM),
+                                quad=quad))
         elif o.type == raw.FPDF_PAGEOBJ_PATH:
             l, bt, r, t = o.get_bounds()
             paths.append((l * PT_TO_MM, bt * PT_TO_MM, r * PT_TO_MM, t * PT_TO_MM))
+            segs.extend(_path_segments(o))
         elif o.type == raw.FPDF_PAGEOBJ_IMAGE:
             images += 1
-    return runs, paths, images
+    return runs, paths, images, segs
+
+
+def _path_segments(o) -> list[tuple[float, float, float, float]]:
+    """Straight pieces of a vector path in page mm (curves are flattened to their end points;
+    SOLIDWORKS already writes circles as many short lines)."""
+    import ctypes
+
+    import pypdfium2.raw as raw
+    a, b, c, d, e, f = o.get_matrix().get()
+    out, prev, ctrl = [], None, []
+    x, y = ctypes.c_float(), ctypes.c_float()
+    for i in range(raw.FPDFPath_CountSegments(o.raw)):
+        sg = raw.FPDFPath_GetPathSegment(o.raw, i)
+        raw.FPDFPathSegment_GetPoint(sg, x, y)
+        px = (a * x.value + c * y.value + e) * PT_TO_MM
+        py = (b * x.value + d * y.value + f) * PT_TO_MM
+        kind = raw.FPDFPathSegment_GetType(sg)
+        if kind == raw.FPDF_SEGMENT_BEZIERTO and prev is not None:
+            ctrl.append((px, py))
+            if len(ctrl) == 3:                 # cubic: p0=prev, c1, c2, p3
+                (x1, y1), (x2, y2), (x3, y3) = ctrl
+                last = prev
+                for t in (0.25, 0.5, 0.75, 1.0):
+                    u = 1 - t
+                    qx = u**3 * prev[0] + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t**3 * x3
+                    qy = u**3 * prev[1] + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t**3 * y3
+                    out.append((last[0], last[1], qx, qy))
+                    last = (qx, qy)
+                prev, ctrl = (x3, y3), []
+            continue
+        ctrl = []
+        if kind != raw.FPDF_SEGMENT_MOVETO and prev is not None:
+            out.append((prev[0], prev[1], px, py))
+        prev = (px, py)
+    return out
+
+
+_BARE_INT = re.compile(r"^\d{1,3}$")
+
+
+class SheetGeometry:
+    """The page's vector lines, used to tell a dimension callout from the other numbers a CAD sheet
+    carries: zone labels on the border, balloon item numbers inside circles, and table cells.
+    Measured on SOLIDWORKS PDFs (2026-10-17): those three were 290 of 302 false rows."""
+
+    def __init__(self, segs, page_w: float, page_h: float, centres=()):
+        import numpy as np
+        self.centres = list(centres)          # centres of every text group on the page
+        self.w, self.h = page_w, page_h
+        a = np.asarray(segs or [(0, 0, 0, 0)], dtype=float)
+        self.seg = a
+        dx, dy = a[:, 2] - a[:, 0], a[:, 3] - a[:, 1]
+        self.horiz = a[np.abs(dy) < 0.05]
+        self.vert = a[np.abs(dx) < 0.05]
+        self.pts = np.vstack([a[:, :2], a[:, 2:]])
+
+    def is_border_label(self, text: str, cx: float, cy: float) -> bool:
+        edge = min(cx, cy, self.w - cx, self.h - cy)
+        return edge < 15.0 and (_BARE_INT.match(text) is not None or re.fullmatch(r"[A-Z]", text) is not None)
+
+    def is_balloon(self, text: str, cx: float, cy: float, th: float) -> bool:
+        """A bare item number centred in a circle: points at a common radius all round it."""
+        import numpy as np
+        if not _BARE_INT.match(text):
+            return False
+        d = np.hypot(self.pts[:, 0] - cx, self.pts[:, 1] - cy)
+        ring = (d > 0.45 * th) & (d < 3.5 * th)
+        if ring.sum() < 8:
+            return False
+        r = d[ring]
+        med = np.median(r)
+        on = np.abs(r - med) < 0.12 * med
+        if on.sum() < 8:
+            return False
+        ang = np.degrees(np.arctan2(self.pts[ring][on, 1] - cy, self.pts[ring][on, 0] - cx))
+        return len(np.unique((ang // 30).astype(int))) >= 9          # >= 270 deg of coverage
+
+    def diameter_glyph_left_of(self, box, th: float) -> bool:
+        """SOLIDWORKS draws the ⌀ sign as vector graphics, not text: a small ring with a slash just
+        left of the number. Looked for in a box one text-height wide left of the run."""
+        import numpy as np
+        x0, y0, x1, y1 = box
+        cy = (y0 + y1) / 2
+        lo_x, hi_x = x0 - 1.4 * th, x0 + 0.1 * th
+        P = self.pts
+        sel = (P[:, 0] >= lo_x) & (P[:, 0] <= hi_x) & (P[:, 1] >= cy - 0.75 * th) & (P[:, 1] <= cy + 0.75 * th)
+        if sel.sum() < 6:
+            return False
+        q = P[sel]
+        cxg, cyg = q[:, 0].mean(), q[:, 1].mean()
+        d = np.hypot(q[:, 0] - cxg, q[:, 1] - cyg)
+        med = np.median(d)
+        if not (0.15 * th <= med <= 0.6 * th):
+            return False
+        ring = np.abs(d - med) < 0.25 * med
+        ang = np.degrees(np.arctan2(q[ring, 1] - cyg, q[ring, 0] - cxg))
+        if len(np.unique((ang // 45).astype(int))) < 6:
+            return False
+        S = self.seg
+        sx = (np.minimum(S[:, 0], S[:, 2]) >= lo_x - 0.2 * th) & (np.maximum(S[:, 0], S[:, 2]) <= hi_x + 0.2 * th)
+        sy = (np.minimum(S[:, 1], S[:, 3]) >= cy - 0.9 * th) & (np.maximum(S[:, 1], S[:, 3]) <= cy + 0.9 * th)
+        L = S[sx & sy]
+        ln = np.hypot(L[:, 2] - L[:, 0], L[:, 3] - L[:, 1])
+        slope = np.degrees(np.arctan2(np.abs(L[:, 3] - L[:, 1]), np.abs(L[:, 2] - L[:, 0]) + 1e-9))
+        return bool(((ln > 0.6 * med * 2) & (slope > 30) & (slope < 80)).any())
+
+    def is_table_cell(self, box, th: float) -> bool:
+        """Ruled on all four sides by lines that run past the text: a table cell, not a callout."""
+        import numpy as np
+        x0, y0, x1, y1 = box
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        H, V = self.horiz, self.vert
+        hx0, hx1 = np.minimum(H[:, 0], H[:, 2]), np.maximum(H[:, 0], H[:, 2])
+        spans_x = (hx0 <= x0 + 0.2) & (hx1 >= x1 - 0.2)
+        above = spans_x & (H[:, 1] >= y1 - 0.2) & (H[:, 1] <= y1 + 2.5 * th)
+        below = spans_x & (H[:, 1] <= y0 + 0.2) & (H[:, 1] >= y0 - 2.5 * th)
+        vy0, vy1 = np.minimum(V[:, 1], V[:, 3]), np.maximum(V[:, 1], V[:, 3])
+        spans_y = (vy0 <= y0 + 0.2) & (vy1 >= y1 - 0.2)
+        left = spans_y & (V[:, 0] <= x0 + 0.2) & (V[:, 0] >= x0 - 60)
+        right = spans_y & (V[:, 0] >= x1 - 0.2) & (V[:, 0] <= x1 + 60)
+        if not (above.any() and below.any() and left.any() and right.any()):
+            return False
+        # Dimension text between its extension lines, with the part edge above and the dimension
+        # line below, is "ruled on four sides" too (measured on SOLIDWORKS sheets). What makes a
+        # table is rows: another text between the SAME two rules, beside this one.
+        ya, yb = H[above, 1].min(), H[below, 1].max()
+        # Rules are often drawn per cell, so "the same rule" means a rule at the same height that
+        # also spans the neighbouring text, not the same segment.
+        at_a = np.abs(H[:, 1] - ya) < 0.3
+        at_b = np.abs(H[:, 1] - yb) < 0.3
+        for ox, oy in self.centres:
+            if not (yb < oy < ya) or (x0 - 0.5 <= ox <= x1 + 0.5):
+                continue
+            if (at_a & (hx0 <= ox) & (hx1 >= ox)).any() and (at_b & (hx0 <= ox) & (hx1 >= ox)).any():
+                return True
+        return False
 
 
 def _orthogonal(angle: float) -> bool:
@@ -107,7 +250,11 @@ def _orthogonal(angle: float) -> bool:
 def group_runs(runs: list[TextRun]) -> list[TextRun]:
     """Join the text runs one callout was split into. See the module docstring for the rules."""
     for r in runs:
-        r.local = _local_box(r.box, r.angle) if _orthogonal(r.angle) else r.box
+        if r.quad:
+            xs, ys = zip(*(_rot(x, y, r.angle) for x, y in r.quad))
+            r.local = (min(xs), min(ys), max(xs), max(ys))
+        else:
+            r.local = _local_box(r.box, r.angle) if _orthogonal(r.angle) else r.box
         r.parts = [r.idx]
     used: set[int] = set()
     out: list[TextRun] = []
@@ -118,7 +265,7 @@ def group_runs(runs: list[TextRun]) -> list[TextRun]:
         used.add(main.idx)
         text, box, local = main.text, list(main.box), list(main.local)
         h = local[3] - local[1]
-        if _orthogonal(main.angle):
+        if main.quad or _orthogonal(main.angle):
             # inline continuation: same size, same baseline, small gap to the right
             grew = True
             while grew:
@@ -138,7 +285,7 @@ def group_runs(runs: list[TextRun]) -> list[TextRun]:
             # stacked deviations: two smaller runs right of the nominal, straddling its centre
             mid = (local[1] + local[3]) / 2
             sats = [r for r in runs if r.idx not in used and same_angle(r, main)
-                    and r.size < 0.85 * main.size
+                    and r.size <= 1.05 * main.size
                     and local[2] - 0.3 * h <= r.local[0] <= local[2] + 1.0 * h
                     and local[1] - 0.5 * h <= (r.local[1] + r.local[3]) / 2 <= local[3] + 0.5 * h]
             upper = [r for r in sats if (r.local[1] + r.local[3]) / 2 > mid]
@@ -189,6 +336,7 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
         warnings.append("revision defaults to A: this route does not read PDF title blocks")
 
     all_runs: list[TextRun] = []
+    sheet_geo: dict[int, SheetGeometry] = {}
     paths: list[tuple] = []
     images = 0
     page_sizes = []
@@ -196,7 +344,8 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
         page = pdf[i]
         w, h = page.get_size()
         page_sizes.append((w * PT_TO_MM, h * PT_TO_MM))
-        runs, pth, img = _read_runs(page, i + 1, len(all_runs))
+        runs, pth, img, segs = _read_runs(page, i + 1, len(all_runs))
+        sheet_geo[i + 1] = SheetGeometry(segs, w * PT_TO_MM, h * PT_TO_MM)
         all_runs += runs
         paths += pth if i == 0 else []
         images += img
@@ -208,6 +357,10 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
                         "the layout image refer to page 1 only")
 
     groups = group_runs(all_runs)
+    for pg_no, geo_ in sheet_geo.items():
+        geo_.centres = [gr.centre for gr in groups if gr.page == pg_no]
+    from collections import Counter
+    skipped: Counter = Counter()
     characteristics: list[Characteristic] = []
     uninterpreted: list[UninterpretedAnnotation] = []
     notes: list[str] = []
@@ -224,6 +377,29 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
             continue
         if not _NUMBER.search(norm):
             continue
+        geo = sheet_geo.get(g.page)
+        # visual text height from the run's own outline: a font size can be well above the drawn
+        # glyph height (measured 8.47 vs 6.3 mm on a SOLIDWORKS balloon), which shifts every
+        # proportion used below
+        lh = g.local[3] - g.local[1] if g.local and g.local[3] > g.local[1] else 0.0
+        th = max(min(g.size, lh) if lh > 0 else g.size, 1.0)
+        if geo is not None:
+            if geo.is_border_label(norm, cx, cy):
+                skipped["border zone label"] += 1
+                continue
+            if geo.is_balloon(norm, cx, cy, th):
+                skipped["balloon item number"] += 1
+                continue
+            if _orthogonal(g.angle) and g.angle % 180 < 1 and geo.is_table_cell(g.box, th):
+                skipped["table cell"] += 1
+                notes.append(f"table cell (page {g.page}): {norm}")
+                continue
+        glyph_note = None
+        if (geo is not None and g.angle % 360 < 1 and not re.match(r"^\s*(?:\d+\s*[xX]\s*)?[⌀Øø∅]", g.text)
+                and re.match(r"^\s*\.?\d", g.text) and geo.diameter_glyph_left_of(g.box, th)):
+            g = TextRun(g.idx, g.page, "⌀" + g.text, g.angle, g.size, g.box, g.local, g.parts, g.quad)
+            glyph_note = ("diameter sign drawn as vector graphics left of the text (a ring with a "
+                          "slash), not as a character; added from the sheet geometry")
         frame = parse_unicode_frame(g.text)
         if frame is not None:
             if not frame.resolved:
@@ -276,6 +452,8 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
             limits=resolve_limits(parsed.nominal, parsed.tolerance, unit))
         c.record("extractor", "extracted",
                  f"PDF text run(s) {handle} on page {g.page}, angle {g.angle:g} deg")
+        if glyph_note:
+            c.record("extractor", "noted", glyph_note)
         for note in parsed.notes:
             c.record("parser", "noted", note)
         if parsed.kind is CharKind.UNKNOWN:
@@ -303,6 +481,10 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
     census = [EntityCensusRow("PDF_TEXT", len(all_runs), used,
                               "text runs; joined into callouts where split by the exporter"),
               EntityCensusRow("PDF_PATH", len(paths), 0, "page-1 vector paths; extents only")]
+    for why, k in sorted(skipped.items()):
+        # recorded, not hidden: text the sheet geometry shows is not a dimension callout
+        census.append(EntityCensusRow(f"PDF_TEXT:{why}", k, 0, f"{k} run group(s) classified as {why} "
+                                      "by the sheet's vector lines; not treated as callouts"))
     if images:
         census.append(EntityCensusRow("PDF_IMAGE", images, 0, "raster content is not read"))
         warnings.append(f"{images} image object(s) on the page are not read (no OCR)")
