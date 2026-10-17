@@ -258,3 +258,11 @@ covered by a check that now fails if it regresses.
   not checked in Firefox or Safari, and not with a screen reader.
 - The design method (UI UX Pro Max) has no manufacturing-inspection category; the nearest rows were
   combined — see `docs/design-system/MASTER.md`.
+
+## G. Measurement results (2026-10-17)
+
+- Values are typed by the inspector; nothing reads a CMM or gauge file yet, and no instrument
+  register exists (instrument IDs are free text, calibration status is not checked).
+- Values are taken in the characteristic's unit; a value in another unit is not converted.
+- Cp/Cpk from a few samples is an indication only; the label states n. No control charts.
+- GD&T rows are judged as a measured deviation against 0..zone; MMC/LMC bonus is not applied.

@@ -150,3 +150,17 @@ def test_inspection_carries_per_characteristic_evidence(ws):
     e = d["evidence"][d["plan"]["rows"][0]["cid"]]
     assert e["history"] and {"anchor_x", "anchor_y", "entity_handle"} <= set(e["source"])
     assert d["plan"]["layout"]["balloons"]
+
+
+def test_page_script_is_valid_javascript(tmp_path):
+    """A syntax error blanks the whole workspace; check the inline script parses (needs Node)."""
+    import shutil as _sh
+    import subprocess
+    node = _sh.which("node")
+    if not node:
+        pytest.skip("node not installed: page script not syntax-checked")
+    s = (Path(__file__).parents[1] / "src" / "astracad_web" / "index.html").read_text(encoding="utf-8")
+    js = tmp_path / "page.js"
+    js.write_text(s[s.index("<script>") + 8:s.rindex("</script>")], encoding="utf-8")
+    r = subprocess.run([node, "--check", str(js)], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr

@@ -15,7 +15,7 @@ what the vendor **documents** (D), what was **observed** (O), or UNKNOWN (U). Ev
 | C-06 | Missing-characteristic / coverage gate | U | D (P6-05, P6-10) | **VERIFIED** | release gate blocks with named reasons |
 | C-07 | AS9102 FAIR forms | U | D (P6-05) | **TESTED** | `inspect fai PLAN.json`: Forms 1-3 structure, zones from the sheet's border labels, results/serials/org data left blank (never invented); reopen-verified |
 | C-08 | PPAP: PFMEA / Control Plan | U | D (P6-10) | NOT_INVESTIGATED (ours) | — |
-| C-09 | SPC / instrument library | U | D (P6-06) | NOT IMPLEMENTED | — |
+| C-09 | Measurement results / SPC / instrument library | U | D (P6-06) | **TESTED** + used live (results); instrument library NOT IMPLEMENTED | `astracad_inspect.measure`: values entered by a named inspector per sample with instrument ID, append-only with superseding corrections and reasoned withdrawals; PASS/FAIL against the drawing's own inclusive limits, NOT_EVALUABLE where it states none; sample states (an open plan is never "acceptable"); Cp/Cpk labelled with n; results XLSX + AS9102 Form 3 results for one serial, both re-opened and checked; 7 tests. No instrument calibration records, no gauge R&R |
 | C-10 | Revision comparison of drawings | U | D (P6-08) | **TESTED** (this session) | `astracad_inspect.revision` |
 | C-11 | Tolerance stack WC/RSS/MC | U | U | **TESTED** (this session) | `astracad_tol` vs closed-form references |
 | C-12 | Selective assembly | U | U | **TESTED** (this session) | `astracad_tol.selective` |

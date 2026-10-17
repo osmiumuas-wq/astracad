@@ -22,10 +22,19 @@ def _requirement(row: dict) -> str:
     return req
 
 
-def write_fai(plan_json: str | Path, out_xlsx: str | Path) -> Path:
+def write_fai(plan_json: str | Path, out_xlsx: str | Path, sample: str | None = None,
+              log: list[dict] | None = None) -> Path:
+    """With `sample` and a measurement `log`, Form 1 names that serial number and Form 3 column 9
+    carries what was RECORDED for it (value, verdict, inspector, instrument, time) - never a value
+    that was not entered. Unmeasured rows stay blank; a failed row asks for an NCR number."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font
     plan = json.loads(Path(plan_json).read_text(encoding="utf-8"))
+    cells = {}
+    if sample and log is not None:
+        from ..measure import evaluate
+        cells = {k.split("|", 1)[1]: v for k, v in evaluate(plan, log)["cells"].items()
+                 if k.split("|", 1)[0] == sample}
     rows = plan.get("rows") or []
     zones = {c["cid"]: (c.get("source") or {}).get("zone", "") for c in plan.get("characteristics") or []}
     tb = plan.get("title_block") or {}
@@ -37,7 +46,7 @@ def write_fai(plan_json: str | Path, out_xlsx: str | Path) -> Path:
     for label, value in [
         ("1. Part number", tb.get("drawing_number") or TO_COMPLETE),
         ("2. Part name", tb.get("part_name") or tb.get("title") or TO_COMPLETE),
-        ("3. Serial number", TO_COMPLETE),
+        ("3. Serial number", sample or TO_COMPLETE),
         ("4. FAI report number", TO_COMPLETE),
         ("5. Part revision level", plan.get("revision") or TO_COMPLETE),
         ("6. Drawing number", tb.get("drawing_number") or TO_COMPLETE),
@@ -74,7 +83,14 @@ def write_fai(plan_json: str | Path, out_xlsx: str | Path) -> Path:
     for r in rows:
         zone = zones.get(r.get("cid"), "")
         loc = f"sheet {r.get('page') or 1}" + (f", zone {zone}" if zone else "")
-        f3.append([r.get("balloon_no"), loc, "", _requirement(r), "", "", "",
+        m = cells.get(r.get("cid"))
+        result = ""
+        ncr = ""
+        if m and m.get("value") is not None:
+            result = (f"{m['value']:g} {r.get('unit') or ''} {m['verdict']} "
+                      f"({m['inspector']}{', ' + m['instrument'] if m.get('instrument') else ''}, {m['at']})")
+            ncr = TO_COMPLETE if m["verdict"] == "FAIL" else ""
+        f3.append([r.get("balloon_no"), loc, "", _requirement(r), result, "", ncr,
                    r.get("cid"), r.get("entity_handle"), f"{r.get('provenance')} / {r.get('status')}"])
     for col, w in zip("ABCDEFGHIJ", (10, 22, 14, 60, 18, 18, 16, 12, 18, 22)):
         f3.column_dimensions[col].width = w

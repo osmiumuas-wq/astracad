@@ -180,7 +180,10 @@ class Workspace:
                 project = {"id": pid, "name": self.projects.get(pid).name}
             except (OSError, ValueError, KeyError):
                 project = None
-        return {"key": key, "name": stem, "project": project, "plan": {k: plan.get(k) for k in (
+        from astracad_inspect.measure import evaluate, read_log
+        measurements = evaluate(plan, read_log(plan_path))
+        return {"key": key, "name": stem, "project": project, "measurements": measurements,
+                "plan": {k: plan.get(k) for k in (
                     "source_document", "source_sha256", "revision", "unit", "rows", "checks",
                     "uninterpreted", "gate", "approvable", "warnings", "feature_support",
                     "layout", "title_block", "coverage", "open_gaps")},
@@ -400,6 +403,37 @@ class Workspace:
                                 "before": before, "after": entry if action != "clear" else None,
                                 "reason": reason}, ensure_ascii=False) + "\n")
         return self.review_state(key)
+
+    # ---- measurement results ------------------------------------------------------------------
+    def measure(self, key: str, body: dict) -> dict:
+        """Append one inspector-entered measurement (or a withdrawal) to the run's log."""
+        from astracad_inspect.measure import evaluate, read_log, record
+        plan_path = self._plan_path(key)
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        entry = record(plan_path, plan, body)
+        return {"entry": entry, "measurements": evaluate(plan, read_log(plan_path))}
+
+    def export_results(self, key: str, sample: str | None = None) -> dict:
+        """Results workbook (+ an AS9102 workbook for one sample), each re-opened and checked."""
+        from astracad_inspect.export.fai import verify_fai, write_fai
+        from astracad_inspect.measure import read_log, verify_results, write_results
+        plan_path = self._plan_path(key)
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        log = read_log(plan_path)
+        if not log:
+            raise ValueError("no measurements recorded for this run yet")
+        stem = plan_path.name[:-len(".plan.json")]
+        res = write_results(plan, log, plan_path.with_name(f"{stem}_results.xlsx"))
+        out = {"results": self.key_for(res),
+               "checks": [{"name": n, "ok": ok, "detail": d} for n, ok, d in verify_results(plan, log, res)]}
+        if sample:
+            if sample not in {e["sample"] for e in log}:
+                raise ValueError(f"no measurements recorded for sample {sample!r}")
+            safe = re.sub(r"[^\w.-]", "_", sample)[:40]
+            fai = write_fai(plan_path, plan_path.with_name(f"{stem}_FAI_{safe}.xlsx"), sample=sample, log=log)
+            out["fai"] = self.key_for(fai)
+            out["checks"] += [{"name": n, "ok": ok, "detail": d} for n, ok, d in verify_fai(plan_path, fai)]
+        return out
 
     def reissue(self, key: str) -> dict:
         """A NEW run from the same drawing with the review applied. Refused when the drawing has
@@ -637,6 +671,10 @@ def make_handler(ws: Workspace):
                                                         body.get("general_tolerance")))
                 if u.path == "/api/review":
                     return self._json(ws.review(str(body.get("key", "")), body))
+                if u.path == "/api/measure":
+                    return self._json(ws.measure(str(body.get("key", "")), body))
+                if u.path == "/api/export_results":
+                    return self._json(ws.export_results(str(body.get("key", "")), body.get("sample") or None))
                 if u.path == "/api/reissue":
                     return self._json(ws.reissue(str(body.get("key", ""))))
                 return self._error(HTTPStatus.NOT_FOUND, "not found")

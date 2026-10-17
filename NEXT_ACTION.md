@@ -12,6 +12,15 @@ now inspects the part read-only and lists candidate dimensions with ready comman
 selected (exit 3). Verified live on SW 2026, including sketch dimensions: "change the diameter of
 shaft.SLDPRT to 30 mm" → pick D1@Sketch1 → edit → STEP re-read 30×30×100.
 
+## 0a. Done 2026-10-17: measurement results (C-09)
+
+Inspection workspace → Sample + Instrument in the bar → select a balloon → `M`, type the value,
+Enter (moves to the next balloon) → Measurements tab → Export results + FAI. Values are only ever
+what an inspector typed; verdicts come from the drawing's own limits; rows without limits are
+recorded but not judged; a sample against an open (not releasable) plan is never "acceptable".
+Next here: an instrument register (ID, range, resolution, calibration due date) checked at entry,
+and refusing a value finer than the instrument's resolution.
+
 ## 0. Done 2026-10-17: projects, upload, preserved originals (Part 9 items 1-3)
 
     py -m astracad_web --projects %USERPROFILE%\.astracad\projects --runs OUT
