@@ -56,7 +56,7 @@ def test_inspections_list_both_routes(ws):
 def test_inspection_detail_links_its_files(ws):
     key = ws.inspections()[0]["key"]
     d = ws.inspection(key)
-    assert set(d["files"]) == {"layout", "report", "workbook"} and d["plan"]["rows"]
+    assert set(d["files"]) == {"layout", "sheet", "report", "workbook"} and d["plan"]["rows"]
 
 
 def test_tasks_are_read_from_the_shared_store(ws):
@@ -117,3 +117,36 @@ def test_oversized_post_body_is_refused(server):
     status, d = req(server, "POST", "/api/inspect", {"drawing": "x" * 70000},
                     {"Host": "127.0.0.1", "X-AstraCAD": "1"})
     assert status == 413
+
+
+def test_interactive_sheet_maps_drawing_coordinates_to_pixels(ws):
+    """The viewer draws balloons itself from plan.layout over the sheet image. That is only right if
+    the image's own frame is exactly the recorded extents, so check a dark pixel lands on geometry."""
+    import numpy as np
+    from PIL import Image
+    key = next(r["key"] for r in ws.inspections() if r["route"] == "dxf-vector")
+    d = ws.inspection(key)
+    sh = d["sheet"]
+    x0, y0, x1, y1 = sh["extents"]
+    img = Image.open(ws.resolve_key(d["files"]["sheet"])).convert("L")
+    assert img.size == (sh["width_px"], sh["height_px"])
+    # aspect of pixels equals aspect of drawing units: no stretch
+    assert abs(img.size[0] / img.size[1] - (x1 - x0) / (y1 - y0)) < 0.01
+    a = np.asarray(img)
+    px = lambda x, y: (int((x - x0) / (x1 - x0) * (img.size[0] - 1)), int((y1 - y) / (y1 - y0) * (img.size[1] - 1)))
+    # the plate's bottom edge runs along y = 0 from x = 10 to 90: ink within 2 px of the mapped line
+    for x in (30.0, 50.0, 70.0):
+        cx, cy = px(x, 0.0)
+        assert a[max(0, cy - 2):cy + 3, cx].min() < 128, (x, cx, cy)
+    # and the centre of the large hole (50, 25) is paper, not ink
+    cx, cy = px(50.0, 25.0)
+    assert a[cy, cx] > 200
+
+
+def test_inspection_carries_per_characteristic_evidence(ws):
+    key = next(r["key"] for r in ws.inspections() if r["route"] == "dxf-vector")
+    d = ws.inspection(key)
+    assert set(d["evidence"]) == {r["cid"] for r in d["plan"]["rows"]}
+    e = d["evidence"][d["plan"]["rows"][0]["cid"]]
+    assert e["history"] and {"anchor_x", "anchor_y", "entity_handle"} <= set(e["source"])
+    assert d["plan"]["layout"]["balloons"]

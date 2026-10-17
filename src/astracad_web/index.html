@@ -3,163 +3,726 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>ASTraCAD Workspace</title>
 <style>
+/* Design system: docs/design-system/MASTER.md. Data-dense + Swiss; status = icon + word + colour. */
 :root {
-  --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #5d6673; --line: #dfe3e8;
-  --accent: #1f5fbf; --ok: #1e7a3c; --ok-bg: #e5f4ea; --warn: #8a5a00; --warn-bg: #fdf1d8;
-  --bad: #b00020; --bad-bg: #fbe5e8; --na: #55606d; --na-bg: #eceff2; --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --bg: #f3f4f6; --surface: #ffffff; --surface-2: #f8f9fb; --surface-3: #eef0f3;
+  --line: #e2e5ea; --line-strong: #cfd4dc; --ink: #0e1420; --ink-2: #2b3442; --muted: #5b6472;
+  --accent: #2456e6; --accent-ink: #ffffff; --accent-soft: #e8eefd; --accent-line: #b9c9f7;
+  --ok: #0f7a4f; --ok-soft: #e3f4ec; --warn: #a35a00; --warn-soft: #fdf0dc;
+  --bad: #c62038; --bad-soft: #fce8eb; --info: #3a5a8c; --info-soft: #e9eff8;
+  --na: #5b6472; --na-soft: #eef0f3;
+  --desk: #e6e9ee; --desk-dot: #cfd5de;
+  --shadow: 0 1px 2px rgba(14, 20, 32, .06), 0 1px 1px rgba(14, 20, 32, .04);
+  --shadow-lg: 0 18px 50px -12px rgba(14, 20, 32, .28), 0 4px 12px rgba(14, 20, 32, .08);
+  --radius: 10px; --radius-sm: 6px;
+  --font: Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Code", "Cascadia Mono", Consolas, ui-monospace, monospace;
+  --side: 232px; --top: 56px;
+  color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #111418; --panel: #1a1f25; --ink: #e6e9ed; --muted: #9aa4b0; --line: #2c333b;
-    --accent: #6ea2ff; --ok: #6fd391; --ok-bg: #173323; --warn: #f2c46b; --warn-bg: #3a2c10;
-    --bad: #ff8094; --bad-bg: #3d1820; --na: #a9b3be; --na-bg: #262c33;
+    --bg: #0b0d11; --surface: #12151b; --surface-2: #181c23; --surface-3: #1e232c;
+    --line: #252b35; --line-strong: #333b48; --ink: #e9edf3; --ink-2: #c9d0db; --muted: #949eac;
+    --accent: #7b9bff; --accent-ink: #0b1020; --accent-soft: #1a2442; --accent-line: #34467e;
+    --ok: #4fd39a; --ok-soft: #10291f; --warn: #f3b453; --warn-soft: #2e2210;
+    --bad: #ff7a8c; --bad-soft: #33151b; --info: #9fb4d8; --info-soft: #182235;
+    --na: #a3acb9; --na-soft: #1e232c; --desk: #07090c; --desk-dot: #1c222b;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5); --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, .7);
+    color-scheme: dark;
   }
 }
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
-header h1 { font-size: 16px; margin: 0; letter-spacing: .2px; }
-header h1 span { color: var(--muted); font-weight: 400; }
-nav { display: flex; gap: 4px; flex-wrap: wrap; }
-nav button { border: 1px solid transparent; background: none; color: var(--muted); padding: 6px 12px; border-radius: 6px; cursor: pointer; font: inherit; }
-nav button[aria-selected="true"] { color: var(--ink); background: var(--bg); border-color: var(--line); font-weight: 600; }
-#cadchips { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
-main { padding: 16px 20px 40px; max-width: 1400px; margin: 0 auto; }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
-.panel h2 { font-size: 14px; margin: 0 0 10px; }
+:root[data-theme="dark"] {
+  --bg: #0b0d11; --surface: #12151b; --surface-2: #181c23; --surface-3: #1e232c;
+  --line: #252b35; --line-strong: #333b48; --ink: #e9edf3; --ink-2: #c9d0db; --muted: #949eac;
+  --accent: #7b9bff; --accent-ink: #0b1020; --accent-soft: #1a2442; --accent-line: #34467e;
+  --ok: #4fd39a; --ok-soft: #10291f; --warn: #f3b453; --warn-soft: #2e2210;
+  --bad: #ff7a8c; --bad-soft: #33151b; --info: #9fb4d8; --info-soft: #182235;
+  --na: #a3acb9; --na-soft: #1e232c; --desk: #07090c; --desk-dot: #1c222b;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .5); --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, .7);
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--font);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.mono { font-family: var(--mono); font-size: .92em; }
+.num { font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
 .nowrap { white-space: nowrap; }
-.mono { font-family: var(--mono); font-size: 12.5px; }
-.chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-.ok { color: var(--ok); background: var(--ok-bg); } .warn { color: var(--warn); background: var(--warn-bg); }
-.bad { color: var(--bad); background: var(--bad-bg); } .na { color: var(--na); background: var(--na-bg); }
-.tablewrap { overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; }
-th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
-td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12.5px; }
-tr.click { cursor: pointer; } tr.click:hover td { background: var(--bg); }
-@media (max-width: 900px) { main { padding: 12px 16px 32px; } }
-img.layout { display: block; margin: 0 auto; width: 100%; max-width: 980px; height: auto; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
-form.run { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
-label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
-input, select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
-input[name=drawing] { min-width: min(520px, 80vw); }
-button.primary { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
-button.link { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font: inherit; }
-.banner { padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; font-weight: 600; }
-.files a { margin-right: 14px; color: var(--accent); }
-.empty { padding: 18px; text-align: center; color: var(--muted); }
-pre { white-space: pre-wrap; word-break: break-word; margin: 0; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
+svg.i.lg { width: 20px; height: 20px; }
+
+/* ---------- shell ---------- */
+.app { display: grid; grid-template-columns: var(--side) minmax(0, 1fr); min-height: 100%; }
+.app > .col { min-width: 0; }
+.side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 4px;
+  padding: 14px 12px; background: var(--surface); border-right: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px; text-decoration: none; color: var(--ink); }
+.brand svg { width: 28px; height: 28px; flex: none; }
+.brand b { font-size: 15px; letter-spacing: -.01em; }
+.brand small { display: block; font-size: 11px; color: var(--muted); font-weight: 500; letter-spacing: .02em; }
+.navlabel { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 10px 10px 4px; }
+.nav { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px;
+  background: none; color: var(--ink-2); text-align: left; font-weight: 500; transition: background .15s, color .15s; }
+.nav:hover { background: var(--surface-2); color: var(--ink); }
+.nav[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.nav .count { margin-left: auto; font-size: 11px; font-weight: 600; padding: 0 7px; border-radius: 999px; background: var(--surface-3); color: var(--muted); }
+.side .foot { margin-top: auto; display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.cadline { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); padding: 4px 10px; min-width: 0; }
+.cadline span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--na); box-shadow: 0 0 0 3px var(--na-soft); }
+.dot.ok { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.dot.warn { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
+.dot.bad { background: var(--bad); box-shadow: 0 0 0 3px var(--bad-soft); }
+
+.top { position: sticky; top: 0; z-index: 20; height: var(--top); display: flex; align-items: center; gap: 12px;
+  padding: 0 24px; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(8px);
+  border-bottom: 1px solid var(--line); }
+.crumbs { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--muted); }
+.crumbs a { color: var(--muted); text-decoration: none; } .crumbs a:hover { color: var(--ink); }
+.crumbs b { color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top .spacer { flex: 1; }
+.kbtn { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px 0 12px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted); min-width: 220px; }
+.kbtn:hover { border-color: var(--line-strong); color: var(--ink); }
+kbd { font: 600 11px/1 var(--font); padding: 3px 6px; border-radius: 5px; border: 1px solid var(--line-strong);
+  border-bottom-width: 2px; background: var(--surface-2); color: var(--muted); }
+.kbtn kbd { margin-left: auto; }
+.iconbtn { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink-2); transition: background .15s, border-color .15s; }
+.iconbtn:hover { background: var(--surface-2); border-color: var(--line-strong); }
+.iconbtn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+main { padding: 24px; max-width: 1680px; margin: 0 auto; width: 100%; }
+
+/* ---------- primitives ---------- */
+.ph { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 24px; margin-bottom: 20px; }
+.ph h1 { margin: 0; font-size: 24px; line-height: 1.2; letter-spacing: -.02em; font-weight: 650; }
+.ph p { margin: 4px 0 0; color: var(--muted); max-width: 72ch; }
+.ph .actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.card > header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); min-height: 48px; }
+.card > header h2 { margin: 0; font-size: 14px; font-weight: 650; letter-spacing: -.005em; }
+.card > header .sub { color: var(--muted); font-size: 12px; }
+.card > header .tools { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.card .body { padding: 16px; }
+.stack { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+.card, .stack > *, .ws > *, .rp > * { min-width: 0; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 34px; padding: 0 14px;
+  border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink);
+  font-weight: 550; text-decoration: none; white-space: nowrap; transition: background .15s, border-color .15s, color .15s, opacity .15s; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+.btn.ok:hover { background: var(--ok-soft); }
+.btn.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); }
+.btn.bad:hover { background: var(--bad-soft); }
+.btn.ghost { border-color: transparent; background: none; color: var(--muted); }
+.btn.ghost:hover { color: var(--ink); background: var(--surface-2); }
+.btn.sm { height: 28px; padding: 0 10px; font-size: 12.5px; border-radius: 7px; }
+.btn[disabled] { opacity: .45; cursor: not-allowed; filter: none; }
+.btn kbd { margin-left: 2px; }
+.btn.primary kbd { background: transparent; color: inherit; border-color: color-mix(in srgb, var(--accent-ink) 45%, transparent); }
+.field { display: grid; gap: 5px; min-width: 0; }
+.field > span { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.field small { color: var(--muted); font-size: 11.5px; }
+.input, select.input, textarea.input { height: 36px; padding: 0 11px; border-radius: 8px; border: 1px solid var(--line-strong);
+  background: var(--surface); color: var(--ink); min-width: 0; width: 100%; transition: border-color .15s, box-shadow .15s; }
+textarea.input { height: auto; min-height: 64px; padding: 8px 11px; resize: vertical; }
+.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.input.sm { height: 30px; font-size: 13px; }
+.input::placeholder { color: color-mix(in srgb, var(--muted) 75%, transparent); }
+
+.pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; white-space: nowrap; border: 1px solid transparent; }
+.pill svg.i { width: 13px; height: 13px; stroke-width: 2.2; vertical-align: 0; }
+.t-ok { color: var(--ok); background: var(--ok-soft); } .t-warn { color: var(--warn); background: var(--warn-soft); }
+.t-bad { color: var(--bad); background: var(--bad-soft); } .t-info { color: var(--info); background: var(--info-soft); }
+.t-na { color: var(--na); background: var(--na-soft); } .t-accent { color: var(--accent); background: var(--accent-soft); }
+.pill.outline { background: none; border-color: currentColor; }
+.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 12px;
+  font-weight: 600; background: var(--surface-3); color: var(--ink-2); white-space: nowrap; }
+
+.seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 9px; background: var(--surface-3); border: 1px solid var(--line); flex-wrap: wrap; }
+.seg button { border: 0; background: none; height: 28px; padding: 0 10px; border-radius: 7px; color: var(--muted); font-weight: 550; font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.seg .n { font-size: 11px; color: var(--muted); font-weight: 600; }
+
+/* tables */
+.tw { overflow: auto; }
+table.dt { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; }
+.dt th { position: sticky; top: 0; z-index: 1; background: var(--surface-2); text-align: left; font-size: 11.5px; font-weight: 600;
+  color: var(--muted); letter-spacing: .02em; padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.dt th button { border: 0; background: none; padding: 0; color: inherit; font: inherit; display: inline-flex; gap: 4px; align-items: center; }
+.dt th button:hover { color: var(--ink); }
+.dt th[aria-sort] button { color: var(--ink); }
+.dt td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.dt tr:last-child td { border-bottom: 0; }
+.dt td.r, .dt th.r { text-align: right; }
+.dt tbody tr.click { cursor: pointer; transition: background .12s; }
+.dt tbody tr.click:hover td { background: var(--surface-2); }
+.dt .title { font-weight: 600; color: var(--ink); }
+.dt .subline { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46ch; }
+
+.empty { display: grid; place-items: center; gap: 8px; text-align: center; padding: 40px 16px; color: var(--muted); }
+.empty svg.i { width: 28px; height: 28px; stroke-width: 1.5; opacity: .7; }
+.empty b { color: var(--ink); font-size: 14px; }
+.skel { border-radius: 6px; background: linear-gradient(90deg, var(--surface-3), var(--surface-2), var(--surface-3)); background-size: 200% 100%; animation: sk 1.2s infinite linear; }
+@keyframes sk { to { background-position: -200% 0; } }
+
+/* KPIs */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.kpi { padding: 14px 16px; display: grid; gap: 2px; }
+.kpi .k { font-size: 12px; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.kpi .v { font-size: 26px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.kpi .d { font-size: 12px; color: var(--muted); }
+
+/* health bar */
+.hbar { display: flex; height: 6px; border-radius: 999px; overflow: hidden; background: var(--surface-3); min-width: 90px; }
+.hbar i { display: block; height: 100%; }
+.hbar .ok { background: var(--ok); } .hbar .info { background: var(--info); opacity: .55; } .hbar .warn { background: var(--warn); } .hbar .bad { background: var(--bad); }
+.hlegend { font-size: 11.5px; color: var(--muted); margin-top: 4px; white-space: nowrap; }
+
+/* new inspection */
+.newrun { display: grid; grid-template-columns: minmax(260px, 1fr) 150px 110px 190px auto; gap: 12px; align-items: end; }
+.runstate { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--muted); min-height: 20px; }
+.spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--accent-line); border-top-color: var(--accent); animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- inspection workspace ---------- */
+.ihead { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 14px; }
+.ihead h1 { margin: 0; font-size: 22px; letter-spacing: -.02em; font-weight: 650; overflow-wrap: anywhere; }
+.ihead .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ihead .actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.gate { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 14px; align-items: center; padding: 12px 16px; border-radius: var(--radius);
+  border: 1px solid; margin-bottom: 14px; }
+.gate.t-ok { border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
+.gate.t-warn { border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+.gate .gi { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: color-mix(in srgb, currentColor 14%, transparent); }
+.gate b { display: block; font-size: 14px; color: inherit; }
+.gate .why { color: var(--ink-2); font-size: 13px; }
+.gate .stats { display: flex; gap: 18px; color: var(--ink-2); font-size: 12px; flex-wrap: wrap; justify-content: flex-end; }
+.gate .stats b { font-size: 16px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.lineage { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); margin: -4px 0 14px; }
+.lineage a { color: var(--accent); }
+
+.ws { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 14px; align-items: start; }
+.viewer { position: sticky; top: calc(var(--top) + 14px); height: calc(100vh - var(--top) - 28px); min-height: 460px; display: flex; flex-direction: column; overflow: hidden; }
+.vbar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.vbar .zoom { min-width: 52px; text-align: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.vbar .legend { margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+.vbar .legend span { display: inline-flex; align-items: center; gap: 5px; }
+.vbar .legend i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; display: inline-block; }
+.stage { position: relative; flex: 1; overflow: hidden; background-color: var(--desk);
+  background-image: radial-gradient(var(--desk-dot) 1px, transparent 1px); background-size: 18px 18px;
+  cursor: grab; touch-action: none; user-select: none; }
+.stage.dragging { cursor: grabbing; }
+.stage > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.paper { filter: drop-shadow(0 6px 18px rgba(0, 0, 0, .18)); }
+.bl { cursor: pointer; }
+.bl .ld { fill: none; stroke-width: 1.4; }
+.bl .an { stroke: none; }
+.bl circle.c { fill: #ffffff; stroke-width: 2; }
+.bl text { font-family: var(--font); font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.bl.s-ok { --b: #0f7a4f; } .bl.s-info { --b: #2456e6; } .bl.s-warn { --b: #b86400; } .bl.s-bad { --b: #c62038; } .bl.s-na { --b: #6b7480; }
+.bl .ld { stroke: var(--b); } .bl .an { fill: var(--b); } .bl circle.c { stroke: var(--b); } .bl text { fill: var(--b); }
+.bl.dim { opacity: .28; }
+.bl:hover circle.c { stroke-width: 3; }
+.bl.sel circle.c { fill: var(--b); stroke-width: 3; } .bl.sel text { fill: #ffffff; }
+.bl.sel .ring { stroke: var(--b); opacity: .35; fill: none; stroke-width: 6; }
+.bl.decided circle.c { stroke-dasharray: 3 2; }
+.escm rect { fill: rgba(179, 100, 0, .08); stroke: #b86400; stroke-width: 1.5; stroke-dasharray: 4 3; }
+.escm.sel rect { fill: rgba(179, 100, 0, .2); stroke-width: 2.5; }
+.tip { position: absolute; z-index: 5; pointer-events: none; padding: 7px 10px; border-radius: 8px; background: #0e1420; color: #f1f4f8;
+  font-size: 12px; box-shadow: var(--shadow-lg); max-width: 280px; transform: translate(12px, 12px); }
+.tip b { font-family: var(--mono); font-size: 13px; }
+.minimapnote { position: absolute; left: 10px; bottom: 10px; font-size: 11px; color: var(--muted); background: color-mix(in srgb, var(--surface) 85%, transparent); padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); }
+
+.rp { display: grid; gap: 14px; min-width: 0; position: sticky; top: calc(var(--top) + 14px); max-height: calc(100vh - var(--top) - 28px);
+  overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; border-radius: var(--radius); align-content: start; }
+.rp .card > header { padding: 10px 12px; }
+.filters { display: grid; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.search { position: relative; }
+.search svg.i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+.search .input { padding-left: 32px; }
+.search kbd { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
+.clist { max-height: min(36vh, 420px); overflow: auto; overscroll-behavior: contain; }
+.citem { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; width: 100%;
+  padding: 9px 12px; border: 0; border-bottom: 1px solid var(--line); background: none; text-align: left; transition: background .12s; }
+.citem:hover { background: var(--surface-2); }
+.citem[aria-selected="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.bn { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  border: 2px solid currentColor; font-variant-numeric: tabular-nums; background: var(--surface); }
+.citem .co { font-family: var(--mono); font-size: 13.5px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.citem .sb { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.citem .st { display: grid; justify-items: end; gap: 3px; }
+.c-ok { color: var(--ok); } .c-info { color: var(--info); } .c-warn { color: var(--warn); } .c-bad { color: var(--bad); } .c-na { color: var(--na); }
+
+.insp .ih { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.insp .bn.big { width: 40px; height: 40px; font-size: 16px; border-width: 2.5px; }
+.insp .callout { font-family: var(--mono); font-size: 20px; font-weight: 650; letter-spacing: -.01em; overflow-wrap: anywhere; line-height: 1.25; }
+.insp .ids { font-size: 12px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 2px; }
+.insp section { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.insp section:last-child { border-bottom: 0; }
+.insp h3 { margin: 0 0 10px; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 650; }
+.spec { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 0; }
+.spec div { min-width: 0; }
+.spec dt { font-size: 11.5px; color: var(--muted); }
+.spec dd { margin: 1px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.spec dd.mono { font-weight: 600; }
+.spec .wide { grid-column: 1 / -1; }
+.band { margin: 4px 0 2px; }
+.band svg { width: 100%; height: 58px; display: block; overflow: visible; }
+.band .zone { fill: var(--ok-soft); stroke: var(--ok); stroke-width: 1; }
+.band .axis { stroke: var(--line-strong); stroke-width: 1; }
+.band .lim { stroke: var(--ok); stroke-width: 2; }
+.band .nom { stroke: var(--ink-2); stroke-width: 1.5; stroke-dasharray: 3 2; }
+.band .geo { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.band text { font: 600 10.5px var(--mono); fill: var(--muted); }
+.band text.g { fill: var(--accent); }
+.list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.list li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; font-size: 13px; }
+.list li svg.i { margin-top: 1px; }
+.list .x { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.tl { list-style: none; margin: 0; padding: 0 0 0 4px; display: grid; gap: 10px; }
+.tl li { position: relative; padding-left: 18px; font-size: 12.5px; }
+.tl li::before { content: ""; position: absolute; left: 0; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); }
+.tl li::after { content: ""; position: absolute; left: 3.5px; top: 16px; bottom: -12px; width: 1px; background: var(--line); }
+.tl li:last-child::after { display: none; }
+.tl li.hum::before { background: var(--accent); }
+.tl b { font-weight: 600; }
+.tl .when { color: var(--muted); font-size: 11.5px; }
+.actbar { display: flex; flex-wrap: wrap; gap: 8px; }
+.form { display: grid; gap: 10px; margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line); }
+.form .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.form .btns { display: flex; gap: 8px; justify-content: flex-end; }
+.ferr { color: var(--bad); font-size: 12.5px; }
+
+.reviewbar { position: relative; z-index: 15; margin-top: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  padding: 10px 12px 10px 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line-strong); box-shadow: var(--shadow-lg); }
+.reviewbar.live { position: sticky; bottom: 12px; border-color: var(--accent-line); }
+.reviewbar .who { display: flex; align-items: center; gap: 8px; }
+.reviewbar .who .input { width: 200px; }
+.reviewbar .pend { font-size: 13px; color: var(--ink-2); flex: 1; min-width: 200px; }
+.reviewbar .pend b { font-variant-numeric: tabular-nums; }
+.reviewbar .go { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+.tabs { display: flex; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.tabs button { border: 0; background: none; padding: 12px 10px; color: var(--muted); font-weight: 600; font-size: 13px; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .n { font-size: 11px; padding: 0 6px; border-radius: 999px; background: var(--surface-3); color: var(--muted); }
+
+.esc { padding: 12px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
+.esc .tx { font-family: var(--mono); font-weight: 600; overflow-wrap: anywhere; }
+.esc .why { font-size: 12.5px; color: var(--muted); }
+
+/* palette / toasts */
+dialog.pal { width: min(640px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--surface);
+  color: var(--ink); box-shadow: var(--shadow-lg); margin-top: 12vh; }
+dialog.pal::backdrop { background: rgba(8, 10, 14, .45); backdrop-filter: blur(2px); }
+.pal .pin { display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.pal .pin input { flex: 1; height: 52px; border: 0; outline: none; background: none; font-size: 15px; }
+.pal ul { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow: auto; }
+.pal li { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; cursor: pointer; }
+.pal li[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+.pal li .g { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+.pal .ft { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); }
+.toasts { position: fixed; right: 16px; bottom: 16px; z-index: 100; display: grid; gap: 8px; }
+.toast { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-lg); max-width: 380px; font-size: 13px; animation: tin .2s ease-out; }
+@keyframes tin { from { opacity: 0; transform: translateY(6px); } }
+
+pre.code { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 12px; background: var(--surface-2); padding: 10px; border-radius: 8px; border: 1px solid var(--line); max-height: 320px; overflow: auto; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.appcard { padding: 16px; display: grid; gap: 10px; }
+.appcard .nm { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 15px; }
+.appcard .nm .ic { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; background: var(--surface-3); color: var(--ink-2); }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 440px); gap: 14px; align-items: start; }
+.chg td.k { box-shadow: inset 3px 0 0 var(--line-strong); }
+.chg tr.s-warn td.k { box-shadow: inset 3px 0 0 var(--warn); } .chg tr.s-bad td.k { box-shadow: inset 3px 0 0 var(--bad); } .chg tr.s-ok td.k { box-shadow: inset 3px 0 0 var(--ok); }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1280px) { .ws { grid-template-columns: minmax(0, 1fr) 380px; } }
+@media (max-width: 1100px) {
+  .ws { grid-template-columns: minmax(0, 1fr); }
+  .viewer { position: relative; top: 0; height: 62vh; min-height: 380px; }
+  .rp { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); position: static; max-height: none; overflow: visible; }
+  .newrun { grid-template-columns: 1fr 1fr; } .newrun .wide { grid-column: 1 / -1; }
+  .split { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .side { position: sticky; top: 0; z-index: 30; height: auto; flex-direction: row; align-items: center; gap: 2px; padding: 6px 8px; border-right: 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .brand { padding: 0 8px 0 2px; } .brand small, .navlabel, .side .foot .cadline span:last-child { display: none; }
+  .nav { width: auto; padding: 8px 10px; } .nav .lbl { display: none; } .nav .count { display: none; }
+  .side .foot { margin: 0 0 0 auto; padding: 0; border: 0; display: flex; }
+  .top { top: 53px; padding: 0 16px; } .kbtn { min-width: 0; } .kbtn .lbl, .kbtn kbd { display: none; }
+  main { padding: 16px; }
+  .rp { grid-template-columns: minmax(0, 1fr); }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gate { grid-template-columns: auto 1fr; } .gate .stats { grid-column: 1 / -1; justify-content: flex-start; }
+  .vbar .legend { display: none; }
+  .reviewbar .who .input { width: 150px; }
+  .hide-sm { display: none; }
+}
+@media (max-width: 520px) { .newrun { grid-template-columns: 1fr; } .kpis { grid-template-columns: 1fr 1fr; } .kpi .v { font-size: 22px; } .ph h1 { font-size: 20px; } }
+@media (pointer: coarse) {
+  .btn, .iconbtn, .input, .nav, .seg button { min-height: 44px; } .iconbtn { width: 44px; } .btn.sm { height: 40px; }
+  .citem { min-height: 52px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
-<header>
-  <h1>ASTraCAD <span>workspace · local</span></h1>
-  <nav role="tablist">
-    <button data-tab="inspections" aria-selected="true">Inspections</button>
-    <button data-tab="tasks">Tasks</button>
-    <button data-tab="changes">Change sets</button>
-    <button data-tab="cad">CAD</button>
-  </nav>
-  <div id="cadchips" aria-live="polite"></div>
-</header>
-<main id="main"></main>
+<div class="app">
+  <aside class="side" aria-label="Primary">
+    <a class="brand" href="#" aria-label="ASTraCAD home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/>
+        <circle cx="16" cy="16" r="8.5" fill="none" stroke="var(--accent-ink)" stroke-width="2.2"/>
+        <path d="M16 4.5v5M16 22.5v5M4.5 16h5M22.5 16h5" stroke="var(--accent-ink)" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="16" cy="16" r="2.2" fill="var(--accent-ink)"/></svg>
+      <span><b>ASTraCAD</b><small>Inspection workspace</small></span>
+    </a>
+    <div class="navlabel">Quality</div>
+    <button class="nav" data-tab="inspections"><svg class="i" data-i="scan"></svg><span class="lbl">Inspections</span><span class="count" id="n-insp"></span></button>
+    <button class="nav" data-tab="changes"><svg class="i" data-i="diff"></svg><span class="lbl">Revision changes</span></button>
+    <div class="navlabel">Automation</div>
+    <button class="nav" data-tab="tasks"><svg class="i" data-i="tasks"></svg><span class="lbl">Tasks</span></button>
+    <button class="nav" data-tab="cad"><svg class="i" data-i="cube"></svg><span class="lbl">CAD connections</span></button>
+    <div class="foot">
+      <div class="cadline" id="cadline" aria-live="polite"><span class="dot"></span><span>CAD status…</span></div>
+    </div>
+  </aside>
+  <div class="col">
+    <div class="top">
+      <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
+      <div class="spacer"></div>
+      <button class="kbtn" id="openpal" aria-label="Open command palette"><svg class="i" data-i="search"></svg><span class="lbl">Search or jump to…</span><kbd>Ctrl K</kbd></button>
+      <button class="iconbtn" id="theme" aria-label="Toggle dark mode"><svg class="i" data-i="moon"></svg></button>
+    </div>
+    <main id="main" tabindex="-1"></main>
+  </div>
+</div>
+<dialog class="pal" id="pal" aria-label="Command palette">
+  <div class="pin"><svg class="i lg" data-i="search"></svg><input id="palq" placeholder="Type a run, a balloon number, a callout or a page…" autocomplete="off" aria-label="Search"></div>
+  <ul id="pall" role="listbox"></ul>
+  <div class="ft"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span><span><kbd>Esc</kbd> close</span></div>
+</dialog>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <script>
 "use strict";
 // Every value from a drawing, task or file is inserted as text, never as HTML.
+const SVGNS = "http://www.w3.org/2000/svg";
 const h = (tag, attrs = {}, ...kids) => {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
     if (v == null || v === false) continue;
     if (k === "class") el.className = v;
+    else if (k === "style") el.style.cssText = v;
     else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k in el && typeof v !== "string") el[k] = v;
     else el.setAttribute(k, v === true ? "" : v);
   }
-  for (const k of kids.flat()) if (k != null && k !== false) el.append(k instanceof Node ? k : String(k));
+  for (const k of kids.flat(Infinity)) if (k != null && k !== false && k !== "") el.append(k instanceof Node ? k : String(k));
   return el;
 };
+const s = (tag, attrs = {}, ...kids) => {
+  const el = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k.startsWith("on")) el.addEventListener(k.slice(2), v); else el.setAttribute(k, v);
+  }
+  for (const k of kids.flat(Infinity)) if (k != null && k !== false) el.append(k instanceof Node ? k : document.createTextNode(String(k)));
+  return el;
+};
+// Lucide-style strokes, drawn inline (no emoji, no icon font, nothing fetched)
+const ICONS = {
+  scan: "M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10",
+  diff: "M6 3v12M18 9v12M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM18 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM18 9c0 4-12 2-12 6",
+  tasks: "M3 6h.01M3 12h.01M3 18h.01M8 6h13M8 12h13M8 18h13",
+  cube: "M21 8l-9-5-9 5v8l9 5 9-5zM3 8l9 5 9-5M12 13v8",
+  search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-4.3-4.3",
+  sun: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
+  moon: "M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z",
+  check: "M20 6L9 17l-5-5",
+  x: "M18 6L6 18M6 6l12 12",
+  edit: "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z",
+  undo: "M3 7v6h6M21 17a9 9 0 0 0-15-6.7L3 13",
+  plus: "M12 5v14M5 12h14", minus: "M5 12h14",
+  fit: "M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3",
+  file: "M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5",
+  sheet: "M3 5h18v14H3zM3 10h18M3 15h18M9 5v14",
+  image: "M3 5h18v14H3zM8.5 9.5h.01M21 15l-5-5L5 19",
+  alert: "M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01",
+  shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4",
+  back: "M19 12H5M12 19l-7-7 7-7",
+  chev: "M9 18l6-6-6-6",
+  layers: "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5",
+  clock: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2",
+  refresh: "M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5",
+  info: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v5M12 8h.01",
+  flag: "M4 21V4M4 4h12l-2 4 2 4H4",
+  ban: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8",
+  ext: "M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6",
+  play: "M6 4l14 8-14 8z",
+  user: "M20 21a8 8 0 0 0-16 0M12 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10z",
+  link: "M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7",
+  crosshair: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM22 12h-4M6 12H2M12 6V2M12 22v-4",
+  eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+};
+const ic = (name, cls = "i") => s("svg", { class: cls, viewBox: "0 0 24 24", "aria-hidden": "true" }, s("path", { d: ICONS[name] || "" }));
+document.querySelectorAll("svg[data-i]").forEach(el => { el.setAttribute("viewBox", "0 0 24 24"); el.setAttribute("aria-hidden", "true"); el.append(s("path", { d: ICONS[el.dataset.i] })); });
+
 const api = async (path, opts) => {
   const r = await fetch(path, opts);
-  const d = await r.json();
+  let d; try { d = await r.json(); } catch (e) { d = {}; }
   if (!r.ok) throw new Error(d.error || r.statusText);
   return d;
 };
-const fmt = (v, n = 4) => v == null ? "–" : (typeof v === "number" ? (+v.toFixed(n)).toString() : String(v));
+const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json", "X-AstraCAD": "1" }, body: JSON.stringify(body) });
+const store = { get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+const fmt = (v, n = 4) => v == null || v === "" ? "–" : (typeof v === "number" ? (+v.toFixed(n)).toString() : String(v));
 // Display only: DXF control codes shown as the symbols they print as (stored text is untouched).
 const sym = t => t == null ? "–" : String(t).replace(/%%[cC]/g, "⌀").replace(/%%[dD]/g, "°").replace(/%%[pP]/g, "±");
-const when = s => s ? new Date(s).toLocaleString() : "–";
-const chip = (text, cls) => h("span", { class: "chip " + cls }, text);
-const stateCls = s => ({ SUCCEEDED: "ok", FAILED: "bad", CANCELLED: "na", WAITING_FOR_APPROVAL: "warn",
-  RUNNING: "warn", RECOVERING: "warn", PENDING: "na", EXECUTED_UNVERIFIED: "warn" }[s] || "na");
-const outcomeCls = o => ({ passed: "ok", failed: "bad", not_verifiable: "na" }[o] || "na");
+const when = v => { if (!v) return "–"; const d = typeof v === "number" ? new Date(v * 1000) : new Date(v); return isNaN(d) ? String(v) : d.toLocaleString(); };
+const ago = v => {
+  if (!v) return "–"; const t = typeof v === "number" ? v * 1000 : Date.parse(v); if (isNaN(t)) return String(v);
+  const m = Math.round((Date.now() - t) / 60000);
+  if (m < 1) return "just now"; if (m < 60) return m + " min ago"; const hh = Math.round(m / 60); if (hh < 48) return hh + " h ago";
+  return new Date(t).toLocaleDateString();
+};
+const human = t => String(t || "").replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase());
+const pill = (tone, icon, text, extra = "") => h("span", { class: `pill t-${tone} ${extra}` }, icon ? ic(icon) : null, text);
+const ROUTE = { dxf: "DXF", "dxf-vector": "DXF", "pdf-vector": "Vector PDF", "raster-ocr": "Scan · OCR" };
+const routeTag = r => h("span", { class: "tag" }, ROUTE[r] || r || "?");
+const OUT = { passed: ["ok", "check", "Passed"], failed: ["bad", "x", "Failed"], not_verifiable: ["na", "info", "Not verifiable"] };
+const outcome = o => { const [t, i, l] = OUT[o] || ["na", "info", human(o)]; return pill(t, i, l); };
+const STATE = { SUCCEEDED: "ok", FAILED: "bad", CANCELLED: "na", WAITING_FOR_APPROVAL: "warn", RUNNING: "info", RECOVERING: "warn", PENDING: "na", EXECUTED_UNVERIFIED: "warn" };
+const STATE_I = { ok: "check", bad: "x", warn: "alert", info: "clock", na: "clock" };
+const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const main = document.getElementById("main");
-const table = (heads, rows) => h("div", { class: "tablewrap" },
-  h("table", {}, h("thead", {}, h("tr", {}, heads.map(x => h("th", {}, x)))), h("tbody", {}, rows)));
-const empty = msg => h("div", { class: "empty" }, msg);
-const panel = (title, ...kids) => h("section", { class: "panel" }, title ? h("h2", {}, title) : null, ...kids);
+const empty = (icon, title, text) => h("div", { class: "empty" }, ic(icon), h("b", {}, title), text ? h("div", {}, text) : null);
+const card = (title, sub, tools, ...kids) => h("section", { class: "card" },
+  title ? h("header", {}, h("h2", {}, title), sub ? h("span", { class: "sub" }, sub) : null, tools ? h("div", { class: "tools" }, tools) : null) : null, ...kids);
+function toast(text, tone = "ok") {
+  const t = h("div", { class: "toast" }, h("span", { class: "c-" + tone }, ic(tone === "ok" ? "check" : tone === "bad" ? "alert" : "info")), h("div", {}, text));
+  document.getElementById("toasts").append(t);
+  setTimeout(() => t.remove(), tone === "bad" ? 7000 : 3500);
+}
+// Sortable data table: cols = [{k, label, num?, render(row), sort(row)}]
+function dataTable(cols, rows, { onRow, rowClass, initial } = {}) {
+  let sortK = initial?.k ?? null, dir = initial?.dir ?? 1;
+  const tbody = h("tbody"), thr = h("tr");
+  const draw = () => {
+    const col = cols.find(c => c.k === sortK);
+    const list = col ? rows.slice().sort((a, b) => {
+      const x = col.sort ? col.sort(a) : a[col.k], y = col.sort ? col.sort(b) : b[col.k];
+      return (x == null) - (y == null) || (x < y ? -1 : x > y ? 1 : 0) * dir;
+    }) : rows;
+    tbody.replaceChildren(...list.map(r => h("tr", { class: (onRow ? "click " : "") + (rowClass ? rowClass(r) : ""), onclick: onRow ? () => onRow(r) : null,
+      tabindex: onRow ? 0 : null, onkeydown: onRow ? e => { if (e.key === "Enter") onRow(r); } : null },
+      cols.map(c => h("td", { class: c.num ? "r num" : (c.cls || "") }, c.render ? c.render(r) : fmt(r[c.k]))))));
+    thr.replaceChildren(...cols.map(c => h("th", { class: c.num ? "r" : "", "aria-sort": c.k === sortK ? (dir > 0 ? "ascending" : "descending") : null },
+      c.nosort ? c.label : h("button", { onclick: () => { dir = sortK === c.k ? -dir : 1; sortK = c.k; draw(); } }, c.label,
+        c.k === sortK ? (dir > 0 ? " ↑" : " ↓") : ""))));
+  };
+  draw();
+  return h("div", { class: "tw" }, h("table", { class: "dt" }, h("thead", {}, thr), tbody));
+}
 
-async function cadChips(refresh) {
-  const box = document.getElementById("cadchips");
+// ---------- shell: theme, crumbs, CAD status, palette ----------
+const themeBtn = document.getElementById("theme");
+function applyTheme(t) {
+  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  const dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  themeBtn.replaceChildren(ic(dark ? "sun" : "moon"));
+  themeBtn.setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
+}
+applyTheme(store.get("astracad.theme"));
+themeBtn.addEventListener("click", () => {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  const t = dark ? "light" : "dark"; store.set("astracad.theme", t); applyTheme(t);
+});
+function crumbs(...parts) {
+  const c = document.getElementById("crumbs");
+  c.replaceChildren(...parts.flatMap((p, i) => [i ? ic("chev") : null, typeof p === "string" ? h("b", {}, p) : h("a", { href: p.href }, p.label)]).filter(Boolean));
+}
+let cadState = null;
+async function cadStatus(refresh) {
+  const box = document.getElementById("cadline");
   try {
-    const s = await api("/api/status" + (refresh ? "?refresh=1" : ""));
-    box.replaceChildren(...s.applications.map(a => chip(`${a.application}: ${a.state}`,
-      a.state === "CONNECTED" ? "ok" : a.state === "NOT_INSTALLED" ? "na" : "warn")));
-    return s;
-  } catch (e) { box.replaceChildren(chip("CAD status unavailable", "bad")); }
+    cadState = await api("/api/status" + (refresh ? "?refresh=1" : ""));
+    const apps = cadState.applications || [];
+    const con = apps.filter(a => a.state === "CONNECTED");
+    box.replaceChildren(h("span", { class: "dot " + (con.length ? "ok" : apps.length ? "warn" : "") }),
+      h("span", {}, con.length ? con.map(a => a.application).join(", ") + " connected" : apps.length ? "No CAD connected" : "CAD probing off"));
+    return cadState;
+  } catch (e) { box.replaceChildren(h("span", { class: "dot bad" }), h("span", {}, "CAD status unavailable")); }
 }
 
+let runsCache = [];
+let palExtra = [];         // items the current view adds (e.g. its characteristics)
+const pal = document.getElementById("pal"), palq = document.getElementById("palq"), pall = document.getElementById("pall");
+let palItems = [], palSel = 0;
+function palBase() {
+  return [
+    { label: "Inspections", group: "Page", icon: "scan", run: () => location.hash = "#inspections" },
+    { label: "Revision changes", group: "Page", icon: "diff", run: () => location.hash = "#changes" },
+    { label: "Tasks", group: "Page", icon: "tasks", run: () => location.hash = "#tasks" },
+    { label: "CAD connections", group: "Page", icon: "cube", run: () => location.hash = "#cad" },
+    { label: "Toggle dark mode", group: "Action", icon: "moon", run: () => themeBtn.click() },
+    ...runsCache.map(r => ({ label: `${r.name} · ${ROUTE[r.route] || r.route} · rev ${r.revision ?? "–"}`, group: "Run", icon: "file",
+      run: () => location.hash = "#inspection=" + encodeURIComponent(r.key) })),
+  ];
+}
+function palDraw() {
+  const q = palq.value.trim().toLowerCase();
+  const all = [...palExtra, ...palBase()];
+  palItems = (q ? all.filter(i => i.label.toLowerCase().includes(q) || i.group.toLowerCase().includes(q)) : all).slice(0, 60);
+  palSel = Math.min(palSel, Math.max(0, palItems.length - 1));
+  pall.replaceChildren(...(palItems.length ? palItems.map((it, i) => h("li", { role: "option", "aria-selected": String(i === palSel),
+    onclick: () => { pal.close(); it.run(); }, onmousemove: () => { if (palSel !== i) { palSel = i; palDraw(); } } },
+    ic(it.icon || "chev"), h("span", {}, it.label), h("span", { class: "g" }, it.group))) : [h("li", { "aria-disabled": "true" }, h("span", { class: "muted" }, "No matches"))]));
+  pall.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+}
+async function openPal() {
+  if (pal.open) return;
+  palq.value = ""; palSel = 0; palDraw(); pal.showModal(); palq.focus();
+  try { runsCache = await api("/api/inspections"); palDraw(); } catch (e) {}
+}
+document.getElementById("openpal").addEventListener("click", openPal);
+palq.addEventListener("input", () => { palSel = 0; palDraw(); });
+palq.addEventListener("keydown", e => {
+  if (e.key === "ArrowDown") { palSel = Math.min(palItems.length - 1, palSel + 1); palDraw(); e.preventDefault(); }
+  else if (e.key === "ArrowUp") { palSel = Math.max(0, palSel - 1); palDraw(); e.preventDefault(); }
+  else if (e.key === "Enter" && palItems[palSel]) { const it = palItems[palSel]; pal.close(); it.run(); }
+});
+pal.addEventListener("click", e => { if (e.target === pal) pal.close(); });
+
+let viewKeys = null;      // keyboard handler of the current view
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openPal(); return; }
+  const tag = (e.target.tagName || "").toLowerCase();
+  if (pal.open || e.ctrlKey || e.metaKey || e.altKey || ["input", "textarea", "select"].includes(tag) || e.target.isContentEditable) return;
+  if (viewKeys) viewKeys(e);
+});
+
+// ---------- Inspections (home) ----------
+const health = r => {
+  const n = r.rows || 0, rev = r.needs_review || 0, bl = r.blocking || 0, ok = Math.max(0, n - rev - bl);
+  const w = x => n ? (100 * x / n).toFixed(1) + "%" : "0";
+  return h("div", {}, h("div", { class: "hbar", role: "img", "aria-label": `${ok} without findings, ${rev} need review, ${bl} blocking` },
+    h("i", { class: "info", style: `width:${w(ok)}` }), h("i", { class: "warn", style: `width:${w(rev)}` }), h("i", { class: "bad", style: `width:${w(bl)}` })),
+    h("div", { class: "hlegend" }, `${rev} review · ${bl} blocking`));
+};
 async function viewInspections() {
-  const status = h("div", { class: "muted", "aria-live": "polite" });
-  const form = h("form", { class: "run", onsubmit: async ev => {
-      ev.preventDefault();
-      const f = new FormData(form);
-      status.textContent = "Running inspection…";
-      try {
-        const r = await api("/api/inspect", { method: "POST",
-          headers: { "Content-Type": "application/json", "X-AstraCAD": "1" },
-          body: JSON.stringify({ drawing: f.get("drawing"), units: f.get("units"), revision: f.get("revision") }) });
-        status.textContent = r.delivered ? "Done." : "Finished, but the exports did not read back correctly.";
-        location.hash = "#inspection=" + encodeURIComponent(r.key);
-      } catch (e) { status.textContent = "Not run: " + e.message; }
-    } },
-    h("label", {}, "Drawing file (.dxf, .pdf, or a scan .png/.jpg/.tif — scans and PDFs need Units)", h("input", { name: "drawing", required: true, placeholder: "C:\\drawings\\part.dxf" })),
-    h("label", {}, "Units", h("select", { name: "units" },
-      h("option", { value: "" }, "from drawing (DXF)"), ...["mm", "in", "cm", "m"].map(u => h("option", { value: u }, u)))),
-    h("label", {}, "Revision", h("input", { name: "revision", size: 6, placeholder: "auto" })),
-    h("button", { class: "primary", type: "submit" }, "Inspect"));
+  crumbs("Inspections");
+  main.replaceChildren(h("div", { class: "ph" }, h("div", {}, h("h1", {}, "Inspections"),
+    h("p", {}, "Drawings read into ballooned inspection plans. Every value traces back to the entity it came from."))),
+    h("div", { class: "kpis" }, [1, 2, 3, 4, 5].map(() => h("div", { class: "card kpi" }, h("div", { class: "skel", style: "height:12px;width:60%" }), h("div", { class: "skel", style: "height:26px;width:40%;margin-top:6px" })))));
   const list = await api("/api/inspections");
-  const rows = list.map(r => h("tr", { class: "click", onclick: () => location.hash = "#inspection=" + encodeURIComponent(r.key) },
-    h("td", {}, r.name, h("div", { class: "muted mono" }, r.folder)),
-    h("td", {}, r.route), h("td", {}, r.revision ?? "–"),
-    h("td", { class: "num" }, r.rows), h("td", { class: "num" }, r.needs_review), h("td", { class: "num" }, r.escalated),
-    h("td", {}, chip(`${r.exports_passed}/${r.exports_total}`, r.exports_total && r.exports_passed === r.exports_total ? "ok" : "bad")),
-    h("td", {}, r.approvable ? chip("releasable", "ok") : chip("not releasable", "warn"))));
+  runsCache = list;
+  document.getElementById("n-insp").textContent = list.length || "";
+  const sum = k => list.reduce((a, r) => a + (r[k] || 0), 0);
+  const kpi = (icon, k, v, d, tone) => h("div", { class: "card kpi" }, h("div", { class: "k" }, h("span", { class: tone ? "c-" + tone : "" }, ic(icon)), k), h("div", { class: "v" }, v), h("div", { class: "d" }, d));
+  const releasable = list.filter(r => r.approvable).length;
+
+  const units = h("select", { class: "input", name: "units" }, h("option", { value: "" }, "Auto (DXF)"), ...["mm", "in", "cm", "m"].map(u => h("option", { value: u }, u)));
+  const drawing = h("input", { class: "input", name: "drawing", required: true, placeholder: "C:\\drawings\\bracket.dxf", spellcheck: false });
+  const revision = h("input", { class: "input", name: "revision", placeholder: "auto" });
+  const gtol = h("input", { class: "input", name: "gtol", placeholder: "e.g. iso2768-m" });
+  const state = h("div", { class: "runstate", "aria-live": "polite" });
+  const go = h("button", { class: "btn primary", type: "submit" }, ic("play"), "Inspect");
+  const form = h("form", { class: "newrun", onsubmit: async ev => {
+      ev.preventDefault();
+      go.disabled = true; const t0 = Date.now();
+      const tick = () => state.replaceChildren(h("span", { class: "spin" }), `Reading the drawing, balloons and exports… ${Math.round((Date.now() - t0) / 1000)} s (scans take about 25 s a page)`);
+      tick(); const timer = setInterval(tick, 1000);
+      try {
+        const r = await post("/api/inspect", { drawing: drawing.value.trim(), units: units.value, revision: revision.value.trim(), general_tolerance: gtol.value.trim() });
+        toast(r.delivered ? "Inspection plan delivered" : "Finished, but the exports did not read back correctly", r.delivered ? "ok" : "warn");
+        location.hash = "#inspection=" + encodeURIComponent(r.key);
+      } catch (e) { state.replaceChildren(h("span", { class: "c-bad" }, ic("alert")), h("span", {}, "Not run: " + e.message)); }
+      finally { clearInterval(timer); go.disabled = false; }
+    } },
+    h("label", { class: "field wide" }, h("span", {}, "Drawing file"), drawing, h("small", {}, ".dxf, vector .pdf, or a scan (.png .jpg .tif) — scans and PDFs need units")),
+    h("label", { class: "field" }, h("span", {}, "Units"), units, h("small", {}, "\u00a0")),
+    h("label", { class: "field" }, h("span", {}, "Revision"), revision, h("small", {}, "\u00a0")),
+    h("label", { class: "field" }, h("span", {}, "General tolerance"), gtol, h("small", {}, "optional; else read from the sheet")),
+    h("div", { class: "field" }, go, h("small", {}, "\u00a0")));
+
+  let filter = "all", q = "";
+  const tableBox = h("div");
+  const drawTable = () => {
+    const rows = list.filter(r => (filter === "all" || (filter === "rel" ? r.approvable : !r.approvable)) &&
+      (!q || `${r.name} ${r.document} ${r.folder}`.toLowerCase().includes(q)));
+    tableBox.replaceChildren(rows.length ? dataTable([
+      { k: "name", label: "Drawing", render: r => h("div", {}, h("div", { class: "title" }, r.name, /_rev\d+$/.test(r.folder || "") ? [" ", h("span", { class: "pill t-accent", title: "a new run made from a reviewed one" }, ic("link"), "re-issue " + r.folder.match(/_rev(\d+)$/)[1])] : ""), h("div", { class: "subline mono", title: r.document || r.folder }, r.document || r.folder)) },
+      { k: "route", label: "Source", render: r => routeTag(r.route) },
+      { k: "revision", label: "Rev", render: r => h("span", { class: "mono" }, r.revision ?? "–") },
+      { k: "rows", label: "Characteristics", num: true },
+      { k: "needs_review", label: "Findings", render: health, sort: r => (r.blocking || 0) * 1000 + (r.needs_review || 0) },
+      { k: "escalated", label: "Escalated", num: true },
+      { k: "exports_passed", label: "Exports", render: r => r.exports_total && r.exports_passed === r.exports_total ? pill("ok", "check", `${r.exports_passed}/${r.exports_total}`) : pill("bad", "x", `${r.exports_passed}/${r.exports_total}`) },
+      { k: "approvable", label: "Release gate", render: r => r.approvable ? pill("ok", "shield", "Releasable") : pill("warn", "alert", "Not releasable") },
+      { k: "modified", label: "Updated", render: r => h("span", { class: "muted nowrap", title: when(r.modified) }, ago(r.modified)) },
+    ], rows, { onRow: r => location.hash = "#inspection=" + encodeURIComponent(r.key), initial: { k: "modified", dir: -1 } })
+      : empty("search", list.length ? "No runs match" : "No inspection runs yet", list.length ? "Clear the search or filter." : "Inspect a drawing above; the plan, report and workbook appear here."));
+  };
+  const seg = h("div", { class: "seg", role: "group", "aria-label": "Filter runs" }, [["all", "All", list.length], ["rel", "Releasable", releasable], ["not", "Not releasable", list.length - releasable]].map(([k, l, n]) =>
+    h("button", { "aria-pressed": String(k === filter), onclick: ev => { filter = k; ev.currentTarget.parentNode.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b === ev.currentTarget))); drawTable(); } }, l, h("span", { class: "n" }, n))));
+  const search = h("div", { class: "search" }, ic("search"), h("input", { class: "input sm", placeholder: "Filter runs", "aria-label": "Filter runs", oninput: e => { q = e.target.value.trim().toLowerCase(); drawTable(); } }));
+  drawTable();
   main.replaceChildren(
-    panel("Inspect a drawing", form, status),
-    panel(`Inspection runs (${list.length})`, list.length ? table(
-      ["Run", "Route", "Rev", "Rows", "Review", "Escalated", "Exports", "Gate"], rows) : empty("No runs yet in the run folders.")));
+    h("div", { class: "ph" }, h("div", {}, h("h1", {}, "Inspections"),
+      h("p", {}, "Drawings read into ballooned inspection plans. Every value traces back to the entity it came from, and nothing is released while a finding is open."))),
+    h("div", { class: "kpis" },
+      kpi("file", "Runs", list.length, `${new Set(list.map(r => r.document)).size} drawing(s)`),
+      kpi("shield", "Releasable", releasable, `${list.length - releasable} held by the gate`, "ok"),
+      kpi("sheet", "Characteristics", sum("rows"), "ballooned across all runs"),
+      kpi("flag", "Need review", sum("needs_review"), `${sum("blocking")} blocking`, "warn"),
+      kpi("eye", "Escalated text", sum("escalated"), "dimension-like, not accepted", "bad")),
+    h("div", { class: "stack" },
+      card("New inspection", "the drawing is read in place; results go to a new run folder", null, h("div", { class: "body" }, form, state)),
+      card("Runs", `${list.length}`, [seg, search], tableBox)));
+  setTimeout(() => { if (!list.length) drawing.focus(); }, 0);
 }
 
-const store = { get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
-                set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
-const post = (path, body) => api(path, { method: "POST",
-  headers: { "Content-Type": "application/json", "X-AstraCAD": "1" }, body: JSON.stringify(body) });
-
-function tolForm(prefix) {
-  // tolerance editor: kind + the fields that kind needs (nothing pre-filled, nothing assumed)
-  const kind = h("select", { name: prefix + "kind" },
-    h("option", { value: "" }, "tolerance: keep"), h("option", { value: "none" }, "none stated"),
-    h("option", { value: "symmetric" }, "± symmetric"), h("option", { value: "deviations" }, "+upper / lower"),
-    h("option", { value: "limit_pair" }, "limits max / min"));
-  const a = h("input", { name: prefix + "a", size: 7, placeholder: "±" }), b = h("input", { name: prefix + "b", size: 7, placeholder: "" });
+// ---------- Inspection workspace ----------
+function rowTone(r) {
+  if (r.status === "approved") return ["ok", "shield", "Approved"];
+  if (r.status === "rejected") return ["na", "ban", "Rejected"];
+  if (r.blocking) return ["bad", "alert", "Blocking"];
+  if (r.status === "needs_review") return ["warn", "flag", "Needs review"];
+  return ["info", "check", "Detected"];
+}
+function tolForm(r) {
+  const kind = h("select", { class: "input sm", "aria-label": "Tolerance type" },
+    h("option", { value: "" }, "Keep tolerance"), h("option", { value: "none" }, "None stated"),
+    h("option", { value: "symmetric" }, "± symmetric"), h("option", { value: "deviations" }, "+upper / −lower"),
+    h("option", { value: "limit_pair" }, "Limits max / min"));
+  const a = h("input", { class: "input sm", inputmode: "decimal", "aria-label": "First value" });
+  const b = h("input", { class: "input sm", inputmode: "decimal", "aria-label": "Second value" });
+  const la = h("span", {}), lb = h("span", {});
+  const fa = h("label", { class: "field" }, la, a), fb = h("label", { class: "field" }, lb, b);
   const sync = () => {
     const k = kind.value;
-    a.hidden = !k || k === "none"; b.hidden = !["deviations", "limit_pair"].includes(k);
-    a.placeholder = { symmetric: "±", deviations: "upper +", limit_pair: "max" }[k] || "";
-    b.placeholder = { deviations: "lower −", limit_pair: "min" }[k] || "";
+    fa.hidden = !k || k === "none"; fb.hidden = !["deviations", "limit_pair"].includes(k);
+    la.textContent = { symmetric: "± value", deviations: "Upper deviation", limit_pair: "Maximum" }[k] || "";
+    lb.textContent = { deviations: "Lower deviation", limit_pair: "Minimum" }[k] || "";
+    a.placeholder = { symmetric: "0.1", deviations: "+0.05", limit_pair: "10.05" }[k] || "";
+    b.placeholder = { deviations: "-0.02", limit_pair: "10.00" }[k] || "";
   };
   kind.addEventListener("change", sync); sync();
   const read = () => {
@@ -170,159 +733,477 @@ function tolForm(prefix) {
     if (k === "deviations") return { kind: k, upper: a.value, lower: b.value };
     return { kind: k, maximum: a.value, minimum: b.value };
   };
-  return { el: h("span", { class: "tolform" }, kind, " ", a, " ", b), read };
+  return { el: [h("label", { class: "field" }, h("span", {}, "Tolerance"), kind), fa, fb], read };
 }
 
-async function viewInspection(key) {
+// Tolerance band: limits, nominal and the value measured from geometry, to scale
+function band(r, ev) {
+  const lo = r.minimum, hi = r.maximum, nom = r.nominal, g = ev?.geometry_value;
+  if (typeof lo !== "number" || typeof hi !== "number" || !(hi > lo)) return null;
+  const pts = [lo, hi, nom, g].filter(v => typeof v === "number");
+  let a = Math.min(...pts), b = Math.max(...pts); const pad = (b - a) * 0.35 || Math.abs(a) * 0.01 || 1; a -= pad; b += pad;
+  const X = v => 8 + (v - a) / (b - a) * 284;
+  const inside = typeof g === "number" ? g >= lo - 1e-9 && g <= hi + 1e-9 : null;
+  return h("div", { class: "band" }, s("svg", { viewBox: "0 0 300 58", role: "img", "aria-label": `Lower limit ${fmt(lo)}, upper limit ${fmt(hi)}${typeof g === "number" ? ", geometry " + fmt(g) : ""}` },
+    s("line", { class: "axis", x1: 4, x2: 296, y1: 30, y2: 30 }),
+    s("rect", { class: "zone", x: X(lo), y: 22, width: Math.max(1, X(hi) - X(lo)), height: 16, rx: 3 }),
+    s("line", { class: "lim", x1: X(lo), x2: X(lo), y1: 16, y2: 44 }), s("line", { class: "lim", x1: X(hi), x2: X(hi), y1: 16, y2: 44 }),
+    typeof nom === "number" ? s("line", { class: "nom", x1: X(nom), x2: X(nom), y1: 14, y2: 46 }) : null,
+    s("text", { x: X(lo), y: 56, "text-anchor": "middle" }, fmt(lo)), s("text", { x: X(hi), y: 56, "text-anchor": "middle" }, fmt(hi)),
+    typeof g === "number" ? [s("circle", { class: "geo", cx: X(g), cy: 30, r: 5.5 }), s("text", { class: "g", x: X(g), y: 9, "text-anchor": "middle" }, "geometry " + fmt(g))] : null),
+    typeof g === "number" ? h("div", { class: "muted", style: "font-size:12px" }, inside ? "The value measured from the drawing's geometry lies inside the limits." : "The value measured from the drawing's geometry lies OUTSIDE the limits.") : null);
+}
+
+function createViewer({ sheet, layout, fileKey, layoutKey, onPick }) {
+  const stage = h("div", { class: "stage", tabindex: 0, "aria-label": "Drawing viewer. Drag to pan, scroll to zoom." });
+  const tip = h("div", { class: "tip", hidden: true });
+  const zoomLbl = h("span", { class: "zoom" }, "100%");
+  const api_ = { el: null, select() {}, setStatus() {}, fit() {}, showEsc() {} };
+  const btn = (icon, label, fn) => h("button", { class: "iconbtn", "aria-label": label, title: label, onclick: fn }, ic(icon));
+  if (!sheet || !fileKey) {
+    // runs made before the interactive sheet existed: the static layout image
+    api_.el = h("section", { class: "card viewer" }, h("div", { class: "vbar" }, h("b", { style: "font-size:13px" }, "Layout"), h("span", { class: "muted", style: "font-size:12px" }, "static image — re-run to get the interactive sheet")),
+      h("div", { class: "stage", style: "overflow:auto;cursor:default" }, layoutKey ? h("img", { src: "/file?key=" + encodeURIComponent(layoutKey), alt: "Drawing with inspection balloons", style: "max-width:100%;display:block;margin:auto;background:#fff" }) : empty("image", "No layout image")));
+    return api_;
+  }
+  const [x0, y0, x1, y1] = sheet.extents, W = sheet.width_px, H = sheet.height_px;
+  const P = (x, y) => [(x - x0) / (x1 - x0) * W, (y1 - y) / (y1 - y0) * H];
+  const unit = W / (x1 - x0);            // pixels per drawing unit
+  const cam = s("g");
+  const svg = s("svg", { "aria-hidden": "true" }, cam);
+  const paper = s("g", { class: "paper" }, s("rect", { x: 0, y: 0, width: W, height: H, fill: "#fff" }),
+    s("image", { href: "/file?key=" + encodeURIComponent(fileKey), x: 0, y: 0, width: W, height: H, preserveAspectRatio: "none" }));
+  const escG = s("g"), blG = s("g");
+  cam.append(paper, escG, blG);
+  stage.append(svg, tip, h("div", { class: "minimapnote" }, "sheet in drawing units · balloons drawn from the plan"));
+  const nodes = new Map();
+  for (const b of layout?.balloons || []) {
+    const [cx, cy] = P(...b.centre), r = b.radius * unit, [ax, ay] = P(...(b.leader?.[0] || b.centre));
+    const g = s("g", { class: "bl s-na", "data-cid": b.cid },
+      s("polyline", { class: "ld", points: (b.leader || []).map(p => P(...p).join(",")).join(" "), "vector-effect": "non-scaling-stroke" }),
+      s("circle", { class: "an", cx: ax, cy: ay, r: Math.max(2.5, r * 0.12) }),
+      s("circle", { class: "ring", cx, cy, r: r + 6 }),
+      s("circle", { class: "c", cx, cy, r, "vector-effect": "non-scaling-stroke" }),
+      s("text", { x: cx, y: cy, "font-size": r * 1.05 }, b.number));
+    g.querySelector(".ring").style.display = "none";
+    nodes.set(b.cid, { g, cx, cy, r, ax, ay, b });
+    g.addEventListener("click", e => { e.stopPropagation(); onPick?.(b.cid); });
+    g.addEventListener("pointerenter", () => { tip.hidden = false; tip.replaceChildren(...(api_.tipFor?.(b.cid) || [String(b.number)])); });
+    g.addEventListener("pointerleave", () => { tip.hidden = true; });
+    blG.append(g);
+  }
+  let k = 1, tx = 0, ty = 0, fitK = 1, anim = 0;
+  const apply = () => { cam.setAttribute("transform", `translate(${tx} ${ty}) scale(${k})`); zoomLbl.textContent = Math.round(k / fitK * 100) + "%"; };
+  const fit = () => {
+    const vw = stage.clientWidth, vh = stage.clientHeight; if (!vw || !vh) return;
+    fitK = Math.min(vw / W, vh / H) * 0.94; k = fitK; tx = (vw - W * k) / 2; ty = (vh - H * k) / 2; apply();
+  };
+  const animateTo = (nk, ntx, nty) => {
+    cancelAnimationFrame(anim);
+    if (reduced()) { k = nk; tx = ntx; ty = nty; apply(); return; }
+    const k0 = k, tx0 = tx, ty0 = ty, t0 = performance.now(), D = 260;
+    const step = t => { const u = Math.min(1, (t - t0) / D), e = 1 - Math.pow(1 - u, 3);
+      k = k0 + (nk - k0) * e; tx = tx0 + (ntx - tx0) * e; ty = ty0 + (nty - ty0) * e; apply(); if (u < 1) anim = requestAnimationFrame(step); };
+    anim = requestAnimationFrame(step);
+  };
+  const zoomAt = (f, px, py) => { const nk = Math.min(fitK * 40, Math.max(fitK * 0.5, k * f)); tx = px - (px - tx) * (nk / k); ty = py - (py - ty) * (nk / k); k = nk; apply(); };
+  const zoomBy = f => zoomAt(f, stage.clientWidth / 2, stage.clientHeight / 2);
+  const centreOn = (pts, minK) => {
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    const bx = Math.min(...xs), by = Math.min(...ys), bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by;
+    const vw = stage.clientWidth, vh = stage.clientHeight;
+    let nk = Math.max(k, minK); nk = Math.min(nk, vw / (bw + 80), vh / (bh + 80)); nk = Math.max(nk, fitK);
+    const cx = bx + bw / 2, cy = by + bh / 2;
+    // only move when the target is not already comfortably in view
+    const sx = cx * k + tx, sy = cy * k + ty;
+    if (nk === k && sx > vw * .15 && sx < vw * .85 && sy > vh * .15 && sy < vh * .85) return;
+    animateTo(nk, vw / 2 - cx * nk, vh / 2 - cy * nk);
+  };
+  stage.addEventListener("wheel", e => { e.preventDefault(); const rc = stage.getBoundingClientRect(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - rc.left, e.clientY - rc.top); }, { passive: false });
+  const ptrs = new Map(); let moved = 0, pinch0 = null;
+  stage.addEventListener("pointerdown", e => { ptrs.set(e.pointerId, [e.clientX, e.clientY]); moved = 0; cancelAnimationFrame(anim);
+    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), k }; } });
+  stage.addEventListener("pointermove", e => {
+    const rc = stage.getBoundingClientRect();
+    if (!tip.hidden) { tip.style.left = (e.clientX - rc.left) + "px"; tip.style.top = (e.clientY - rc.top) + "px"; }
+    if (!ptrs.has(e.pointerId)) return;
+    const [px, py] = ptrs.get(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+    if (ptrs.size === 2 && pinch0) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      zoomAt((pinch0.k * d / pinch0.d) / k, (a[0] + b[0]) / 2 - rc.left, (a[1] + b[1]) / 2 - rc.top); return; }
+    moved += Math.abs(e.clientX - px) + Math.abs(e.clientY - py);
+    if (moved > 3) { if (!stage.classList.contains("dragging")) { stage.classList.add("dragging"); stage.setPointerCapture(e.pointerId); } tx += e.clientX - px; ty += e.clientY - py; apply(); }
+  });
+  const up = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch0 = null; stage.classList.remove("dragging"); };
+  stage.addEventListener("pointerup", up); stage.addEventListener("pointercancel", up);
+  stage.addEventListener("click", e => { if (moved > 3) { e.stopPropagation(); e.preventDefault(); } }, true);
+  stage.addEventListener("dblclick", e => { const rc = stage.getBoundingClientRect(); zoomAt(2, e.clientX - rc.left, e.clientY - rc.top); });
+  new ResizeObserver(() => { const wasFit = Math.abs(k - fitK) < 1e-9; if (wasFit || !stage.dataset.ready) { fit(); stage.dataset.ready = "1"; } }).observe(stage);
+  let showB = true;
+  const tgl = h("button", { class: "iconbtn", "aria-label": "Show balloons", "aria-pressed": "true", title: "Balloons (B)", onclick: () => { showB = !showB; blG.style.display = showB ? "" : "none"; tgl.setAttribute("aria-pressed", String(showB)); } }, ic("layers"));
+  const legend = h("div", { class: "legend" }, [["#2456e6", "Detected"], ["#b86400", "Review"], ["#c62038", "Blocking"], ["#0f7a4f", "Approved"]].map(([c, l]) => h("span", {}, h("i", { style: `border-color:${c}` }), l)),
+    h("span", {}, h("i", { style: "border-color:#b86400;border-style:dashed;border-radius:2px" }), "Escalated text"));
+  api_.el = h("section", { class: "card viewer", "aria-label": "Drawing" }, h("div", { class: "vbar" },
+    btn("minus", "Zoom out (−)", () => zoomBy(1 / 1.4)), zoomLbl, btn("plus", "Zoom in (+)", () => zoomBy(1.4)), btn("fit", "Fit sheet (F)", () => animateTo(fitK, (stage.clientWidth - W * fitK) / 2, (stage.clientHeight - H * fitK) / 2)), tgl, legend), stage);
+  api_.fit = () => animateTo(fitK, (stage.clientWidth - W * fitK) / 2, (stage.clientHeight - H * fitK) / 2);
+  api_.zoomBy = zoomBy;
+  api_.toggle = () => tgl.click();
+  api_.setStatus = (cid, tone, decided, dim) => { const n = nodes.get(cid); if (!n) return; n.g.setAttribute("class", `bl s-${tone}${decided ? " decided" : ""}${dim ? " dim" : ""}${n.g.classList.contains("sel") ? " sel" : ""}`); };
+  api_.select = (cid, move = true) => {
+    for (const [c, n] of nodes) { const on = c === cid; n.g.classList.toggle("sel", on); n.g.querySelector(".ring").style.display = on ? "" : "none"; if (on) blG.append(n.g); }
+    escG.querySelectorAll(".escm").forEach(m => m.classList.remove("sel"));
+    const n = nodes.get(cid); if (n && move) centreOn([[n.cx - n.r, n.cy - n.r], [n.cx + n.r, n.cy + n.r], [n.ax, n.ay]], fitK * 1.6);
+  };
+  api_.showEsc = list => {
+    escG.replaceChildren(...list.filter(u => typeof u.anchor_x === "number" && typeof u.anchor_y === "number").map((u, i) => {
+      const [cx, cy] = P(u.anchor_x, u.anchor_y), sz = 7 * unit;
+      const g = s("g", { class: "escm", "data-i": u._i }, s("rect", { x: cx - sz, y: cy - sz * 0.6, width: sz * 2, height: sz * 1.2, rx: 2, "vector-effect": "non-scaling-stroke" }));
+      g.addEventListener("click", e => { e.stopPropagation(); onPick?.("esc:" + u._i); });
+      g.addEventListener("pointerenter", () => { tip.hidden = false; tip.replaceChildren(h("b", {}, sym(u.text)), h("div", {}, "Escalated: not accepted as a characteristic")); });
+      g.addEventListener("pointerleave", () => { tip.hidden = true; });
+      return g; }));
+  };
+  api_.selectEsc = i => {
+    for (const n of nodes.values()) { n.g.classList.remove("sel"); n.g.querySelector(".ring").style.display = "none"; }
+    escG.querySelectorAll(".escm").forEach(m => m.classList.toggle("sel", m.dataset.i === String(i)));
+    const m = escG.querySelector(`.escm[data-i="${i}"] rect`);
+    if (m) { const x = +m.getAttribute("x"), y = +m.getAttribute("y"), w = +m.getAttribute("width"), hh = +m.getAttribute("height"); centreOn([[x, y], [x + w, y + hh]], fitK * 2); }
+  };
+  return api_;
+}
+
+async function viewInspection(key, keepSel) {
   const d = await api("/api/inspection?key=" + encodeURIComponent(key));
-  const p = d.plan;
+  const p = d.plan, rows = p.rows || [], ev = d.evidence || {};
+  crumbs({ href: "#inspections", label: "Inspections" }, d.name);
   const decided = Object.fromEntries((d.review?.characteristics || []).map(e => [e.cid, e]));
   const annDecided = Object.fromEntries((d.review?.annotations || []).map(e => [e.text, e]));
-  const msg = h("div", { class: "muted", "aria-live": "polite" });
-  const reviewer = h("input", { id: "reviewer", size: 18, placeholder: "your name", value: store.get("astracad.reviewer") });
+  const esc = (p.uninterpreted || []).map((u, i) => ({ ...u, _i: i }));
+  const pending = (d.review?.characteristics || []).length + (d.review?.annotations || []).length;
+  const prov = d.provenance || {};
+  const cov = p.coverage || {};
+
+  // header
+  const fileBtn = (k, icon, label) => d.files[k] ? h("a", { class: "btn sm", href: "/file?key=" + encodeURIComponent(d.files[k]), target: "_blank", rel: "noopener" }, ic(icon), label) : null;
+  const tb = p.title_block || {};
+  const head = h("div", { class: "ihead" },
+    h("div", {}, h("h1", {}, d.name), h("div", { class: "meta" }, routeTag(prov.route), h("span", { class: "tag" }, "rev " + (p.revision ?? "–")), h("span", { class: "tag" }, p.unit || "?"),
+      tb.part_name ? h("span", { class: "muted", style: "font-size:13px" }, tb.part_name) : null, tb.material ? h("span", { class: "muted", style: "font-size:13px" }, "· " + tb.material) : null)),
+    h("div", { class: "actions" }, fileBtn("report", "file", "Report PDF"), fileBtn("workbook", "sheet", "Workbook XLSX"), fileBtn("layout", "image", "Layout PNG")));
+  const ok = !!p.approvable;
+  const gate = h("div", { class: "gate " + (ok ? "t-ok" : "t-warn"), role: "status" },
+    h("div", { class: "gi" }, ic(ok ? "shield" : "alert", "i lg")),
+    h("div", {}, h("b", {}, ok ? "Releasable" : "Not releasable"), h("div", { class: "why" }, String(p.gate || "").replace(/^(NOT )?releasable\s*[—-]\s*/i, ""))),
+    h("div", { class: "stats" },
+      h("div", {}, h("b", {}, cov.characteristics_extracted ?? rows.length), h("div", {}, "characteristics")),
+      cov.geometry_cross_checked != null ? h("div", {}, h("b", {}, `${cov.geometry_cross_check_passed ?? 0}/${cov.geometry_cross_checked}`), h("div", {}, "geometry checks")) : null,
+      h("div", {}, h("b", {}, rows.filter(r => r.blocking).length), h("div", {}, "blocking")),
+      h("div", {}, h("b", {}, esc.length), h("div", {}, "escalated"))));
+  const lineage = d.parent ? h("div", { class: "lineage" }, ic("link"), "Re-issued from ", h("a", { href: "#inspection=" + encodeURIComponent(d.parent) }, "the reviewed run"),
+    ` with ${(d.applied_log || []).length} recorded decision(s) applied.`) : null;
+
+  // viewer
+  let sel = keepSel || null;
+  const viewer = createViewer({ sheet: d.sheet, layout: p.layout, fileKey: d.files.sheet, layoutKey: d.files.layout, onPick: c => pick(c) });
+  viewer.tipFor = cid => { const r = rows.find(x => x.cid === cid); if (!r) return [cid]; const [t, , l] = rowTone(r);
+    return [h("b", {}, sym(r.callout)), h("div", {}, `#${r.balloon_no} · ${r.kind} · ${l}`), r.tolerance_text ? h("div", {}, sym(r.tolerance_text)) : null]; };
+  viewer.showEsc?.(esc);
+
+  // reviewer
+  const reviewer = h("input", { class: "input sm", id: "reviewer", placeholder: "Your name", value: store.get("astracad.reviewer"), autocomplete: "name", "aria-label": "Reviewer name" });
   reviewer.addEventListener("change", () => store.set("astracad.reviewer", reviewer.value.trim()));
   const act = async body => {
-    msg.textContent = "Saving…";
-    try { await post("/api/review", { key, reviewer: reviewer.value.trim(), ...body }); await viewInspection(key); }
-    catch (e) { msg.textContent = "Not saved: " + e.message; }
+    if (!reviewer.value.trim()) { toast("Enter your name as reviewer first — every decision is signed.", "warn"); reviewer.focus(); return false; }
+    store.set("astracad.reviewer", reviewer.value.trim());
+    try {
+      await post("/api/review", { key, reviewer: reviewer.value.trim(), ...body });
+      toast(`${human(body.action)} recorded${body.cid ? " for " + body.cid : ""}`);
+      await viewInspection(key, sel); return true;
+    } catch (e) { toast("Not saved: " + e.message, "bad"); return false; }
   };
-  const decisionChip = e => !e ? "" : e.approve ? chip("approve (pending)", "ok")
-    : e.reject ? chip("reject (pending)", "bad") : chip("correction (pending)", "warn");
-  const files = h("div", { class: "files" }, Object.entries(d.files).map(([k, v]) =>
-    h("a", { href: "/file?key=" + encodeURIComponent(v), target: "_blank", rel: "noopener" }, k)));
-  const tbody = h("tbody");
-  for (const r of (p.rows || [])) {
-    const editor = h("tr", { hidden: true });
-    const nominal = h("input", { size: 8, placeholder: "nominal", value: r.nominal ?? "" });
-    const tf = tolForm("t");
-    editor.append(h("td", { colspan: 9 }, h("span", { class: "muted" }, `Correct ${r.cid}: `), nominal, " ", tf.el, " ",
-      h("button", { class: "primary", onclick: () => {
-        const body = { action: "correct", cid: r.cid };
-        if (String(nominal.value) !== String(r.nominal ?? "")) body.nominal = nominal.value;
-        const t = tf.read(); if (t) body.tolerance = t;
-        act(body);
-      } }, "Save correction"), " ", h("button", { class: "link", onclick: () => editor.hidden = true }, "cancel")));
-    tbody.append(h("tr", {},
-      h("td", { class: "num" }, r.balloon_no ?? "–"), h("td", {}, r.kind), h("td", { class: "mono" }, sym(r.callout)),
-      h("td", { class: "num" }, fmt(r.nominal)), h("td", { class: "mono" }, r.tolerance_text),
-      h("td", { class: "num" }, fmt(r.minimum)), h("td", { class: "num" }, fmt(r.maximum)),
-      h("td", {}, chip(r.status, r.blocking ? "bad" : r.status === "needs_review" ? "warn" : "ok"),
-        ...(r.issues || []).map(i => h("div", { class: "muted" }, i))),
-      h("td", { class: "nowrap" }, decisionChip(decided[r.cid]), h("div", {},
-        h("button", { class: "link", onclick: () => act({ action: "approve", cid: r.cid }) }, "approve"), " · ",
-        h("button", { class: "link", onclick: () => { const why = prompt(`Reason for rejecting ${r.cid}?`); if (why) act({ action: "reject", cid: r.cid, reason: why }); } }, "reject"), " · ",
-        h("button", { class: "link", onclick: () => { editor.hidden = !editor.hidden; } }, "correct"),
-        decided[r.cid] ? [" · ", h("button", { class: "link", onclick: () => act({ action: "clear", cid: r.cid }) }, "undo")] : ""))),
-      editor);
+
+  // list + filters
+  let filter = "all", q = "";
+  const counts = { all: rows.length, action: rows.filter(r => r.blocking || r.status === "needs_review").length, blocking: rows.filter(r => r.blocking).length, decided: Object.keys(decided).length };
+  const searchIn = h("input", { class: "input sm", placeholder: "Search callout, balloon, kind", "aria-label": "Search characteristics", oninput: e => { q = e.target.value.trim().toLowerCase(); drawList(); } });
+  const segBtns = [["all", "All"], ["action", "Open"], ["blocking", "Blocking"], ["decided", "Decided"]].map(([k, l]) =>
+    h("button", { "aria-pressed": String(k === filter), onclick: () => { filter = k; segBtns.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.k === k))); drawList(); }, "data-k": k }, l, h("span", { class: "n" }, counts[k])));
+  const clist = h("div", { class: "clist", role: "listbox", "aria-label": "Characteristics" });
+  const visible = () => rows.filter(r => (filter === "all" || (filter === "action" ? (r.blocking || r.status === "needs_review") : filter === "blocking" ? r.blocking : !!decided[r.cid])) &&
+    (!q || `${r.balloon_no} ${sym(r.callout)} ${r.kind} ${r.cid} ${sym(r.tolerance_text)}`.toLowerCase().includes(q)));
+  function drawList() {
+    const vis = visible(), vset = new Set(vis.map(r => r.cid));
+    for (const r of rows) { const [t] = rowTone(r); viewer.setStatus(r.cid, t, !!decided[r.cid], (filter !== "all" || q) && !vset.has(r.cid)); }
+    if (sel && !String(sel).startsWith("esc:")) viewer.select(sel, false);
+    clist.replaceChildren(...(vis.length ? vis.map(r => {
+      const [t, i, l] = rowTone(r), dec = decided[r.cid];
+      return h("button", { class: "citem", role: "option", "aria-selected": String(sel === r.cid), "data-cid": r.cid, onclick: () => pick(r.cid) },
+        h("span", { class: "bn c-" + t }, r.balloon_no ?? "–"),
+        h("span", { style: "min-width:0" }, h("div", { class: "co" }, sym(r.callout)), h("div", { class: "sb" }, `${r.kind}${r.count > 1 ? " ×" + r.count : ""} · ${sym(r.tolerance_text)}${typeof r.minimum === "number" ? ` · ${fmt(r.minimum)} – ${fmt(r.maximum)}` : ""}`)),
+        h("span", { class: "st" }, pill(t, i, l), dec ? pill("accent", "clock", dec.approve ? "Approve pending" : dec.reject ? "Reject pending" : "Correction pending", "outline") : null));
+    }) : [empty("search", "Nothing matches", "Change the filter or search.")]));
   }
-  const checks = (p.checks || []).map(c => h("tr", {},
-    h("td", {}, chip(c.outcome, outcomeCls(c.outcome))), h("td", { class: "mono" }, c.name),
-    h("td", {}, c.expected), h("td", {}, c.actual), h("td", { class: "muted" }, c.why || "")));
-  const esc = (p.uninterpreted || []).map(u => {
-    const kind = h("select", {}, ...["linear", "diameter", "radius", "angular"].map(k => h("option", { value: k }, k)));
-    const nominal = h("input", { size: 8, placeholder: "nominal" });
-    const tf = tolForm("a");
-    const form = h("div", { hidden: true }, kind, " ", nominal, " ", tf.el, " ",
-      h("button", { class: "primary", onclick: () => {
-        const body = { action: "as_characteristic", text: u.text, kind: kind.value, nominal: nominal.value };
-        const t = tf.read(); if (t) body.tolerance = t;
-        act(body);
-      } }, "Add"));
-    const dec = annDecided[u.text];
-    return h("tr", {}, h("td", { class: "mono" }, sym(u.text)), h("td", { class: "muted" }, u.reason),
-      h("td", { class: "nowrap" }, dec ? chip(dec.action + " (pending)", "warn") : "", h("div", {},
-        h("button", { class: "link", onclick: () => { const why = prompt("Why is this not a characteristic?"); if (why) act({ action: "dismiss", text: u.text, reason: why }); } }, "dismiss"), " · ",
-        h("button", { class: "link", onclick: () => { form.hidden = !form.hidden; } }, "add as characteristic")), form));
-  });
-  const ver = (d.provenance?.export_verification || []).map(c => h("tr", {},
-    h("td", {}, chip(c.outcome, outcomeCls(c.outcome))), h("td", { class: "mono" }, c.name), h("td", {}, c.actual)));
-  const pending = (d.review?.characteristics || []).length + (d.review?.annotations || []).length;
-  const reissue = h("button", { class: "primary", disabled: !pending, onclick: async () => {
-      msg.textContent = "Re-issuing a new run with the review applied…";
-      try { const r = await post("/api/reissue", { key }); location.hash = "#inspection=" + encodeURIComponent(r.key); }
-      catch (e) { msg.textContent = "Not re-issued: " + e.message; }
-    } }, `Re-issue with ${pending} decision(s)`);
-  const log = (d.log || []).slice().reverse().map(e => h("tr", {},
-    h("td", { class: "mono nowrap" }, e.at), h("td", {}, e.reviewer), h("td", {}, e.action),
-    h("td", { class: "mono" }, sym(e.target)), h("td", { class: "muted" }, e.reason || "")));
-  main.replaceChildren(
-    h("p", {}, h("button", { class: "link", onclick: () => location.hash = "" }, "← all runs")),
-    panel(d.name,
-      h("div", { class: "banner " + (p.approvable ? "ok" : "warn") }, p.gate || (p.approvable ? "releasable" : "not releasable")),
-      h("div", { class: "muted mono" }, `${p.source_document}  ·  rev ${p.revision}  ·  ${p.unit}  ·  route ${d.provenance?.route ?? "?"}`),
-      h("div", { class: "muted mono" }, "sha256 " + p.source_sha256), files),
-    panel("Review", d.parent ? h("p", {}, "Re-issued from ", h("button", { class: "link", onclick: () => location.hash = "#inspection=" + encodeURIComponent(d.parent) }, "the reviewed run"),
-        ` with ${(d.applied_log || []).length} recorded decision(s) applied.`) : "",
-      h("div", { class: "run" }, h("label", {}, "Reviewer", reviewer), reissue), msg,
-      h("p", { class: "muted" }, "Decisions are recorded with your name and applied only when you re-issue: that makes a new run from the unchanged drawing; this run is never edited.")),
-    panel("Layout", d.files.layout ? h("img", { class: "layout", alt: "drawing with inspection balloons", src: "/file?key=" + encodeURIComponent(d.files.layout) }) : empty("no layout image")),
-    panel(`Characteristics (${(p.rows || []).length})`, (p.rows || []).length ? h("div", { class: "tablewrap" },
-      h("table", {}, h("thead", {}, h("tr", {}, ["#", "Kind", "Callout", "Nominal", "Tolerance", "Min", "Max", "Status", "Review"].map(x => h("th", {}, x)))), tbody)) : empty("none")),
-    esc.length ? panel(`Escalated text (${esc.length})`, table(["Text", "Why it was not accepted", "Review"], esc)) : "",
-    panel("Plan checks", table(["", "Check", "Expected", "Actual", "Why"], checks)),
-    panel("Export read-back", ver.length ? table(["", "Check", "Actual"], ver) : empty("no verification record")),
-    log.length ? panel(`Audit trail (${log.length})`, table(["When (UTC)", "Reviewer", "Action", "Target", "Reason"], log)) : "",
-    (d.applied_log || []).length ? panel(`Decisions applied in this run (${d.applied_log.length})`, table(["When (UTC)", "Reviewer", "Action", "Target", "Reason"],
-      d.applied_log.slice().reverse().map(e => h("tr", {}, h("td", { class: "mono nowrap" }, e.at), h("td", {}, e.reviewer), h("td", {}, e.action),
-        h("td", { class: "mono" }, sym(e.target)), h("td", { class: "muted" }, e.reason || ""))))) : "",
-    (p.warnings || []).length ? panel("Warnings", h("ul", {}, p.warnings.map(w => h("li", {}, w)))) : "");
+
+  // escalated list
+  const escBox = h("div");
+  function drawEsc() {
+    escBox.replaceChildren(...(esc.length ? esc.map(u => {
+      const dec = annDecided[u.text];
+      const formBox = h("div");
+      const dismiss = () => {
+        const why = h("textarea", { class: "input", placeholder: "e.g. a reference note, not a requirement", "aria-label": "Reason" });
+        formBox.replaceChildren(h("div", { class: "form" }, h("label", { class: "field" }, h("span", {}, "Why is this not a characteristic?"), why),
+          h("div", { class: "btns" }, h("button", { class: "btn sm ghost", onclick: () => formBox.replaceChildren() }, "Cancel"),
+            h("button", { class: "btn sm primary", onclick: () => { if (!why.value.trim()) { why.focus(); return; } act({ action: "dismiss", text: u.text, reason: why.value.trim() }); } }, "Dismiss"))));
+        why.focus();
+      };
+      const promote = () => {
+        const kind = h("select", { class: "input sm" }, ...["linear", "diameter", "radius", "angular"].map(k => h("option", { value: k }, k)));
+        const nominal = h("input", { class: "input sm", inputmode: "decimal", placeholder: "25" });
+        const tf = tolForm({});
+        formBox.replaceChildren(h("div", { class: "form" }, h("div", { class: "row" }, h("label", { class: "field" }, h("span", {}, "Kind"), kind), h("label", { class: "field" }, h("span", {}, "Nominal"), nominal), tf.el),
+          h("div", { class: "btns" }, h("button", { class: "btn sm ghost", onclick: () => formBox.replaceChildren() }, "Cancel"),
+            h("button", { class: "btn sm primary", onclick: () => { const body = { action: "as_characteristic", text: u.text, kind: kind.value, nominal: nominal.value }; const t = tf.read(); if (t) body.tolerance = t; act(body); } }, "Add characteristic"))));
+      };
+      return h("div", { class: "esc", "data-esc": u._i, style: sel === "esc:" + u._i ? "background:var(--accent-soft)" : "" },
+        h("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap" }, h("span", { class: "tx" }, sym(u.text)), dec ? pill("accent", "clock", human(dec.action) + " pending", "outline") : null,
+          typeof u.anchor_x === "number" ? h("button", { class: "btn sm ghost", style: "margin-left:auto", onclick: () => pick("esc:" + u._i) }, ic("crosshair"), "Locate") : null),
+        h("div", { class: "why" }, u.reason),
+        h("div", { class: "actbar" }, h("button", { class: "btn sm", onclick: dismiss }, ic("ban"), "Dismiss"), h("button", { class: "btn sm", onclick: promote }, ic("plus"), "Add as characteristic")), formBox);
+    }) : [empty("check", "Nothing escalated", "All dimension-like text on the sheet was interpreted.")]));
+  }
+
+  // inspector
+  const insp = h("section", { class: "card insp", "aria-live": "polite" });
+  function drawInspector() {
+    const r = rows.find(x => x.cid === sel);
+    if (!r) { insp.replaceChildren(empty("crosshair", "Select a characteristic", "Click a balloon on the drawing or a row in the list. J / K step through them.")); return; }
+    const e = ev[r.cid] || {}, [t, i, l] = rowTone(r), dec = decided[r.cid], src = e.source || {};
+    const form = h("div");
+    const correct = () => {
+      const nominal = h("input", { class: "input sm", inputmode: "decimal", value: r.nominal ?? "" });
+      const tf = tolForm(r), err = h("div", { class: "ferr" });
+      form.replaceChildren(h("div", { class: "form" }, h("div", { class: "row" }, h("label", { class: "field" }, h("span", {}, "Nominal"), nominal), tf.el), err,
+        h("div", { class: "btns" }, h("button", { class: "btn sm ghost", onclick: () => form.replaceChildren() }, "Cancel"),
+          h("button", { class: "btn sm primary", onclick: () => { const body = { action: "correct", cid: r.cid };
+            if (String(nominal.value) !== String(r.nominal ?? "")) body.nominal = nominal.value; const tt = tf.read(); if (tt) body.tolerance = tt;
+            if (Object.keys(body).length === 2) { err.textContent = "Change the nominal or choose a tolerance first."; return; } act(body); } }, "Save correction"))));
+      nominal.focus();
+    };
+    const reject = () => {
+      const why = h("textarea", { class: "input", placeholder: "e.g. callout belongs to the stock, not the part", "aria-label": "Reason for rejecting" });
+      form.replaceChildren(h("div", { class: "form" }, h("label", { class: "field" }, h("span", {}, "Reason for rejecting " + r.cid), why),
+        h("div", { class: "btns" }, h("button", { class: "btn sm ghost", onclick: () => form.replaceChildren() }, "Cancel"),
+          h("button", { class: "btn sm bad", onclick: () => { if (!why.value.trim()) { why.focus(); return; } act({ action: "reject", cid: r.cid, reason: why.value.trim() }); } }, ic("x"), "Reject"))));
+      why.focus();
+    };
+    insp._approve = () => act({ action: "approve", cid: r.cid }); insp._reject = reject; insp._correct = correct;
+    const issues = r.issues || [];
+    const checks = e.checks || [];
+    const hist = e.history || [];
+    insp.replaceChildren(
+      h("div", { class: "ih" }, h("span", { class: "bn big c-" + t }, r.balloon_no ?? "–"),
+        h("div", { style: "min-width:0" }, h("div", { class: "callout" }, sym(r.callout)),
+          h("div", { class: "ids" }, h("span", { class: "mono" }, r.cid), "·", r.kind, r.count > 1 ? `· ${r.count}×` : null, pill(t, i, l),
+            dec ? pill("accent", "clock", dec.approve ? "Approve pending" : dec.reject ? "Reject pending" : "Correction pending", "outline") : null))),
+      h("section", {}, h("h3", {}, "Review"),
+        h("div", { class: "actbar" },
+          h("button", { class: "btn sm ok", onclick: insp._approve }, ic("check"), "Approve", h("kbd", {}, "A")),
+          h("button", { class: "btn sm bad", onclick: reject }, ic("x"), "Reject", h("kbd", {}, "R")),
+          h("button", { class: "btn sm", onclick: correct }, ic("edit"), "Correct", h("kbd", {}, "C")),
+          dec ? h("button", { class: "btn sm ghost", onclick: () => act({ action: "clear", cid: r.cid }) }, ic("undo"), "Undo decision") : null),
+        form),
+      h("section", {}, h("h3", {}, "Requirement"), band(r, e),
+        h("dl", { class: "spec" },
+          h("div", {}, h("dt", {}, "Nominal"), h("dd", { class: "mono" }, fmt(r.nominal), " ", h("span", { class: "muted" }, r.unit || ""))),
+          h("div", {}, h("dt", {}, "Tolerance"), h("dd", { class: "mono" }, sym(r.tolerance_text))),
+          h("div", {}, h("dt", {}, "Lower limit"), h("dd", { class: "mono" }, fmt(r.minimum))),
+          h("div", {}, h("dt", {}, "Upper limit"), h("dd", { class: "mono" }, fmt(r.maximum))),
+          h("div", {}, h("dt", {}, "From geometry"), h("dd", { class: "mono" }, fmt(e.geometry_value))),
+          h("div", {}, h("dt", {}, "Provenance"), h("dd", {}, human(r.provenance))),
+          h("div", { class: "wide" }, h("dt", {}, "Method"), h("dd", {}, human(r.method), r.method_basis ? h("div", { class: "muted", style: "font-weight:400;font-size:12.5px" }, r.method_basis) : null)),
+          h("div", { class: "wide" }, h("dt", {}, "Source"), h("dd", { class: "mono", style: "font-weight:500" },
+            [src.entity_type || r.entity_type, src.entity_handle || r.entity_handle ? "handle " + (src.entity_handle || r.entity_handle) : null, src.layer || r.layer ? "layer " + (src.layer || r.layer) : null,
+             src.zone ? "zone " + src.zone : null, "page " + (src.page ?? r.page ?? 1)].filter(Boolean).join(" · "))))),
+      issues.length ? h("section", {}, h("h3", {}, `Findings (${issues.length})`), h("ul", { class: "list" }, issues.map(x => {
+        const [sev, ...rest] = String(x).split(":"); const tone = sev === "blocking" ? "bad" : sev === "warning" ? "warn" : "info";
+        return h("li", {}, h("span", { class: "c-" + tone }, ic(tone === "bad" ? "alert" : tone === "warn" ? "flag" : "info")), h("div", {}, h("b", {}, human(rest.join(":") || sev)), h("div", { class: "x" }, human(sev))));
+      }))) : null,
+      checks.length ? h("section", {}, h("h3", {}, `Checks (${checks.length})`), h("ul", { class: "list" }, checks.map(c => {
+        const [tone, icon] = OUT[c.outcome] || ["na", "info"];
+        return h("li", {}, h("span", { class: "c-" + tone }, ic(icon)), h("div", {}, h("b", {}, human(c.name)), h("div", { class: "x" }, `expected ${c.expected ?? "–"} · actual ${c.actual ?? "–"}`), c.why ? h("div", { class: "x" }, c.why) : null));
+      }))) : null,
+      hist.length ? h("section", {}, h("h3", {}, "History"), h("ol", { class: "tl" }, hist.map(x => h("li", { class: / by |reviewer|override/.test(x.actor || "") ? "hum" : "" },
+        h("div", {}, h("b", {}, human(x.action)), " · ", h("span", { class: "muted" }, x.actor)), x.detail ? h("div", {}, x.detail) : null, h("div", { class: "when" }, when(x.at)))))) : null);
+  }
+
+  function pick(cid, move = true) {
+    sel = cid;
+    if (String(cid).startsWith("esc:")) { setTab("esc"); viewer.selectEsc?.(cid.slice(4)); drawEsc(); escBox.querySelector(`[data-esc="${cid.slice(4)}"]`)?.scrollIntoView({ block: "nearest", behavior: reduced() ? "auto" : "smooth" }); return; }
+    setTab("chars");
+    viewer.select(cid, move);
+    clist.querySelectorAll(".citem").forEach(b => b.setAttribute("aria-selected", String(b.dataset.cid === cid)));
+    clist.querySelector(`[data-cid="${CSS.escape(cid)}"]`)?.scrollIntoView({ block: "nearest", behavior: reduced() ? "auto" : "smooth" });
+    drawInspector();
+  }
+
+  // right panel tabs
+  let tab = "chars";
+  const tabBtn = (k, label, n) => h("button", { role: "tab", "aria-selected": String(tab === k), "data-k": k, onclick: () => setTab(k) }, label, h("span", { class: "n" }, n));
+  const tabs = h("div", { class: "tabs", role: "tablist" }, tabBtn("chars", "Characteristics", rows.length), tabBtn("esc", "Escalated text", esc.length));
+  const charsPane = h("div", {}, h("div", { class: "filters" }, h("div", { class: "search" }, ic("search"), searchIn, h("kbd", {}, "/")), h("div", { class: "seg", role: "group", "aria-label": "Filter" }, segBtns)), clist);
+  const escPane = h("div", { hidden: true }, escBox);
+  function setTab(k) { tab = k; tabs.querySelectorAll("button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.k === k))); charsPane.hidden = k !== "chars"; escPane.hidden = k !== "esc"; }
+  const listCard = h("section", { class: "card" }, tabs, charsPane, escPane);
+
+  // evidence tabs (bottom)
+  const checks = p.checks || [], ver = prov.export_verification || [], log = (d.log || []).slice().reverse(), applied = (d.applied_log || []).slice().reverse();
+  const limits = prov.limitations || [], warns = p.warnings || [];
+  const logTable = list => dataTable([
+    { k: "at", label: "When (UTC)", render: e => h("span", { class: "mono nowrap" }, e.at) },
+    { k: "reviewer", label: "Reviewer", render: e => h("span", { class: "nowrap" }, ic("user"), " ", e.reviewer) },
+    { k: "action", label: "Action", render: e => human(e.action) },
+    { k: "target", label: "Target", render: e => h("span", { class: "mono" }, sym(e.target)) },
+    { k: "reason", label: "Reason", render: e => h("span", { class: "muted" }, e.reason || "") }], list);
+  const evTabs = [
+    ["checks", "Plan checks", checks.length, () => dataTable([
+      { k: "outcome", label: "Outcome", render: c => outcome(c.outcome) }, { k: "name", label: "Check", render: c => h("span", { class: "title" }, human(c.name)) },
+      { k: "expected", label: "Expected" }, { k: "actual", label: "Actual" }, { k: "why", label: "Why", render: c => h("span", { class: "muted" }, c.why || "") }], checks)],
+    ["exports", "Export read-back", ver.length, () => ver.length ? dataTable([
+      { k: "outcome", label: "Outcome", render: c => outcome(c.outcome) }, { k: "name", label: "Check", render: c => h("span", { class: "mono" }, c.name) }, { k: "actual", label: "Actual" }], ver) : empty("file", "No verification record")],
+    ["audit", "Audit trail", log.length, () => log.length ? logTable(log) : empty("user", "No decisions yet", "Approve, reject or correct a characteristic; each decision is signed and logged here.")],
+    ...(applied.length ? [["applied", "Applied in this run", applied.length, () => logTable(applied)]] : []),
+    ["limits", "Warnings & limitations", warns.length + limits.length, () => (warns.length + limits.length) ? h("div", { class: "body" }, h("ul", { class: "list" },
+      [...warns.map(w => h("li", {}, h("span", { class: "c-warn" }, ic("flag")), h("div", {}, w))), ...limits.map(w => h("li", {}, h("span", { class: "c-info" }, ic("info")), h("div", {}, w)))])) : empty("check", "None recorded")],
+    ["prov", "Provenance", null, () => h("div", { class: "body stack" }, h("dl", { class: "spec" },
+      h("div", { class: "wide" }, h("dt", {}, "Source document"), h("dd", { class: "mono" }, p.source_document)),
+      h("div", { class: "wide" }, h("dt", {}, "SHA-256"), h("dd", { class: "mono" }, p.source_sha256)),
+      h("div", {}, h("dt", {}, "Created (UTC)"), h("dd", {}, prov.created_utc || "–")),
+      h("div", {}, h("dt", {}, "Route"), h("dd", {}, ROUTE[prov.route] || prov.route || "–"))))],
+  ];
+  let evSel = evTabs[0][0];
+  const evBody = h("div");
+  const evBar = h("div", { class: "tabs", role: "tablist" });
+  const drawEv = () => { evBar.replaceChildren(...evTabs.map(([k, l, n]) => h("button", { role: "tab", "aria-selected": String(k === evSel), onclick: () => { evSel = k; drawEv(); } }, l, n != null ? h("span", { class: "n" }, n) : null)));
+    evBody.replaceChildren(evTabs.find(t => t[0] === evSel)[3]()); };
+  drawEv();
+
+  // review bar
+  const reissue = h("button", { class: "btn primary", disabled: !pending, onclick: async () => {
+      reissue.disabled = true; reissue.replaceChildren(h("span", { class: "spin" }), "Re-issuing…");
+      try { const r = await post("/api/reissue", { key }); toast("New run issued with the review applied"); location.hash = "#inspection=" + encodeURIComponent(r.key); }
+      catch (e) { toast("Not re-issued: " + e.message, "bad"); reissue.disabled = false; reissue.replaceChildren(ic("refresh"), `Re-issue with ${pending} decision(s)`); }
+    } }, ic("refresh"), `Re-issue with ${pending} decision(s)`);
+  const reviewbar = h("div", { class: "reviewbar" + (pending ? " live" : ""), role: "region", "aria-label": "Review" },
+    h("label", { class: "who" }, ic("user"), h("span", { class: "hide-sm", style: "font-size:13px;font-weight:600" }, "Reviewer"), reviewer),
+    h("div", { class: "pend" }, pending ? [h("b", {}, pending), " decision(s) recorded, not yet applied."] : "Decisions are signed and logged; this run is never edited. Re-issuing makes a new run from the unchanged drawing."),
+    h("div", { class: "go" }, reissue));
+
+  main.replaceChildren(head, gate, lineage || "",
+    h("div", { class: "ws" }, viewer.el, h("div", { class: "rp" }, listCard, insp)),
+    reviewbar,
+    h("div", { style: "margin-top:14px" }, h("section", { class: "card" }, evBar, evBody)));
+  drawList(); drawEsc();
+  if (!sel && rows.length) sel = (rows.find(r => r.blocking) || rows.find(r => r.status === "needs_review") || rows[0]).cid;
+  if (sel) pick(sel, !!keepSel); else drawInspector();
+
+  palExtra = [...rows.map(r => ({ label: `#${r.balloon_no} ${sym(r.callout)} · ${r.kind}`, group: "Balloon", icon: "crosshair", run: () => pick(r.cid) })),
+    ...esc.map(u => ({ label: sym(u.text), group: "Escalated", icon: "eye", run: () => pick("esc:" + u._i) }))];
+  const step = dlt => { const vis = visible(); if (!vis.length) return; const i = vis.findIndex(r => r.cid === sel); pick(vis[(i + dlt + vis.length) % vis.length].cid); };
+  viewKeys = e => {
+    const k = e.key;
+    if (k === "j" || k === "ArrowDown") { step(1); e.preventDefault(); }
+    else if (k === "k" || k === "ArrowUp") { step(-1); e.preventDefault(); }
+    else if (k === "/") { setTab("chars"); searchIn.focus(); e.preventDefault(); }
+    else if (k === "f") viewer.fit();
+    else if (k === "b") viewer.toggle?.();
+    else if (k === "+" || k === "=") viewer.zoomBy?.(1.4);
+    else if (k === "-") viewer.zoomBy?.(1 / 1.4);
+    else if (k === "a" && insp._approve) insp._approve();
+    else if (k === "r" && insp._reject) { insp._reject(); e.preventDefault(); }
+    else if (k === "c" && insp._correct) { insp._correct(); e.preventDefault(); }
+  };
 }
 
-async function viewTasks() {
-  const list = (await api("/api/tasks")).slice().reverse();   // newest first
-  const detail = h("div");
-  const rows = list.map(t => h("tr", { class: "click", onclick: async () => {
-      const d = await api("/api/tasks/" + encodeURIComponent(t.task_id));
-      detail.replaceChildren(panel(d.task_id + " — events",
-        table(["When", "Kind", "Payload"], (d.events || []).map(e => h("tr", {},
-          h("td", { class: "mono" }, e.at || e.created_utc || ""), h("td", {}, e.kind),
-          h("td", {}, h("pre", { class: "mono" }, JSON.stringify(e.payload ?? e, null, 1).slice(0, 4000))))))));
-      detail.scrollIntoView({ behavior: "smooth" });
-    } },
-    h("td", { class: "mono nowrap" }, t.task_id), h("td", {}, chip(t.state, stateCls(t.state))),
-    h("td", {}, t.request), h("td", { class: "muted" }, when(t.created_utc)), h("td", { class: "muted" }, t.outcome || "")));
-  main.replaceChildren(panel(`Tasks (${list.length})`, list.length ? table(["Task", "State", "Request", "Created", "Outcome"], rows) : empty("No tasks recorded in this database.")), detail);
-}
-
+// ---------- Revision changes ----------
 async function viewChanges() {
+  crumbs("Revision changes");
   const list = await api("/api/changes");
-  main.replaceChildren(panel(`Change sets (${list.length})`, list.length ? h("div", {}, list.map(c => h("div", { class: "panel" },
-    h("h2", {}, `${c.name}  `, c.needs_review ? chip("needs review", "warn") : chip("no review needed", "ok")),
-    h("div", { class: "muted mono" }, `${c.old_document} (rev ${c.old_revision}) → ${c.new_document} (rev ${c.new_revision})`),
-    h("p", {}, Object.entries(c.summary || {}).map(([k, v]) => chip(`${k}: ${v}`, "na")).flatMap(x => [x, " "])),
-    table(["Status", "Kind", "Old", "New", "Detail"], (c.changes || []).map(x => h("tr", {},
-      h("td", {}, chip(x.status, x.status === "UNCHANGED" ? "ok" : x.requires_review ? "warn" : "na")), h("td", {}, x.kind),
-      h("td", { class: "mono" }, sym(x.old?.callout)), h("td", { class: "mono" }, sym(x.new?.callout)),
-      h("td", { class: "muted" }, x.detail || ""))))))) : empty("No *.changes.json in the run folders. Create one with: py -m astracad_inspect compare OLD NEW --out DIR")));
+  const tone = x => x.status === "UNCHANGED" ? "ok" : x.status === "REMOVED" ? "bad" : x.requires_review ? "warn" : "na";
+  main.replaceChildren(h("div", { class: "ph" }, h("div", {}, h("h1", {}, "Revision changes"),
+    h("p", {}, "Characteristic-level comparison of two revisions of a drawing: what was added, removed, moved or retoleranced."))),
+    list.length ? h("div", { class: "stack" }, list.map(c => card(c.name, `${c.old_document} (rev ${c.old_revision}) → ${c.new_document} (rev ${c.new_revision})`,
+      [c.needs_review ? pill("warn", "flag", "Needs review") : pill("ok", "check", "No review needed")],
+      h("div", { class: "body", style: "display:flex;gap:6px;flex-wrap:wrap;padding-bottom:0" }, Object.entries(c.summary || {}).map(([k, v]) => h("span", { class: "tag" }, `${human(k)}: ${v}`))),
+      h("div", { class: "chg", style: "margin-top:12px" }, dataTable([
+        { k: "status", label: "Status", cls: "k", render: x => pill(tone(x), tone(x) === "ok" ? "check" : tone(x) === "bad" ? "x" : "flag", human(x.status.toLowerCase())) },
+        { k: "kind", label: "Kind" },
+        { k: "old", label: "Old", render: x => h("span", { class: "mono" }, sym(x.old?.callout)), sort: x => x.old?.callout },
+        { k: "new", label: "New", render: x => h("span", { class: "mono" }, sym(x.new?.callout)), sort: x => x.new?.callout },
+        { k: "detail", label: "Detail", render: x => h("span", { class: "muted" }, x.detail || "") }], c.changes || [], { rowClass: x => "s-" + tone(x) })))))
+      : card(null, null, null, empty("diff", "No revision comparisons yet", "Create one with:  py -m astracad_inspect compare OLD NEW --out DIR")));
 }
 
+// ---------- Tasks ----------
+async function viewTasks() {
+  crumbs("Tasks");
+  const list = (await api("/api/tasks")).slice().reverse();
+  const detail = h("div");
+  const open = async t => {
+    detail.replaceChildren(card(t.task_id, "loading…", null, h("div", { class: "body" }, h("div", { class: "skel", style: "height:80px" }))));
+    const d = await api("/api/tasks/" + encodeURIComponent(t.task_id));
+    detail.replaceChildren(card(t.task_id, human(String(t.state).toLowerCase()), [pill(STATE[t.state] || "na", STATE_I[STATE[t.state] || "na"], human(String(t.state).toLowerCase()))],
+      h("div", { class: "body" }, h("p", { style: "margin-top:0" }, t.request),
+        (d.events || []).length ? h("ol", { class: "tl" }, d.events.map(e => h("li", {}, h("div", {}, h("b", {}, human(e.kind))), h("div", { class: "when" }, e.at || e.created_utc || ""),
+          h("pre", { class: "code", style: "margin-top:6px" }, JSON.stringify(e.payload ?? e, null, 1).slice(0, 4000))))) : empty("clock", "No events"))));
+  };
+  main.replaceChildren(h("div", { class: "ph" }, h("div", {}, h("h1", {}, "Tasks"), h("p", {}, "CAD automation tasks from the persistent engine: state, retries, approvals and every event recorded."))),
+    list.length ? h("div", { class: "split" }, card("History", `${list.length}`, null, dataTable([
+      { k: "task_id", label: "Task", render: t => h("span", { class: "mono nowrap" }, t.task_id) },
+      { k: "state", label: "State", render: t => pill(STATE[t.state] || "na", STATE_I[STATE[t.state] || "na"], human(String(t.state).toLowerCase())) },
+      { k: "request", label: "Request", render: t => h("span", { class: "title" }, t.request) },
+      { k: "created_utc", label: "Created", render: t => h("span", { class: "muted nowrap", title: when(t.created_utc) }, ago(t.created_utc)) },
+      { k: "outcome", label: "Outcome", render: t => h("span", { class: "muted" }, t.outcome || "") }], list, { onRow: open })), detail)
+      : card(null, null, null, empty("tasks", "No tasks recorded", "Tasks appear here when CAD automation runs through the task engine.")));
+  if (list.length) open(list[0]);
+}
+
+// ---------- CAD ----------
 async function viewCad() {
-  main.replaceChildren(panel("CAD applications", empty("Probing…")));
-  const s = await cadChips(true);
-  const rows = (s?.applications || []).map(a => h("tr", {},
-    h("td", {}, a.application), h("td", {}, chip(a.state, a.state === "CONNECTED" ? "ok" : a.state === "NOT_INSTALLED" ? "na" : "warn")),
-    h("td", { class: "mono" }, a.version || "–"), h("td", { class: "muted" }, a.detail)));
-  main.replaceChildren(panel("CAD applications (checked " + when(s?.checked_utc) + ")",
-    rows.length ? table(["Application", "State", "Version", "Detail"], rows) : empty("CAD probing is off (--no-cad-status)."),
-    h("p", { class: "muted" }, "Creating or editing parts is not offered here. Use the CLI with an explicit --authorize: py -m astracad_cad build|spec|edit …")));
+  crumbs("CAD connections");
+  main.replaceChildren(h("div", { class: "ph" }, h("div", {}, h("h1", {}, "CAD connections"), h("p", {}, "Which CAD applications this machine can reach right now. Probed live; nothing is assumed."))),
+    h("div", { class: "grid2" }, [1, 2, 3].map(() => h("div", { class: "card appcard" }, h("div", { class: "skel", style: "height:36px;width:60%" }), h("div", { class: "skel", style: "height:14px" })))));
+  const st = await cadStatus(true);
+  const apps = st?.applications || [];
+  const tone = a => a.state === "CONNECTED" ? "ok" : a.state === "NOT_INSTALLED" ? "na" : "warn";
+  main.replaceChildren(h("div", { class: "ph" }, h("div", {}, h("h1", {}, "CAD connections"), h("p", {}, `Probed ${when(st?.checked_utc)}. Nothing is assumed: a state is what the probe saw.`)),
+    h("div", { class: "actions" }, h("button", { class: "btn", onclick: viewCad }, ic("refresh"), "Probe again"))),
+    apps.length ? h("div", { class: "grid2" }, apps.map(a => h("div", { class: "card appcard" },
+      h("div", { class: "nm" }, h("span", { class: "ic" }, ic("cube", "i lg")), h("div", {}, a.application, h("div", { class: "muted mono", style: "font-size:12px;font-weight:400" }, a.version || "version unknown")),
+        h("span", { style: "margin-left:auto" }, pill(tone(a), tone(a) === "ok" ? "check" : tone(a) === "na" ? "ban" : "alert", human(String(a.state).toLowerCase())))),
+      h("div", { class: "muted", style: "font-size:13px" }, a.detail)))) : card(null, null, null, empty("cube", "CAD probing is off", "Start the workspace without --no-cad-status to probe installed CAD.")),
+    h("p", { class: "muted", style: "margin-top:16px;font-size:13px" }, "Creating or editing parts is deliberately not offered here. It runs from the CLI with an explicit --authorize: py -m astracad_cad build | spec | edit …"));
 }
 
+// ---------- router ----------
 async function route() {
   const hash = location.hash.slice(1);
   const tab = hash.startsWith("inspection=") ? "inspections" : (hash || "inspections");
-  document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
+  document.querySelectorAll(".nav").forEach(b => { if (b.dataset.tab === tab) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+  viewKeys = null; palExtra = [];
   try {
     if (hash.startsWith("inspection=")) await viewInspection(decodeURIComponent(hash.slice(11)));
     else if (tab === "tasks") await viewTasks();
     else if (tab === "changes") await viewChanges();
     else if (tab === "cad") await viewCad();
     else await viewInspections();
-  } catch (e) { main.replaceChildren(panel("Error", h("p", {}, e.message))); }
+  } catch (e) { main.replaceChildren(card(null, null, null, empty("alert", "Could not load this page", e.message))); }
+  window.scrollTo(0, 0);
 }
-document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => location.hash = b.dataset.tab));
+document.querySelectorAll(".nav").forEach(b => b.addEventListener("click", () => location.hash = b.dataset.tab));
 window.addEventListener("hashchange", route);
 route();
-cadChips(false);
+cadStatus(false);
+api("/api/inspections").then(l => { runsCache = l; document.getElementById("n-insp").textContent = l.length || ""; }).catch(() => {});
 </script>
 </body>
 </html>

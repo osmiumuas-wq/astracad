@@ -590,14 +590,14 @@ def apply_overrides(bundle, path: str | Path) -> list[str]:
             c.review = ReviewStatus.REJECTED
             reason = entry.get("reason") or "no reason given"
             c.fail("rejected_by_reviewer", reason, "blocking")
-            c.record(actor, "rejected", reason)
+            c.record(who, "rejected", reason)
         elif entry.get("approve"):
             reviewer = entry.get("reviewer") or "<unnamed>"
             c.state = ProvenanceState.HUMAN_APPROVED
             c.review = ReviewStatus.APPROVED
             c.issues = [i for i in c.issues if i.severity != "blocking"]
             c.limits = resolve_limits(c.nominal, c.tolerance, c.unit)
-            c.record(actor, "approved",
+            c.record(who, "approved",
                      f"approved by {reviewer}; blocking findings marked accepted, not corrected")
         else:
             c.review = ReviewStatus.NEEDS_REVIEW

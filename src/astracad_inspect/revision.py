@@ -124,6 +124,20 @@ def _req(ch: dict) -> dict:
                          (ch.get("source") or {}).get("anchor_y")]}
 
 
+def _tol_text(r: dict) -> str:
+    """'±0.1 (99.9 to 100.1)' - the tolerance as a reader states it, with the limits it gives."""
+    t = r.get("tolerance") or {}
+    k = t.get("kind")
+    g = lambda v: f"{v:g}" if isinstance(v, (int, float)) else str(v)
+    text = {"none": "none stated", "symmetric": f"±{g(t.get('plus_minus'))}",
+            "deviations": f"+{g(t.get('upper'))}/{g(t.get('lower'))}",
+            "limit_pair": f"{g(t.get('maximum'))}/{g(t.get('minimum'))}",
+            "fit_class": "/".join(x for x in (t.get("hole"), t.get("shaft")) if x) or "fit class",
+            "general": f"±{g(t.get('plus_minus'))} general ({t.get('basis')})"}.get(k, k or "none stated")
+    lim = r.get("limits")
+    return f"{text} ({g(lim[0])} to {g(lim[1])})" if lim else f"{text} (no limits)"
+
+
 def _classify(o: dict, n: dict, pos_d: float) -> tuple[str, str]:
     ro, rn = _req(o), _req(n)
     diffs = []
@@ -131,8 +145,7 @@ def _classify(o: dict, n: dict, pos_d: float) -> tuple[str, str]:
         diffs.append(("CHANGED_NOMINAL", f"nominal {ro['nominal']} -> {rn['nominal']}"))
     if ro["tolerance"] != rn["tolerance"] or ro["limits"] != rn["limits"]:
         diffs.append(("CHANGED_TOLERANCE",
-                      f"tolerance {ro['tolerance']} (limits {ro['limits']}) -> "
-                      f"{rn['tolerance']} (limits {rn['limits']})"))
+                      f"tolerance {_tol_text(ro)} -> {_tol_text(rn)}"))
     if ro["count"] != rn["count"]:
         diffs.append(("CHANGED_COUNT", f"count {ro['count']} -> {rn['count']}"))
     if diffs:

@@ -237,3 +237,16 @@ covered by a check that now fails if it regresses.
 - ISO 2768-1 values are transcribed from widely reproduced tables, not read from a licensed copy of
   the standard; verify before acceptance use. Angular general tolerances are not applied (need the
   shorter leg length). ISO 2768-2 (geometrical, H/K/L) classes are recorded in the note but not applied.
+
+## F. Web workspace (2026-10-17 redesign)
+
+- The interactive sheet is **page 1 only**; balloons of later pages of a multi-page PDF/scan are
+  listed but not drawn on a sheet.
+- The DXF sheet is ezdxf's rendering: dimension text is drawn at its true (often small) size, so it
+  needs zooming to read. The callout itself is always shown in the list and inspector.
+- Runs made before the redesign have no `_sheet.png`; the viewer falls back to the static layout
+  image and says so. Re-running the drawing produces the interactive sheet.
+- The UI was checked in a Chromium-based pane at 1440×900, 1024×768 and 375×812 (touch emulation);
+  not checked in Firefox or Safari, and not with a screen reader.
+- The design method (UI UX Pro Max) has no manufacturing-inspection category; the nearest rows were
+  combined — see `docs/design-system/MASTER.md`.

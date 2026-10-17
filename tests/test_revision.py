@@ -85,3 +85,10 @@ def test_plan_from_disk_equals_plan_in_memory(tmp_path):
     mem = build_plan(read_dxf(dxf("plate_synthetic"), None, None)).to_dict()
     disk = json.loads(json.dumps(mem, default=str))
     assert set(compare_plans(disk, mem).summary()) == {"UNCHANGED"}
+
+
+def test_tolerance_change_is_described_in_words_not_a_data_dump(tmp_path):
+    cs = compare_drawings(dxf("plate_synthetic"), make_rev_b(tmp_path), old_revision="A", new_revision="B")
+    details = sorted(c.detail for c in cs.changes if c.status == "CHANGED_TOLERANCE")
+    assert details == ["tolerance none stated (no limits) -> ±0.2 (24.8 to 25.2)",
+                       "tolerance ±0.1 (99.9 to 100.1) -> ±0.05 (99.95 to 100.05)"]

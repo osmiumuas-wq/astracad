@@ -145,14 +145,28 @@ class Workspace:
         plan = self._read(plan_path)
         prov_path = plan_path.with_name(f"{stem}.provenance.json")
         files = {}
-        for label, suffix in (("layout", "_layout.png"), ("report", "_inspection_report.pdf"),
+        for label, suffix in (("layout", "_layout.png"), ("sheet", "_sheet.png"),
+                              ("report", "_inspection_report.pdf"),
                               ("workbook", "_inspection_table.xlsx")):
             p = plan_path.with_name(stem + suffix)
             if p.exists():
                 files[label] = self.key_for(p)
+        sheet_path = plan_path.with_name(f"{stem}.sheet.json")
+        sheet = self._read(sheet_path) if sheet_path.exists() else None
         return {"key": key, "name": stem, "plan": {k: plan.get(k) for k in (
                     "source_document", "source_sha256", "revision", "unit", "rows", "checks",
-                    "uninterpreted", "gate", "approvable", "warnings", "feature_support")},
+                    "uninterpreted", "gate", "approvable", "warnings", "feature_support",
+                    "layout", "title_block", "coverage", "open_gaps")},
+                "sheet": {k: sheet.get(k) for k in ("extents", "width_px", "height_px")}
+                if sheet else None,
+                # per-characteristic evidence for the detail panel: what was checked and who did what
+                "evidence": {c["cid"]: {
+                    "checks": c.get("checks") or [], "history": c.get("history") or [],
+                    "geometry_value": c.get("geometry_value"), "review": c.get("review"),
+                    "state": c.get("state"),
+                    "source": {k: (c.get("source") or {}).get(k) for k in (
+                        "anchor_x", "anchor_y", "zone", "entity_type", "entity_handle", "layer",
+                        "page")}} for c in plan.get("characteristics") or [] if c.get("cid")},
                 "provenance": self._read(prov_path) if prov_path.exists() else None,
                 "files": files}
 
@@ -345,7 +359,7 @@ def _correction(body: dict, need_kind: bool = False) -> dict:
 
 
 def make_handler(ws: Workspace):
-    page = PAGE.read_bytes()
+    # read per request: a local single-user page, and edits to it then need no restart
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "astracad-web"
@@ -386,7 +400,7 @@ def make_handler(ws: Workspace):
             q = parse_qs(u.query)
             try:
                 if u.path == "/":
-                    return self._send(200, page, "text/html; charset=utf-8")
+                    return self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
                 if u.path == "/api/status":
                     return self._json(ws.status(refresh="refresh" in q))
                 if u.path == "/api/tasks":

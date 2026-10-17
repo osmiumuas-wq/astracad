@@ -113,11 +113,25 @@ def inspect_drawing(drawing_path: str | Path, out_dir: str | Path, *,
 
     plan_json = _write_json(out / f"{stem}.plan.json", plan.to_dict())
 
+    # balloon-free sheet + its coordinate frame for the interactive viewer. Optional: the report
+    # does not depend on it, so a failure is recorded rather than costing the run.
+    from .export.render import render_sheet
+    sheet_png = out / f"{stem}_sheet.png"
+    try:
+        sheet = render_sheet(src, route, plan.layout, sheet_png)
+        _write_json(out / f"{stem}.sheet.json", {"image": sheet_png.name, **sheet})
+    except Exception as e:  # noqa: BLE001 - viewer image only; named in the record below
+        sheet = None
+        sheet_error = f"{type(e).__name__}: {e}"
+
     record = build_record(inputs, route=route, plan=plan)
     for what in render_info["entities_not_drawn"]:
         record.limitations.append(
             f"layout preview: {what} could not be decomposed by ezdxf and is absent from the image; "
             "the extraction and the measured extents cover the entities that could be read")
+    if sheet is None:
+        record.limitations.append(f"interactive sheet image not produced ({sheet_error}); "
+                                  "the layout PNG and report are unaffected")
     stamp(record, [png, plan_json])
     record.limitations.append(
         "the PDF and XLSX hashes are recorded in provenance.json; an artefact cannot carry its "

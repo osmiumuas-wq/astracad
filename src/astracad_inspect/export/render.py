@@ -235,3 +235,61 @@ def ink_fraction(png_path: str | Path) -> float:
     if a.size == 0:
         return 0.0
     return float((a < 250).mean())
+
+
+def render_sheet(src_path: str | Path, route: str, layout: Layout, out_path: str | Path,
+                 *, max_px: int = 2400) -> dict:
+    """The sheet alone - no balloons, no caption, no margin - for the interactive viewer.
+
+    The axes fill the whole image and its limits are exactly ``extents``, so a drawing coordinate
+    maps to a pixel by a plain linear scale. The viewer draws balloons, leaders and anchors itself
+    from ``plan.layout``: the same numbers the PNG/PDF overlays use, so the two cannot disagree."""
+    minx, maxx, miny, maxy = _ax_limits(layout.page, layout.slot_pitch / 2)
+    w, h = maxx - minx, maxy - miny
+    if w <= 0 or h <= 0:
+        raise ValueError("degenerate sheet extents")
+    dpi = 100
+    scale = max_px / max(w, h)
+    fig = plt.figure(figsize=(w * scale / dpi, h * scale / dpi), dpi=dpi)
+    fig.patch.set_facecolor("white")
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_facecolor("white")
+    not_drawn: list[str] = []
+    src = Path(src_path)
+    if route == "pdf-vector":
+        import pypdfium2 as pdfium
+        page = pdfium.PdfDocument(str(src))[0]
+        w_pt, h_pt = page.get_size()
+        img = page.render(scale=min(6.0, max(1.0, scale * 25.4 / 72.0))).to_pil().convert("RGB")
+        ax.imshow(img, extent=(0, w_pt * 25.4 / 72, 0, h_pt * 25.4 / 72), origin="upper",
+                  interpolation="antialiased")
+    elif route == "raster-ocr":
+        from ..ingest.raster import load_pages
+        img, sdpi, _ = load_pages(src)[0]
+        ax.imshow(img, extent=(0, img.width * 25.4 / sdpi, 0, img.height * 25.4 / sdpi),
+                  origin="upper", interpolation="antialiased")
+    else:
+        import ezdxf
+        from ezdxf.addons.drawing import RenderContext
+        doc = ezdxf.readfile(str(src))
+        msp = doc.modelspace()
+        backend, not_drawn = _draw_modelspace(msp, ax, RenderContext(doc))
+        _draw_frames(msp, ax)
+        backend.finalize()
+        # ezdxf's finalize resizes the figure to the data's aspect; the viewer needs the sheet's
+        fig.set_size_inches(w * scale / dpi, h * scale / dpi, forward=True)
+    ax.set_xlim(minx, maxx)
+    ax.set_ylim(miny, maxy)
+    ax.set_aspect("auto")
+    ax.set_axis_off()
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(str(out), dpi=dpi, facecolor="white")
+    plt.close(fig)
+    from PIL import Image
+    with Image.open(out) as im:
+        px = im.size
+    record = file_record(out)
+    record.update({"extents": [minx, miny, maxx, maxy], "width_px": px[0], "height_px": px[1],
+                   "entities_not_drawn": not_drawn, "ink_fraction": ink_fraction(out)})
+    return record
