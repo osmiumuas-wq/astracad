@@ -416,6 +416,39 @@ class Workspace:
         entry = record(plan_path, plan, body, register=load(self.instruments_path))
         return {"entry": entry, "measurements": evaluate(plan, read_log(plan_path))}
 
+    # ---- quality dossier ---------------------------------------------------------------------------
+    def dossier(self, key: str, sample: str | None) -> dict:
+        from astracad_inspect.checklists import TEMPLATES, log_path
+        from astracad_inspect.dossier import build, verify
+        from astracad_inspect.measure import evaluate, read_log
+        plan_path = self._plan_path(key)
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        stem = plan_path.name[:-len(".plan.json")]
+        sample = (sample or "").strip() or None
+        log = read_log(plan_path)
+        meas = evaluate(plan, log)
+        if sample and sample not in meas["samples"]:
+            raise ValueError(f"no measurements recorded for serial {sample!r}")
+        if log:
+            self.export_results(key, sample)                 # fresh results + FAI workbooks into the run
+        states = []
+        for t in self.checklist_templates():
+            per = t["per_sample"]
+            if per and not sample:
+                continue
+            if log_path(plan_path, t["id"], sample if per else None).exists():
+                states.append(self.checklist(key, t["id"], sample))
+                self.export_checklist(key, t["id"], sample)
+        ncrs = [n for n in self.ncr.for_run(key)
+                if not sample or (n.get("link") or {}).get("sample") in (sample, None)]
+        tail = f"_{re.sub(r'[^\w.-]', '_', sample)[:40]}" if sample else ""
+        out = plan_path.with_name(f"{stem}_dossier{tail}.zip")
+        res = build(plan_path, out, sample=sample, meas=meas, ncrs=ncrs, checklists=states, extra=[], instruments=[])
+        checks = verify(out)
+        return {"file": self.key_for(out), "status": res["status"], "files": len(res["manifest"]["files"]),
+                "drawing": res["manifest"]["drawing"],
+                "checks": [{"name": n, "ok": ok, "detail": d} for n, ok, d in checks]}
+
     # ---- nonconformance reports --------------------------------------------------------------------
     @property
     def ncr(self):
@@ -481,7 +514,7 @@ class Workspace:
         ts = [_builtin(k) for k in TEMPLATES] + self.cl_store.list()
         return [{"id": t["id"], "title": t["title"], "purpose": t.get("purpose", ""), "per_sample": t["per_sample"],
                  "items": len(t["items"]), "auto": sum(1 for i in t["items"] if i["type"] == "auto"),
-                 "builtin": t.get("builtin", False), "version": t.get("version", 0),
+                 "builtin": t.get("builtin", False), "version": t.get("version", 0), "retired": t.get("retired"),
                  "by": t.get("by"), "at": t.get("at")} for t in ts]
 
     def checklist_template(self, tid: str, version: str | None = None) -> dict:
@@ -490,6 +523,9 @@ class Workspace:
         return {**t, "auto_checks": {k: v[1] for k, v in AUTO_CHECKS.items()}}
 
     def save_checklist_template(self, body: dict) -> dict:
+        if body.get("action") in ("retire", "restore"):
+            return self.cl_store.set_retired(str(body.get("id", "")), str(body.get("by", "")),
+                                             str(body.get("reason") or ""), body["action"] == "retire")
         return self.cl_store.save(body)
 
     def checklist(self, key: str, template: str, sample: str | None) -> dict:
@@ -859,6 +895,8 @@ def make_handler(ws: Workspace):
                     return self._json(ws.ncr_action(body))
                 if u.path == "/api/checklist_template":
                     return self._json(ws.save_checklist_template(body))
+                if u.path == "/api/dossier":
+                    return self._json(ws.dossier(str(body.get("key", "")), body.get("sample")))
                 if u.path == "/api/export_checklist":
                     return self._json(ws.export_checklist(str(body.get("key", "")), str(body.get("template", "")),
                                                           body.get("sample")))

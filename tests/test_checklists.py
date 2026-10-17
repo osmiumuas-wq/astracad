@@ -143,3 +143,20 @@ def test_template_validation(ws_run, bad, why):
     w, key = ws_run
     with pytest.raises(ValueError, match=why):
         w.save_checklist_template({**CUSTOM, **bad})
+
+
+def test_retired_template_starts_no_new_checklist_but_running_ones_finish(ws_run):
+    w, key = ws_run
+    w.save_checklist_template(CUSTOM)
+    base = {"key": key, "template": "deburr-check", "by": "K M"}
+    w.checklist_decide({**base, "sample": "SN-5", "item": "flatness", "value": "0.01"})
+    with pytest.raises(ValueError, match="reason"):
+        w.save_checklist_template({"action": "retire", "id": "deburr-check", "by": "Q Lead"})
+    t = w.save_checklist_template({"action": "retire", "id": "deburr-check", "by": "Q Lead", "reason": "replaced by deburr-v2"})
+    assert t["retired"]["by"] == "Q Lead"
+    w.checklist_decide({**base, "sample": "SN-5", "item": "operator", "text": "stamp 4"})    # running one finishes
+    with pytest.raises(ValueError, match="retired"):
+        w.checklist_decide({**base, "sample": "SN-6", "item": "flatness", "value": "0.01"})
+    assert next(x for x in w.checklist_templates() if x["id"] == "deburr-check")["retired"]
+    w.save_checklist_template({"action": "restore", "id": "deburr-check", "by": "Q Lead"})
+    w.checklist_decide({**base, "sample": "SN-6", "item": "flatness", "value": "0.01"})

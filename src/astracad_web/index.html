@@ -971,7 +971,20 @@ async function viewInspection(key, keepSel, focusId) {
   const head = h("div", { class: "ihead" },
     h("div", {}, h("h1", {}, d.name), h("div", { class: "meta" }, routeTag(prov.route), h("span", { class: "tag" }, "rev " + (p.revision ?? "–")), h("span", { class: "tag" }, p.unit || "?"),
       tb.part_name ? h("span", { class: "muted", style: "font-size:13px" }, tb.part_name) : null, tb.material ? h("span", { class: "muted", style: "font-size:13px" }, "· " + tb.material) : null)),
-    h("div", { class: "actions" }, fileBtn("report", "file", "Report PDF"), fileBtn("workbook", "sheet", "Workbook XLSX"), fileBtn("layout", "image", "Layout PNG")));
+    h("div", { class: "actions" }, fileBtn("report", "file", "Report PDF"), fileBtn("workbook", "sheet", "Workbook XLSX"), fileBtn("layout", "image", "Layout PNG"),
+      h("button", { class: "btn sm primary", title: "everything recorded for this run (and the serial in the review bar), with verified hashes", onclick: async ev => {
+          const b = ev.currentTarget; const s = (document.getElementById("sample")?.value || "").trim();
+          const serial = s && (d.measurements?.samples || []).includes(s) ? s : null;
+          b.disabled = true; b.replaceChildren(h("span", { class: "spin" }), " Building…");
+          try {
+            const r = await post("/api/dossier", { key, sample: serial });
+            const okv = r.checks.every(c => c.ok);
+            toast(`${okv ? "Dossier built and re-verified" : "Dossier built, verification FAILED"}: ${r.files} files${serial ? " for " + serial : ""}`, okv ? "ok" : "bad");
+            toast(r.status.conforming ? "Records show conformance (no open items)" : `${r.status.open_items.length} open item(s): ${r.status.open_items[0]}`, r.status.conforming ? "ok" : "warn");
+            window.open("/file?key=" + encodeURIComponent(r.file), "_blank", "noopener");
+          } catch (e) { toast("Dossier not built: " + e.message.replace(/^\w+Error: /, ""), "bad"); }
+          finally { b.disabled = false; b.replaceChildren(ic("shield"), "Quality dossier"); }
+        } }, ic("shield"), "Quality dossier")));
   const ok = !!p.approvable;
   const gate = h("div", { class: "gate " + (ok ? "t-ok" : "t-warn"), role: "status" },
     h("div", { class: "gi" }, ic(ok ? "shield" : "alert", "i lg")),
@@ -1675,7 +1688,7 @@ function checklistPane(key, sampleOf, templates) {
   async function draw() {
     const sample = sampleOf();
     const sel = h("select", { class: "input sm", style: "width:auto", "aria-label": "Checklist", onchange: () => { tpl = sel.value; store.set("astracad.checklist", tpl); draw(); } },
-      templates.map(t => h("option", { value: t.id, selected: t.id === tpl }, `${t.title} (${t.auto} automatic / ${t.items})`)));
+      templates.filter(t => !t.retired || t.id === tpl).map(t => h("option", { value: t.id, selected: t.id === tpl }, `${t.title}${t.retired ? " (retired)" : ""} (${t.auto} automatic / ${t.items})`)));
     let st;
     try { st = await api(`/api/checklist?key=${encodeURIComponent(key)}&template=${encodeURIComponent(tpl)}&sample=${encodeURIComponent(sample || "")}`); }
     catch (e) { box.replaceChildren(empty("alert", "Could not load the checklist", e.message)); return; }
@@ -1823,13 +1836,20 @@ async function viewTemplates(arg) {
       h("div", { class: "actions" }, h("a", { class: "btn primary", href: "#templates=new" }, ic("plus"), "New template"))),
     card("Templates", `${list.length}`, null, dataTable([
       { k: "title", label: "Template", render: t => h("div", {}, h("div", { class: "title" }, t.title), h("div", { class: "subline mono" }, t.id)) },
-      { k: "builtin", label: "Kind", render: t => t.builtin ? h("span", { class: "tag" }, "built-in") : h("span", { class: "tag" }, `custom v${t.version}`) },
+      { k: "builtin", label: "Kind", render: t => t.builtin ? h("span", { class: "tag" }, "built-in") : h("span", {}, h("span", { class: "tag" }, `custom v${t.version}`), t.retired ? [" ", h("span", { title: `${t.retired.by}: ${t.retired.reason}` }, pill("na", "ban", "Retired"))] : null) },
       { k: "items", label: "Items", num: true },
       { k: "auto", label: "Automatic", num: true },
       { k: "per_sample", label: "Scope", render: t => t.per_sample ? "per serial" : "per run" },
       { k: "at", label: "Last saved", render: t => t.builtin ? h("span", { class: "muted" }, "–") : h("span", { class: "muted nowrap" }, `${t.by} · ${ago(t.at)}`) },
       { k: "act", label: "", nosort: true, render: t => h("div", { style: "display:flex;gap:6px" },
         t.builtin ? null : h("a", { class: "btn sm", href: "#templates=edit:" + encodeURIComponent(t.id) }, ic("edit"), "Edit"),
+        t.builtin ? null : h("button", { class: "btn sm ghost", onclick: async () => {
+          const by = store.get("astracad.reviewer");
+          if (!by) { toast("Set your name first (Reviewer bar on any inspection, or the builder).", "warn"); return; }
+          const reason = t.retired ? "" : prompt(`Why retire ${t.title}?`);
+          if (!t.retired && !reason) return;
+          try { await post("/api/checklist_template", { action: t.retired ? "restore" : "retire", id: t.id, by, reason }); toast(t.retired ? "Restored" : "Retired"); viewTemplates(null); }
+          catch (e) { toast(e.message.replace(/^\w+Error: /, ""), "bad"); } } }, t.retired ? "Restore" : "Retire"),
         h("a", { class: "btn sm ghost", href: "#templates=copy:" + encodeURIComponent(t.id) }, "Duplicate")) },
     ], list, { initial: { k: "builtin", dir: 1 } })));
 }

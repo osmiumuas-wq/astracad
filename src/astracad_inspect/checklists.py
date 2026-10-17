@@ -300,6 +300,29 @@ class TemplateStore:
             tmp.replace(p)
         return self.get(t["id"])
 
+    def set_retired(self, tid: str, by: str, reason: str, retired: bool = True) -> dict:
+        """Retire a template (no new checklists start from it) or restore it. Versions and every
+        checklist already started on it are untouched; the change is recorded."""
+        if not _NAME.fullmatch(str(by or "").strip()):
+            raise ValueError("your name is required")
+        reason = str(reason or "").strip()[:300]
+        if retired and not reason:
+            raise ValueError("retiring a template needs a reason")
+        with _lock:
+            p = self._p(tid)
+            if not p.exists():
+                raise FileNotFoundError(f"no checklist template {tid!r}")
+            doc = json.loads(p.read_text(encoding="utf-8"))
+            doc["retired"] = ({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "by": by.strip(), "reason": reason}
+                              if retired else None)
+            doc.setdefault("status_history", []).append({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                                         "by": by.strip(), "action": "retired" if retired else "restored",
+                                                         "reason": reason})
+            tmp = p.with_suffix(".tmp")
+            tmp.write_text(json.dumps(doc, indent=1, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(p)
+        return self.get(tid)
+
     def get(self, tid: str, version: int | None = None) -> dict:
         p = self._p(tid)
         if not p.exists():
@@ -309,7 +332,8 @@ class TemplateStore:
         v = vs[-1] if version is None else next((x for x in vs if x["version"] == int(version)), None)
         if v is None:
             raise FileNotFoundError(f"{tid} has no version {version}")
-        return {"id": tid, "builtin": False, "versions": [{"version": x["version"], "at": x["at"], "by": x["by"]} for x in vs], **v}
+        return {"id": tid, "builtin": False, "retired": doc.get("retired"),
+                "versions": [{"version": x["version"], "at": x["at"], "by": x["by"]} for x in vs], **v}
 
     def list(self) -> list[dict]:
         out = []
@@ -405,6 +429,9 @@ def decide(plan_path: Path, template: str, ctx: dict, body: dict, store: Templat
         raise ValueError("your name is required (letters, digits, space . ' - ; up to 64)")
     p = log_path(plan_path, template, sample if head["per_sample"] else None)
     decisions = _read(p)
+    if head.get("retired") and not decisions:
+        raise ValueError(f"{template} is retired ({head['retired']['reason']}): start new checklists from another "
+                         "template; checklists already started on it can be finished")
     t = _pinned(template, store, decisions)
     item = str(body.get("item", ""))
     note = str(body.get("note") or "").strip()[:500]
