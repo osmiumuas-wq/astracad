@@ -1,5 +1,25 @@
 # NEXT ACTION
 
+## Done 2026-10-18: Title block and general tolerance note in `mac drawing` (C-19)
+
+**What was changed:**
+- `mecagent-alternative/src/Mac/DrawingCommand.cs`: Added `FormatTitleBlock` and `FormatGeneralToleranceNote` helpers. Added CLI flags `--title`, `--drawing-number`, `--revision`, `--material`, `--tolerance`, and `--date`. When creating a drawing in SolidWorks: populates document Custom Properties (`Title`, `Description`, `Drawing Number`, `Number`, `Revision`, `Material`, `Date`, `Units`, `General Tolerance`); inserts title block notes at sheet bottom-right (`TITLE`, `DRAWING NUMBER`, `REVISION`, `MATERIAL`, `UNITS`, `DATE`); inserts general tolerance notes at sheet bottom-left (`GENERAL TOLERANCES PER <TOLERANCE>`); records `title_block` dictionary and `general_tolerance` in `drawing.json` report.
+- `mecagent-alternative/src/Mac/Program.cs`: Updated `mac drawing` command documentation in `--help`. Added selftest checks for `FormatTitleBlock` and `FormatGeneralToleranceNote`, expanding selftest baseline from 40/40 to **42/42**.
+- `astracad/src/astracad_cad/adapters/solidworks.py`: Updated `_op_create_drawing` to forward title block and tolerance options (`--title`, `--drawing-number`, `--revision`, `--material`, `--tolerance`) in CLI arguments to `mac drawing`. Updated `drawing_dxf_checks` to accept optional `expected_title` and `expected_tolerance` and independently verify that exported DXF drawings contain the expected title block attributes and general tolerance notes.
+- `astracad/tests/test_cad_drawing.py`: Added `test_drawing_flags_forwarded_to_mac` testing CLI option forwarding; added `test_drawing_dxf_checks_verifies_title_block_and_general_tolerance` testing independent DXF verification of title block attributes and general tolerance notes including failure detection on mismatches.
+- Documentation: Updated `CURRENT_STATE.md` (42/42 selftest, 533 passed Python tests), and `docs/competitive/parity-matrix.md` (row C-19: automated title block and ISO 2768 general tolerance note).
+
+**What was verified and how:**
+- Mac .NET build: `dotnet build -c Release` in `mecagent-alternative/src/Mac` succeeded with 0 warnings, 0 errors.
+- Mac selftest: `bin\Release\net10.0-windows\mac.exe selftest` passed completely: **42/42 passed** (0 failed).
+- Targeted Python test suite: `py -m pytest -q tests/test_cad_drawing.py` passed: **10 passed** in 1.42s.
+- CAD test suite: `py -m pytest -q tests/test_cad_contract.py tests/test_cad_spec.py tests/test_cad_drawing.py` passed: **44 passed** in 1.98s.
+- Full Python test suite: `py -m pytest -q` passed completely: **533 passed**, 0 failed (203.18s).
+- Line endings verified with Python byte checks: 100% compliant across all modified files in both repositories.
+
+**What could not be verified:**
+- Live CAD run against a running GUI SOLIDWORKS session with active documents: `mac docs` reports `no live CAD session` (SOLIDWORKS was not active during this run). Full end-to-end integration was verified via `mac selftest` (42/42), CLI probe mock execution, and DXF inspection engine round-trips.
+
 ## Done 2026-10-18: DXF zone references (C-26)
 
 **What was changed:**

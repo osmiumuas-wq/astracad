@@ -108,3 +108,55 @@ def test_a_hung_cad_run_becomes_a_failed_result_not_an_exception(part, tmp_path)
                         Authorization("KM", frozenset({Op.CREATE_DRAWING}), (str(out),)))
     assert res.status is OpStatus.FAILED and "did not complete" in res.message
     assert o.store.get(tid).state.value == "FAILED"
+
+
+def test_drawing_flags_forwarded_to_mac(part, tmp_path):
+    a = adapter()
+    params = {
+        "part_path": str(part), "name": "bracket", "out_dir": str(tmp_path / "o"),
+        "title": "Custom Bracket", "drawing_number": "DWG-101", "revision": "B",
+        "material": "Steel", "tolerance": "ISO 2768-c",
+    }
+    r = a.execute(Op.CREATE_DRAWING, params)
+    assert r.status is OpStatus.SUCCEEDED
+    call = next(c for c in a.probe.calls if c[1] == "drawing")
+    assert "--title" in call and call[call.index("--title") + 1] == "Custom Bracket"
+    assert "--drawing-number" in call and call[call.index("--drawing-number") + 1] == "DWG-101"
+    assert "--revision" in call and call[call.index("--revision") + 1] == "B"
+    assert "--material" in call and call[call.index("--material") + 1] == "Steel"
+    assert "--tolerance" in call and call[call.index("--tolerance") + 1] == "ISO 2768-c"
+
+
+def test_drawing_dxf_checks_verifies_title_block_and_general_tolerance(tmp_path):
+    import ezdxf
+    doc = ezdxf.new("R2010")
+    doc.header["$INSUNITS"] = 4
+    msp = doc.modelspace()
+    msp.add_lwpolyline([(0, 0), (100, 0), (100, 50), (0, 50), (0, 0)])
+    msp.add_linear_dim(base=(50, 60), p1=(0, 0), p2=(100, 0), text="100").render()
+    msp.add_text("TITLE: Widget")
+    msp.add_text("DRAWING NUMBER: DWG-42")
+    msp.add_text("REVISION: B")
+    msp.add_text("MATERIAL: Aluminum")
+    msp.add_text("NOTES: GENERAL TOLERANCES PER ISO 2768-m")
+    dxf = tmp_path / "test.dxf"
+    doc.saveas(dxf)
+
+    checks = {c.name: (c.outcome, c.actual) for c in drawing_dxf_checks(
+        dxf, [{"name": "D1@Sketch1", "mm": 100.0}],
+        expected_title={"drawing_number": "DWG-42", "revision": "B", "material": "Aluminum"},
+        expected_tolerance="ISO 2768-m")}
+
+    assert checks["inspect:title_block:drawing_number"][0] == "passed"
+    assert checks["inspect:title_block:revision"][0] == "passed"
+    assert checks["inspect:title_block:material"][0] == "passed"
+    assert checks["inspect:general_tolerance"][0] == "passed"
+
+    # Mismatch is caught
+    bad = {c.name: c.outcome for c in drawing_dxf_checks(
+        dxf, [{"name": "D1@Sketch1", "mm": 100.0}],
+        expected_title={"drawing_number": "WRONG-NO", "revision": "Z"},
+        expected_tolerance="ISO 2768-c")}
+    assert bad["inspect:title_block:drawing_number"] == "failed"
+    assert bad["inspect:title_block:revision"] == "failed"
+    assert bad["inspect:general_tolerance"] == "failed"

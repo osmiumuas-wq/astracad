@@ -83,7 +83,9 @@ def _dim_key(full: str) -> str:
     return "@".join(parts[:2]) if len(parts) >= 2 else full
 
 
-def drawing_dxf_checks(dxf: Path, model_dims: list[dict]) -> list[Check]:
+def drawing_dxf_checks(dxf: Path, model_dims: list[dict],
+                       expected_title: dict | None = None,
+                       expected_tolerance: str | None = None) -> list[Check]:
     """Independent check of a CAD-generated drawing, by the inspection engine rather than the CAD
     application: every dimension's printed value must agree with its drawn geometry, and the
     printed values must match the model's dimensions one to one (nothing missing, nothing extra)."""
@@ -112,6 +114,21 @@ def drawing_dxf_checks(dxf: Path, model_dims: list[dict]) -> list[Check]:
     out.append(Check("inspect:no_extra_dimensions", "passed" if not remaining else "failed",
                      "every printed dimension is a model dimension",
                      ", ".join(r.callout for r in remaining) or "none extra"))
+    if expected_title:
+        for key in ("drawing_number", "part_name", "revision", "material"):
+            if key in expected_title:
+                expected_val = str(expected_title[key])
+                actual_val = str(bundle.title_block.get(key) or "")
+                out.append(Check(f"inspect:title_block:{key}",
+                                 "passed" if actual_val.lower() == expected_val.lower() else "failed",
+                                 expected_val, actual_val or "<absent>"))
+    if expected_tolerance:
+        from astracad_inspect.general_tol import detect
+        gtol = detect(bundle.notes)
+        found = bool(gtol.iso_class and gtol.iso_class in expected_tolerance.lower())
+        out.append(Check("inspect:general_tolerance",
+                         "passed" if found else "failed",
+                         expected_tolerance, gtol.evidence or "<absent>"))
     return out
 
 
@@ -355,6 +372,9 @@ class SolidWorksAdapter(Adapter):
         out_dir.mkdir(parents=True, exist_ok=True)
         argv = self.mac_command() + ["drawing", str(part), "--out", str(out_dir), "--name", name,
                                      "--angle", angle, "--export", "dxf,pdf"]
+        for opt in ("title", "drawing_number", "revision", "material", "tolerance"):
+            if opt in params and params[opt]:
+                argv += [f"--{opt.replace('_', '-')}", str(params[opt])]
         try:
             cp = self.probe.run(argv, timeout=self.timeout_s)
         except Exception as ex:
@@ -378,7 +398,9 @@ class SolidWorksAdapter(Adapter):
                                 "passed" if row.get("ok") else "failed", f"{row['model_mm']} mm",
                                 f"{row.get('drawing_mm')} mm on {row.get('on_drawing')} view(s)"))
         dxf = out_dir / f"{name}.dxf"
-        checks += drawing_dxf_checks(dxf, report.get("model_dimensions") or [])
+        checks += drawing_dxf_checks(dxf, report.get("model_dimensions") or [],
+                                    expected_title=report.get("title_block"),
+                                    expected_tolerance=report.get("general_tolerance"))
         artifacts = [{"path": str(p), "bytes": p.stat().st_size, "sha256": _sha256(p)}
                      for p in (out_dir / f"{name}.SLDDRW", dxf, out_dir / f"{name}.pdf")
                      if p.exists()]
