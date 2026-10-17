@@ -437,6 +437,14 @@ def make_handler(ws: Workspace):
             except ValueError:
                 n = 0
             if n > (1 << 16):
+                # discard (bounded) what the client is sending, then refuse: replying mid-upload
+                # made Windows abort the connection before the 413 could be read
+                left = n if n <= (8 << 20) else 0
+                while left > 0:
+                    chunk = self.rfile.read(min(left, 1 << 16))
+                    if not chunk:
+                        break
+                    left -= len(chunk)
                 self.close_connection = True
                 return self._error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "request body too large")
             raw = self.rfile.read(n) if n > 0 else b""
