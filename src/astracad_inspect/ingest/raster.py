@@ -296,6 +296,75 @@ def regions_for(img, win: WindowsOcr, rapid: RapidOcrEngine, angles=(0, -90), ge
     return regions
 
 
+# ---- deskew -----------------------------------------------------------------------------------
+def estimate_skew(img) -> float | None:
+    """Page rotation in degrees (PIL convention: positive = content turned counter-clockwise),
+    from long straight lines near horizontal/vertical, length-weighted median. None if too few."""
+    import cv2
+    import numpy as np
+    g = np.asarray(img.convert("L"))
+    small = 1600 / max(g.shape)                        # speed: estimate on a reduced copy
+    if small < 1:
+        g = cv2.resize(g, (int(g.shape[1] * small), int(g.shape[0] * small)), interpolation=cv2.INTER_AREA)
+    edges = cv2.Canny(cv2.GaussianBlur(g, (3, 3), 0), 50, 150)
+    lines = cv2.HoughLinesP(edges, 1, np.pi / 1800, threshold=80,
+                            minLineLength=int(0.08 * min(g.shape)), maxLineGap=4)
+    if lines is None:
+        return None
+    ang, w = [], []
+    for x1, y1, x2, y2 in np.asarray(lines).reshape(-1, 4):      # OpenCV 4 (N,1,4) or 5 (N,4)
+        a = np.degrees(np.arctan2(y2 - y1, x2 - x1))
+        a = (a + 45) % 90 - 45                         # fold verticals onto horizontals
+        if abs(a) <= 5:
+            ang.append(a)
+            w.append(np.hypot(x2 - x1, y2 - y1))
+    if len(ang) < 5:
+        return None
+    order = np.argsort(ang)
+    a, w = np.asarray(ang)[order], np.asarray(w)[order]
+    return float(a[np.searchsorted(np.cumsum(w), w.sum() / 2)])
+
+
+def deskew(img):
+    """Rotate the page upright when it is measurably skewed; returns (img, correction in degrees).
+
+    estimate_skew measures line angles in image coordinates (y down): content turned by +r (PIL,
+    counter-clockwise) shows lines at -r, and rotate(-r) undoes it - so the correction IS the
+    measured angle (verified on pages degraded by known angles). A second pass on the corrected
+    page refines the first (measured first-pass bias ~0.1 deg)."""
+    from PIL import Image
+
+    def turn(angle):
+        return img.rotate(angle, resample=Image.BICUBIC, expand=False, fillcolor=(255, 255, 255))
+    a1 = estimate_skew(img)
+    if a1 is None or abs(a1) < 0.05:
+        return img, 0.0
+    corr = _refine_by_profile(img, a1)
+    return turn(corr), corr
+
+
+def _refine_by_profile(img, coarse: float, span: float = 0.4, step: float = 0.02) -> float:
+    """Pick the rotation near `coarse` whose row and column ink profiles are sharpest: straight
+    rules line up with pixel rows/columns only when the page is truly upright. Hough endpoints
+    alone left ~0.1 deg (measured); this resolves to the step size."""
+    import cv2
+    import numpy as np
+    g = np.asarray(img.convert("L"))
+    k = 2000 / max(g.shape)
+    if k < 1:
+        g = cv2.resize(g, (int(g.shape[1] * k), int(g.shape[0] * k)), interpolation=cv2.INTER_AREA)
+    ink = (255 - g).astype(np.float32)
+    h, w = ink.shape
+    best, best_score = coarse, -1.0
+    for a in np.arange(coarse - span, coarse + span + 1e-9, step):
+        m = cv2.getRotationMatrix2D((w / 2, h / 2), a, 1.0)       # same convention as PIL rotate
+        r = cv2.warpAffine(ink, m, (w, h), flags=cv2.INTER_LINEAR, borderValue=0)
+        score = float(np.var(r.sum(axis=1)) + np.var(r.sum(axis=0)))
+        if score > best_score:
+            best, best_score = float(a), score
+    return best
+
+
 # ---- sheet geometry from pixels -------------------------------------------------------------
 REREAD_BUDGET = 40          # per page: a cluttered sheet took 572 s without a cap (measured)
 
@@ -446,6 +515,7 @@ def read_raster(path: str | Path, declared_unit: str | None = None,
     characteristics, uninterpreted, notes = [], [], []
     from collections import Counter
     skipped: Counter = Counter()
+    zone_labels: list = []
     n_regions = n_agreed = n_disagree = n_single = 0
     page_w = page_h = 0.0
     for pno, (img, dpi, stated) in enumerate(pages, start=1):
@@ -455,6 +525,10 @@ def read_raster(path: str | Path, declared_unit: str | None = None,
         mm = 25.4 / dpi
         if pno == 1:
             page_w, page_h = img.width * mm, img.height * mm
+        img, skew = deskew(img)
+        if skew:
+            warnings.append(f"page {pno}: rotated {skew:+.2f} deg to deskew (estimated from long straight "
+                            "lines); positions refer to the deskewed page")
         try:
             geo = raster_geometry(img, dpi)
         except Exception as ex:                 # geometry is an aid, not a requirement
@@ -466,6 +540,10 @@ def read_raster(path: str | Path, declared_unit: str | None = None,
             n_regions += 1
             if r.skip:
                 skipped[r.skip] += 1
+                if r.skip == "border zone label":
+                    zone_labels.append((pno, normalise(r.agreed or r.a or r.b or ""),
+                                        (r.box[0] + r.box[2]) / 2 * mm,
+                                        (img.height - (r.box[1] + r.box[3]) / 2) * mm))
                 continue
             cx = (r.box[0] + r.box[2]) / 2 * mm
             cy = (img.height - (r.box[1] + r.box[3]) / 2) * mm
@@ -545,6 +623,8 @@ def read_raster(path: str | Path, declared_unit: str | None = None,
             if hasattr(c, "_box_px"):
                 delattr(c, "_box_px")
 
+    from ..zones import assign_zones
+    assign_zones(characteristics, zone_labels)
     extents = (0.0, 0.0, page_w, page_h)
     census = [EntityCensusRow("OCR_REGION", n_regions, len(characteristics),
                               f"{n_agreed} agreed, {n_disagree} disagreed, {n_single} one-engine")]

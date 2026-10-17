@@ -96,6 +96,18 @@ def cmd_run(a) -> int:
     return 0 if res.plan.approvable else 3
 
 
+def cmd_fai(a) -> int:
+    from .export.fai import verify_fai, write_fai
+    out = write_fai(a.plan_json, a.out)
+    checks = verify_fai(a.plan_json, out)
+    for name, ok, detail in checks:
+        print(f"  {'ok ' if ok else 'BAD'} {name:<24} {detail}")
+    print(f"ARTIFACT   fai   {out}")
+    print("NOTE       results, serial numbers, organisation data and Form 2 are left blank to be "
+          "completed by the organisation performing the FAI")
+    return 0 if all(ok for _, ok, _ in checks) else 1
+
+
 def cmd_doctor(a) -> int:
     print(f"ENGINE     astracad-inspect {__version__} (python {sys.version.split()[0]})")
     for name, version in sorted(tool_versions().items()):
@@ -197,6 +209,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--out", default="out")
     sp.set_defaults(func=cmd_compare)
 
+    sp = sub.add_parser("fai", help="AS9102-structured FAI workbook (Forms 1-3) from a plan JSON")
+    sp.add_argument("plan_json")
+    sp.add_argument("--out", required=True, help="output .xlsx")
+    sp.set_defaults(func=cmd_fai)
     sp = sub.add_parser("selftest", help="run the no-drawing checks")
     sp.set_defaults(func=cmd_selftest)
     return p

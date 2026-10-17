@@ -486,6 +486,7 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
         geo_.texts = [(gr.centre[0], gr.centre[1], normalise(gr.text)) for gr in groups if gr.page == pg_no]
     from collections import Counter
     skipped: Counter = Counter()
+    zone_labels: list = []
     characteristics: list[Characteristic] = []
     uninterpreted: list[UninterpretedAnnotation] = []
     notes: list[str] = []
@@ -501,6 +502,10 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
                 "attached to a guessed dimension", g.page, cx, cy))
             continue
         if not _NUMBER.search(norm):
+            # row labels of the sheet grid are letters: kept for zone references, never callouts
+            geo_ = sheet_geo.get(g.page)
+            if geo_ is not None and re.fullmatch(r"[A-Z]", norm.strip()) and                     geo_.is_border_label(norm.strip(), cx, cy):
+                zone_labels.append((g.page, norm.strip(), cx, cy))
             continue
         geo = sheet_geo.get(g.page)
         # visual text height from the run's own outline: a font size can be well above the drawn
@@ -511,6 +516,7 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
         if geo is not None:
             if geo.is_border_label(norm, cx, cy):
                 skipped["border zone label"] += 1
+                zone_labels.append((g.page, norm, cx, cy))
                 continue
             if geo.is_balloon(norm, cx, cy, th):
                 skipped["balloon item number"] += 1
@@ -630,6 +636,8 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
                    "warning")
         characteristics.append(c)
 
+    from ..zones import assign_zones
+    assign_zones(characteristics, zone_labels)
     page_w, page_h = page_sizes[0]
     extents = (0.0, 0.0, page_w, page_h)
     # Paths covering most of the sheet are the border/title frame, not the part.

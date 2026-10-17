@@ -87,6 +87,7 @@ class SourceLocation:
     anchor_x: float
     anchor_y: float
     definition_points: list[tuple[float, float]] = field(default_factory=list)
+    zone: str = ""          # sheet grid reference (e.g. "C4") from the sheet's own border labels
 
 
 # --- tolerance representations -------------------------------------------------------------

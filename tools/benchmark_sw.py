@@ -119,7 +119,7 @@ def score_gtols(key_gtols: list[dict], rows: list) -> dict:
     return {"key_frames": len(want), "found": hit, "key": want, "read": got}
 
 
-def run(corpus: Path, ocr: bool) -> dict:
+def run(corpus: Path, ocr: bool, scans: Path | None = None) -> dict:
     from astracad_inspect.ingest.dxf import read_dxf
     from astracad_inspect.ingest.pdf import read_pdf
     from astracad_inspect.plan import build_plan
@@ -140,6 +140,13 @@ def run(corpus: Path, ocr: bool) -> dict:
                         from astracad_inspect.ingest.raster import read_raster
                         return read_raster(p, key["unit"])
                     routes.append(("ocr", _ocr))
+            if scans is not None and "pdf" in sh["files"]:
+                jpg = scans / (Path(sh["files"]["pdf"]).stem + ".jpg")
+                if jpg.exists():
+                    def _scan(p=jpg):
+                        from astracad_inspect.ingest.raster import read_raster
+                        return read_raster(p, key["unit"])
+                    routes = [("scan", _scan)]          # scan mode scores only the degraded images
             for rname, reader in routes:
                 t0 = time.time()
                 try:
@@ -177,8 +184,10 @@ def main() -> int:
     ap.add_argument("--corpus", default=str(ROOT / "_sources" / "corpus_sw"))
     ap.add_argument("--ocr", action="store_true")
     ap.add_argument("--out", default=str(ROOT / "_out" / "benchmark_sw.json"))
+    ap.add_argument("--scans", default=None,
+                    help="folder of SIMULATED scans from tools/degrade.py; scores only those")
     a = ap.parse_args()
-    res = run(Path(a.corpus), a.ocr)
+    res = run(Path(a.corpus), a.ocr, Path(a.scans) if a.scans else None)
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(json.dumps(res, indent=2, ensure_ascii=False), encoding="utf-8")
     for r in res["sheets"]:

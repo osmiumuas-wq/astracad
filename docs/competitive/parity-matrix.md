@@ -13,7 +13,7 @@ what the vendor **documents** (D), what was **observed** (O), or UNKNOWN (U). Ev
 | C-04 | GD&T frames and datums | U | D/O (P6-03, P6-27) | **TESTED** | DXF TOLERANCE entities; PDF text frames and frames drawn as graphics (14 symbols by strokes); 1/1 real frame; MMC/LMC bonus not computed |
 | C-05 | ISO 286 fit-class limits | U | U | **VERIFIED** (783 cells, 3–400 mm) | double-sourced table + IT check |
 | C-06 | Missing-characteristic / coverage gate | U | D (P6-05, P6-10) | **VERIFIED** | release gate blocks with named reasons |
-| C-07 | AS9102 FAIR forms | U | D (P6-05) | PLANNED | data model exists; form layout not built |
+| C-07 | AS9102 FAIR forms | U | D (P6-05) | **TESTED** | `inspect fai PLAN.json`: Forms 1-3 structure, zones from the sheet's border labels, results/serials/org data left blank (never invented); reopen-verified |
 | C-08 | PPAP: PFMEA / Control Plan | U | D (P6-10) | NOT_INVESTIGATED (ours) | — |
 | C-09 | SPC / instrument library | U | D (P6-06) | NOT IMPLEMENTED | — |
 | C-10 | Revision comparison of drawings | U | D (P6-08) | **TESTED** (this session) | `astracad_inspect.revision` |
@@ -27,6 +27,7 @@ what the vendor **documents** (D), what was **observed** (O), or UNKNOWN (U). Ev
 | C-18 | Text → CAD | D (F-03) | — | PLANNED | structured spec exists; NL interpretation not built |
 | C-19 | CAD → drawing (.SLDDRW) | D (F-06) | — | **END_TO_END_VERIFIED** | `mac drawing` + independent DXF inspection; 3 live parts; no title block/tolerances yet |
 | C-23 | Accuracy measured against an independent answer key | U | claims "near 100%" (P6-03), no method | **TESTED** | SOLIDWORKS API answer keys, 13 drawings / 18 sheets, method in `tools/benchmark_sw.py` |
+| C-26 | Drawing zone (grid) references | U | D (P6-20) | **TESTED** | PDF and scan routes, from the sheet's own border labels; DXF not yet |
 | C-25 | General tolerances (ISO 2768 / title-block rules) | U | D (P6-19: scans tolerance tables) | **TESTED** | 24 tests incl. table values and refusals; table values transcribed, to verify against a licensed ISO copy |
 | C-24 | Detects a drawing's own drafting errors | U | U | **TESTED** | found a SOLIDWORKS sample printing 15 for a 150 mm span (blocking) |
 | C-20 | STEP → 3-axis features → G-code | — | D (P6-07) | NOT IMPLEMENTED | needs a real CAM backend |
