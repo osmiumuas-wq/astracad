@@ -414,6 +414,22 @@ class Workspace:
         entry = record(plan_path, plan, body, register=load(self.instruments_path))
         return {"entry": entry, "measurements": evaluate(plan, read_log(plan_path))}
 
+    # ---- results import -------------------------------------------------------------------------
+    def import_results(self, key: str, name: str, data: bytes, opts: dict) -> dict:
+        """Preview (default) or commit an imported results file for a run."""
+        from astracad_inspect.import_results import commit, preview
+        from astracad_inspect.instruments import load
+        plan_path = self._plan_path(key)
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        kw = dict(inspector=str(opts.get("inspector") or "").strip(), register=load(self.instruments_path),
+                  instrument=str(opts.get("instrument") or ""), unit=str(opts.get("unit") or ""),
+                  default_sample=str(opts.get("sample") or "") or None)
+        if not kw["inspector"]:
+            raise ValueError("the person importing must be named (inspector)")
+        if opts.get("mode") == "commit":
+            return commit(plan_path, name, data, plan, skip_rejected=opts.get("skip_rejected") in ("1", "true"), **kw)
+        return preview(name, data, plan, **kw)
+
     # ---- checklists ----------------------------------------------------------------------------
     def _checklist_ctx(self, key: str, sample: str | None) -> tuple[Path, dict]:
         from astracad_inspect.measure import evaluate, read_log
@@ -717,6 +733,30 @@ def make_handler(ws: Workspace):
                         HTTPStatus.BAD_REQUEST)
                 return self._error(code, str(ex))
 
+        def _import_results(self, n: int):
+            from astracad_inspect.import_results import MAX_BYTES
+            q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+            refuse = None
+            if not self._host_ok():
+                refuse = (HTTPStatus.FORBIDDEN, "host not allowed")
+            elif self.headers.get("X-AstraCAD") != "1":
+                refuse = (HTTPStatus.FORBIDDEN, "missing X-AstraCAD header")
+            elif n <= 0:
+                refuse = (HTTPStatus.LENGTH_REQUIRED, "Content-Length required")
+            elif n > MAX_BYTES:
+                refuse = (HTTPStatus.REQUEST_ENTITY_TOO_LARGE, f"file larger than {MAX_BYTES // 2**20} MiB")
+            if refuse:
+                self._drain(n, 1 << 27)
+                self.close_connection = True
+                return self._error(*refuse)
+            data = self.rfile.read(n)
+            try:
+                return self._json(ws.import_results(q.get("key", ""), q.get("name", "results.csv"), data, q))
+            except PermissionError as ex:
+                return self._error(HTTPStatus.FORBIDDEN, str(ex))
+            except (FileNotFoundError, ValueError, UnicodeDecodeError) as ex:
+                return self._error(HTTPStatus.BAD_REQUEST, str(ex))
+
         def do_POST(self):                      # noqa: N802
             # Read the request body BEFORE any reply: answering 403 with the client still sending
             # made Windows reset the connection (intermittent ConnectionAborted in tests).
@@ -726,6 +766,8 @@ def make_handler(ws: Workspace):
                 n = 0
             if urlparse(self.path).path == "/api/upload":
                 return self._upload(n)
+            if urlparse(self.path).path == "/api/import_results":
+                return self._import_results(n)
             if n > (1 << 16):
                 # discard (bounded) what the client is sending, then refuse: replying mid-upload
                 # made Windows abort the connection before the 413 could be read

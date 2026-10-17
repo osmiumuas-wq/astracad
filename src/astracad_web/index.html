@@ -1218,8 +1218,54 @@ async function viewInspection(key, keepSel, focusId) {
     { k: "reason", label: "Reason", render: e => h("span", { class: "muted" }, e.reason || "") }], list);
   const STATE_L = { ACCEPTABLE: ["ok", "shield", "Acceptable"], FAIL: ["bad", "x", "Fail"], INCOMPLETE: ["warn", "clock", "Incomplete"],
     NOT_ACCEPTABLE_PLAN_OPEN: ["warn", "alert", "Plan not releasable"] };
+  const importPane = () => {
+    // CMM / gauge / spreadsheet results: preview first (nothing written), then commit
+    const box = h("div");
+    const unitSel = h("select", { class: "input sm", style: "width:auto", "aria-label": "Unit of the values in the file" },
+      h("option", { value: "" }, "units: as the drawing"), h("option", { value: "mm" }, "file in mm"), h("option", { value: "in" }, "file in inches"));
+    const picker = h("input", { type: "file", accept: ".csv,.tsv,.txt,.xlsx", hidden: true, onchange: () => { const f = picker.files[0]; picker.value = ""; if (f) run(f, "preview"); } });
+    let file = null;
+    async function run(f, mode, skip) {
+      file = f;
+      if (!reviewer.value.trim()) { toast("Enter your name in the bar first — imported values are signed by the importer.", "warn"); reviewer.focus(); return; }
+      const qs = new URLSearchParams({ key, name: f.name, inspector: reviewer.value.trim(), instrument: instrIn.value.trim(), unit: unitSel.value, sample: curSample(), mode, skip_rejected: skip ? "1" : "" });
+      box.replaceChildren(h("div", { class: "runstate" }, h("span", { class: "spin" }), mode === "commit" ? "Importing…" : "Reading and checking every row…"));
+      try {
+        const r = await fetch("/api/import_results?" + qs, { method: "POST", headers: { "X-AstraCAD": "1", "Content-Type": "application/octet-stream" }, body: f });
+        const d = await r.json(); if (!r.ok) throw new Error(d.error || r.statusText);
+        if (mode === "commit") { toast(`Imported ${d.committed.imported} value(s) from ${f.name}`); await viewInspection(key, sel); return; }
+        show(d);
+      } catch (e) { box.replaceChildren(h("div", { class: "gate t-warn", style: "grid-template-columns:auto 1fr" }, h("div", { class: "gi" }, ic("alert", "i lg")), h("div", {}, h("b", {}, "Not imported"), h("div", { class: "why" }, e.message)))); }
+    }
+    function show(d) {
+      const skip = h("input", { type: "checkbox" });
+      const go = h("button", { class: "btn sm primary", disabled: !d.accepted.length || (d.refused.length > 0), onclick: () => run(file, "commit", skip.checked) }, ic("check"), `Import ${d.accepted.length} value(s)`);
+      skip.addEventListener("change", () => { go.disabled = !d.accepted.length || (d.refused.length > 0 && !skip.checked); });
+      box.replaceChildren(h("div", { class: "stack", style: "margin-top:12px" },
+        h("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap" }, h("b", {}, d.file), h("span", { class: "tag" }, d.layout + " table"),
+          pill("ok", "check", `${d.summary.accepted} accepted`), d.summary.fail ? pill("bad", "x", `${d.summary.fail} out of tolerance`) : null,
+          d.refused.length ? pill("warn", "alert", `${d.refused.length} refused`) : null, h("span", { class: "mono muted", style: "font-size:11.5px" }, "sha256 " + d.sha256.slice(0, 16) + "…"),
+          h("span", { style: "margin-left:auto;display:flex;gap:8px;align-items:center" },
+            d.refused.length ? h("label", { style: "display:flex;gap:6px;align-items:center;font-size:12.5px" }, skip, "import the accepted rows, skip refused ones") : null,
+            h("button", { class: "btn sm ghost", onclick: () => box.replaceChildren() }, "Cancel"), go)),
+        d.refused.length ? card("Refused rows", "nothing from these rows is imported", null, dataTable([
+          { k: "row", label: "Row", num: true }, { k: "ref", label: "Reference", render: x => h("span", { class: "mono" }, x.ref) },
+          { k: "reason", label: "Why", render: x => h("span", { class: "c-bad" }, x.reason) }], d.refused)) : null,
+        d.accepted.length ? card("Accepted rows (preview — not yet written)", null, null, dataTable([
+          { k: "where", label: "Where", render: a => h("span", { class: "mono nowrap" }, a.where) },
+          { k: "balloon_no", label: "#", num: true },
+          { k: "sample", label: "Sample", sort: a => a.entry.sample, render: a => h("span", { class: "mono" }, a.entry.sample) },
+          { k: "value", label: "Value", sort: a => a.entry.value, render: a => h("span", { class: "mono" }, fmt(a.entry.value, 6), a.entry.converted_from ? h("span", { class: "muted" }, ` (from ${a.entry.converted_from.value} ${a.entry.converted_from.unit})`) : null) },
+          { k: "verdict", label: "Verdict", render: a => h("span", { title: a.why }, verdictPill(a.verdict)) },
+          { k: "inst", label: "Instrument", render: a => h("span", {}, a.entry.instrument || "–", (a.entry.warnings || []).length ? h("div", { class: "c-warn", style: "font-size:12px" }, a.entry.warnings.join("; ")) : null) }], d.accepted)) : null));
+    }
+    return h("div", {}, h("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap" },
+      h("button", { class: "btn sm", onclick: () => picker.click() }, ic("plus"), "Import results (CSV / XLSX)"), unitSel, picker,
+      h("span", { class: "muted", style: "font-size:12px" }, "long table (sample, balloon, value) or wide (balloon × samples); instrument from the file or the bar")), box);
+  };
   const measPane = () => {
-    if (!M.entries) return empty("check", "No measurements yet", "Enter a sample number in the bar, select a balloon and type the measured value (M). Every value is signed; nothing is filled in for you.");
+    const imp = importPane();
+    if (!M.entries) return h("div", { class: "body" }, h("div", {}, imp), empty("check", "No measurements yet", "Import a results file, or enter a sample number in the bar, select a balloon and type the measured value (M). Every value is signed; nothing is filled in for you."));
     const exportBtn = h("button", { class: "btn sm", onclick: async () => {
         try { const r = await post("/api/export_results", { key, sample: curSample() && M.samples.includes(curSample()) ? curSample() : null });
           const bad = r.checks.filter(c => !c.ok);
@@ -1239,7 +1285,7 @@ async function viewInspection(key, keepSel, focusId) {
         return c ? h("span", { class: "nowrap", title: c.why }, verdictPill(c.verdict), " ", h("span", { class: "mono" }, c.value != null ? fmt(c.value) : "—")) : h("span", { class: "muted" }, "–"); } })),
       { k: "cpk", label: "Cpk", num: true, sort: r => M.capability[r.cid]?.cpk, render: r => { const c = M.capability[r.cid]; return c?.cpk != null ? h("span", { title: c.note }, c.cpk.toFixed(2)) : "–"; } },
     ];
-    return h("div", {}, states, h("div", { style: "margin-top:12px" }, dataTable(cols, rows)));
+    return h("div", {}, states, h("div", { class: "body", style: "padding-top:12px;padding-bottom:0" }, imp), h("div", { style: "margin-top:12px" }, dataTable(cols, rows)));
   };
   let CLT = [];
   try { CLT = await api("/api/checklists"); } catch (e) {}

@@ -52,6 +52,20 @@ def record(plan_path: Path, plan: dict, body: dict, register: dict | None = None
     """Validate and append one entry. Raises ValueError with the reason when it is refused.
     With an instrument `register`, the instrument is checked (see instruments.check) and a snapshot
     of it - resolution, calibration due date and certificate - is stored with the value."""
+    entry = build_entry(plan, body, register)
+    append(plan_path, [entry])
+    return entry
+
+
+def append(plan_path: Path, entries: list[dict]) -> None:
+    """Append already-validated entries in one write (an import lands whole or not at all)."""
+    with _lock:
+        with log_path(plan_path).open("a", encoding="utf-8") as f:
+            f.write("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in entries))
+
+
+def build_entry(plan: dict, body: dict, register: dict | None = None) -> dict:
+    """The validated entry for `body`, not yet written. Raises ValueError with the reason."""
     inspector = str(body.get("inspector", "")).strip()
     if not _NAME.fullmatch(inspector):
         raise ValueError("inspector name required (letters, digits, space . ' - ; up to 64)")
@@ -87,9 +101,10 @@ def record(plan_path: Path, plan: dict, body: dict, register: dict | None = None
             entry["instrument_record"] = snap
         if warnings:
             entry["warnings"] = warnings
-    with _lock:
-        with log_path(plan_path).open("a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    # imported values say where they came from (file hash + row) and when they were measured
+    for k in ("source", "measured_at", "converted_from"):
+        if body.get(k):
+            entry[k] = body[k]
     return entry
 
 

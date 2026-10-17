@@ -29,8 +29,9 @@ what an inspector typed; verdicts come from the drawing's own limits; rows witho
 recorded but not judged; a sample against an open (not releasable) plan is never "acceptable".
 Done next (same day): the instrument register (Instruments page) is checked at entry - verified
 live: an expired caliper refused, 99.9964 from a 0.001 mm micrometer refused, 99.996 recorded.
-Next here: import CMM / gauge results (CSV) into the same log, each row attributed to the file it
-came from, with the same instrument checks.
+Done next: results import (CSV/XLSX, long or wide, preview -> commit, traced to file hash + row,
+file preserved). Next here, if CMM files are provided: a mapping profile per CMM program (feature
+name -> balloon) saved with the project, so repeat imports need no renaming.
 
 ## 0. Done 2026-10-17: projects, upload, preserved originals (Part 9 items 1-3)
 
