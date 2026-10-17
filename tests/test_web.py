@@ -111,3 +111,9 @@ def test_same_stem_runs_in_one_second_never_share_a_folder(tmp_path):
     a = w.run_inspection(str(FIX / "plate_synthetic.dxf"), None, None)
     b = w.run_inspection(str(FIX / "plate_synthetic.dxf"), None, None)
     assert a["folder"] != b["folder"] and len(w.inspections()) == 2
+
+
+def test_oversized_post_body_is_refused(server):
+    status, d = req(server, "POST", "/api/inspect", {"drawing": "x" * 70000},
+                    {"Host": "127.0.0.1", "X-AstraCAD": "1"})
+    assert status == 413

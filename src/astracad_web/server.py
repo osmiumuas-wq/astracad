@@ -261,14 +261,23 @@ def make_handler(ws: Workspace):
                 return self._error(HTTPStatus.INTERNAL_SERVER_ERROR, f"{type(ex).__name__}: {ex}")
 
         def do_POST(self):                      # noqa: N802
+            # Read the request body BEFORE any reply: answering 403 with the client still sending
+            # made Windows reset the connection (intermittent ConnectionAborted in tests).
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                n = 0
+            if n > (1 << 16):
+                self.close_connection = True
+                return self._error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "request body too large")
+            raw = self.rfile.read(n) if n > 0 else b""
             if not self._host_ok():
                 return self._error(HTTPStatus.FORBIDDEN, "host not allowed")
             if self.headers.get("X-AstraCAD") != "1":
                 return self._error(HTTPStatus.FORBIDDEN, "missing X-AstraCAD header")
             u = urlparse(self.path)
             try:
-                n = int(self.headers.get("Content-Length") or 0)
-                body = json.loads(self.rfile.read(min(n, 1 << 16)) or b"{}")
+                body = json.loads(raw or b"{}")
                 if u.path == "/api/inspect":
                     return self._json(ws.run_inspection(str(body.get("drawing", "")),
                                                         body.get("units"), body.get("revision")))
