@@ -23,7 +23,7 @@ def _requirement(row: dict) -> str:
 
 
 def write_fai(plan_json: str | Path, out_xlsx: str | Path, sample: str | None = None,
-              log: list[dict] | None = None) -> Path:
+              log: list[dict] | None = None, ncrs: dict | None = None) -> Path:
     """With `sample` and a measurement `log`, Form 1 names that serial number and Form 3 column 9
     carries what was RECORDED for it (value, verdict, inspector, instrument, time) - never a value
     that was not entered. Unmeasured rows stay blank; a failed row asks for an NCR number."""
@@ -90,6 +90,8 @@ def write_fai(plan_json: str | Path, out_xlsx: str | Path, sample: str | None = 
             result = (f"{m['value']:g} {r.get('unit') or ''} {m['verdict']} "
                       f"({m['inspector']}{', ' + m['instrument'] if m.get('instrument') else ''}, {m['at']})")
             ncr = TO_COMPLETE if m["verdict"] == "FAIL" else ""
+        if (ncrs or {}).get(r.get("cid")):
+            ncr = ncrs[r["cid"]]                     # the NCR raised for this characteristic and serial
         f3.append([r.get("balloon_no"), loc, "", _requirement(r), result, "", ncr,
                    r.get("cid"), r.get("entity_handle"), f"{r.get('provenance')} / {r.get('status')}"])
     for col, w in zip("ABCDEFGHIJ", (10, 22, 14, 60, 18, 18, 16, 12, 18, 22)):

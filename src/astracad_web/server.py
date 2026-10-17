@@ -182,7 +182,9 @@ class Workspace:
                 project = None
         from astracad_inspect.measure import evaluate, read_log
         measurements = evaluate(plan, read_log(plan_path))
-        return {"key": key, "name": stem, "project": project, "measurements": measurements,
+        ncrs = [{k: n.get(k) for k in ("number", "status", "title", "link", "disposition")}
+                for n in self.ncr.for_run(key)]
+        return {"key": key, "name": stem, "project": project, "measurements": measurements, "ncrs": ncrs,
                 "plan": {k: plan.get(k) for k in (
                     "source_document", "source_sha256", "revision", "unit", "rows", "checks",
                     "uninterpreted", "gate", "approvable", "warnings", "feature_support",
@@ -414,6 +416,34 @@ class Workspace:
         entry = record(plan_path, plan, body, register=load(self.instruments_path))
         return {"entry": entry, "measurements": evaluate(plan, read_log(plan_path))}
 
+    # ---- nonconformance reports --------------------------------------------------------------------
+    @property
+    def ncr(self):
+        from astracad_inspect.ncr import NcrStore
+        return NcrStore(self.projects.root if self.projects is not None else self.runs[0])
+
+    def ncr_list(self) -> list[dict]:
+        return self.ncr.list()
+
+    def ncr_action(self, body: dict) -> dict:
+        action = body.get("action")
+        if action == "create":
+            from astracad_inspect.measure import evaluate, read_log
+            from astracad_inspect.ncr import link_from_measurement
+            key = str(body.get("key", ""))
+            plan_path = self._plan_path(key)
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            sample = (str(body.get("sample") or "").strip() or None)
+            if body.get("checklist"):
+                link = {"key": key, "document": plan.get("source_document"), "revision": plan.get("revision"),
+                        "checklist": str(body["checklist"]), "item": str(body.get("item") or ""), "sample": sample}
+            else:
+                cid = str(body.get("cid", ""))
+                cell = evaluate(plan, read_log(plan_path))["cells"].get(f"{sample}|{cid}") if sample else None
+                link = link_from_measurement(plan, key, cell, cid, sample)
+            return self.ncr.create(body, link)
+        return self.ncr.act(str(body.get("number", "")), body)
+
     # ---- results import -------------------------------------------------------------------------
     def import_results(self, key: str, name: str, data: bytes, opts: dict) -> dict:
         """Preview (default) or commit an imported results file for a run."""
@@ -521,7 +551,10 @@ class Workspace:
             if sample not in {e["sample"] for e in log}:
                 raise ValueError(f"no measurements recorded for sample {sample!r}")
             safe = re.sub(r"[^\w.-]", "_", sample)[:40]
-            fai = write_fai(plan_path, plan_path.with_name(f"{stem}_FAI_{safe}.xlsx"), sample=sample, log=log)
+            ncrs = {(n["link"] or {}).get("cid"): n["number"] for n in self.ncr.for_run(key)
+                    if n["status"] != "CANCELLED" and (n["link"] or {}).get("sample") == sample}
+            fai = write_fai(plan_path, plan_path.with_name(f"{stem}_FAI_{safe}.xlsx"), sample=sample, log=log,
+                            ncrs=ncrs)
             out["fai"] = self.key_for(fai)
             out["checks"] += [{"name": n, "ok": ok, "detail": d} for n, ok, d in verify_fai(plan_path, fai)]
         return out
@@ -657,6 +690,10 @@ def make_handler(ws: Workspace):
                     return self._json(ws.projects_list())
                 if u.path == "/api/instruments":
                     return self._json(ws.instruments())
+                if u.path == "/api/ncrs":
+                    return self._json(ws.ncr_list())
+                if u.path == "/api/ncr":
+                    return self._json(ws.ncr.get(q.get("number", [""])[0]))
                 if u.path == "/api/checklists":
                     return self._json(ws.checklist_templates())
                 if u.path == "/api/checklist":
@@ -801,6 +838,8 @@ def make_handler(ws: Workspace):
                     return self._json(ws.save_instrument(body))
                 if u.path == "/api/checklist":
                     return self._json(ws.checklist_decide(body))
+                if u.path == "/api/ncr":
+                    return self._json(ws.ncr_action(body))
                 if u.path == "/api/export_checklist":
                     return self._json(ws.export_checklist(str(body.get("key", "")), str(body.get("template", "")),
                                                           body.get("sample")))

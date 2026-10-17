@@ -316,4 +316,16 @@ def run(name: str, params: dict) -> Calculation:
     if name == "cutting_power":
         q = kw.pop("q_cm3_min", None)
         return fn(q, **kw)
+    if name == "cycle_time":
+        proc, length = kw.pop("process", None), kw.pop("length_mm", None)
+        return fn(proc, length, **kw)
     return fn(**kw)
+
+
+# inspection (metrology) calculations share the same record form and registry
+def _merge_metrology():
+    from . import metrology
+    REGISTRY.update(metrology.REGISTRY)
+
+
+_merge_metrology()

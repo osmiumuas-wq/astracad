@@ -429,6 +429,7 @@ pre.code { margin: 0; white-space: pre-wrap; word-break: break-word; font-family
     <div class="navlabel">Quality</div>
     <button class="nav" data-tab="projects"><svg class="i" data-i="file"></svg><span class="lbl">Projects</span><span class="count" id="n-proj"></span></button>
     <button class="nav" data-tab="inspections"><svg class="i" data-i="scan"></svg><span class="lbl">Inspections</span><span class="count" id="n-insp"></span></button>
+    <button class="nav" data-tab="ncrs"><svg class="i" data-i="flag"></svg><span class="lbl">Nonconformances</span><span class="count" id="n-ncr"></span></button>
     <button class="nav" data-tab="instruments"><svg class="i" data-i="crosshair"></svg><span class="lbl">Instruments</span><span class="count" id="n-inst"></span></button>
     <button class="nav" data-tab="changes"><svg class="i" data-i="diff"></svg><span class="lbl">Revision changes</span></button>
     <div class="navlabel">Manufacturing</div>
@@ -617,6 +618,7 @@ function palBase() {
     { label: "Inspections", group: "Page", icon: "scan", run: () => location.hash = "#inspections" },
     { label: "Instruments", group: "Page", icon: "crosshair", run: () => location.hash = "#instruments" },
     { label: "Machining calculations", group: "Page", icon: "cube", run: () => location.hash = "#machining" },
+    { label: "Nonconformances", group: "Page", icon: "flag", run: () => location.hash = "#ncrs" },
     { label: "Revision changes", group: "Page", icon: "diff", run: () => location.hash = "#changes" },
     { label: "Tasks", group: "Page", icon: "tasks", run: () => location.hash = "#tasks" },
     { label: "CAD connections", group: "Page", icon: "cube", run: () => location.hash = "#cad" },
@@ -1178,6 +1180,11 @@ async function viewInspection(key, keepSel, focusId) {
         cur ? h("div", { class: "mrow" }, verdictPill(cur.verdict), h("b", { class: "mono" }, cur.value != null ? `${fmt(cur.value)} ${r.unit || ""}` : "—"),
           h("span", { class: "muted", style: "font-size:12px" }, `${cur.inspector}${cur.instrument ? " · " + cur.instrument : ""}${cur.instrument_record?.calibration_ref ? " (cal " + cur.instrument_record.calibration_ref + ")" : ""} · ${when(cur.at)}${cur.history.length ? ` · supersedes ${cur.history.length}` : ""}`)) : null,
         cur && (cur.warnings || []).length ? h("ul", { class: "list", style: "margin-top:6px" }, cur.warnings.map(w => h("li", {}, h("span", { class: "c-warn" }, ic("flag")), h("div", { class: "x" }, w)))) : null,
+        (() => { const linked = (d.ncrs || []).filter(n => n.link?.cid === r.cid && n.link?.sample === curSample());
+          if (linked.length) return h("div", { style: "margin-top:8px;display:flex;gap:6px;flex-wrap:wrap" }, linked.map(n => h("a", { href: "#ncrs=" + n.number, style: "text-decoration:none" }, ncrPill(n.status), " ", h("span", { class: "mono" }, n.number))));
+          if (cur && cur.verdict === "FAIL") { const slot = h("div"); return h("div", {}, h("button", { class: "btn sm bad", style: "margin-top:8px", onclick: () => slot.replaceChildren(ncrForm(async t => { const n = await raiseNcr({ key, cid: r.cid, sample: curSample(), description: t }); if (n) viewInspection(key, sel); },
+            `${sym(r.callout)}: measured ${fmt(cur.value)} ${r.unit || ""} (${cur.why})`)) }, ic("flag"), "Raise NCR"), slot); }
+          return null; })(),
         h("div", { class: "actbar", style: "align-items:center;margin-top:8px" }, val, h("span", { class: "muted" }, r.unit || ""),
           h("button", { class: "btn sm primary", onclick: save }, ic("check"), cur ? "Record correction" : "Record", h("kbd", {}, "M")), live,
           cur && cur.value != null ? h("button", { class: "btn sm ghost", onclick: withdraw }, ic("undo"), "Withdraw") : null), wbox]
@@ -1607,7 +1614,9 @@ async function viewInstruments(editId) {
 }
 
 // ---------- Machining calculations ----------
-const CALC_TITLE = { spindle_speed: "Spindle speed", cutting_speed: "Cutting speed", milling_feed: "Milling table feed",
+const CALC_TITLE = { true_position: "True position (MMC / LMC bonus)", three_wire: "Three-wire thread measurement",
+  sine_bar: "Sine bar setup", bolt_circle: "Bolt circle coordinates", cycle_time: "Cutting time", convert: "Unit conversion",
+  spindle_speed: "Spindle speed", cutting_speed: "Cutting speed", milling_feed: "Milling table feed",
   chip_thinning: "Chip thinning", removal_rate: "Material removal rate", cutting_power: "Cutting power & torque",
   turning_roughness: "Turning roughness (Ra, Rt)", turning_feed_for_ra: "Max feed for a target Ra",
   scallop_height: "Ball-end scallop height", stepover_for_scallop: "Stepover for a scallop", iso_metric_thread: "ISO metric thread",
@@ -1687,7 +1696,8 @@ function checklistPane(key, sampleOf, templates) {
       const ev = i.auto ? h("div", { class: "x", style: "margin-top:4px" }, pill(i.auto.state === "PASS" ? "ok" : i.auto.state === "FAIL" ? "bad" : "na", i.auto.state === "PASS" ? "check" : i.auto.state === "FAIL" ? "x" : "info", "ASTraCAD: " + human(i.auto.state.toLowerCase())), " ", h("span", { class: "muted", style: "font-size:12px" }, i.auto.evidence)) : h("div", { class: "x muted", style: "font-size:12px;margin-top:4px" }, "manual — a person's check");
       return h("tr", {},
         h("td", {}, h("div", { class: "title", style: "font-weight:500" }, i.text), ev),
-        h("td", { class: "nowrap" }, d ? h("div", {}, pill(...DEC[d.result]), h("div", { class: "hlegend" }, `${d.by} · ${ago(d.at)}`), d.note ? h("div", { class: "muted", style: "font-size:12px" }, d.note) : null) : h("span", { class: "muted" }, "—")),
+        h("td", { class: "nowrap" }, d ? h("div", {}, pill(...DEC[d.result]), h("div", { class: "hlegend" }, `${d.by} · ${ago(d.at)}`), d.note ? h("div", { class: "muted", style: "font-size:12px" }, d.note) : null,
+          d.result === "FAIL" ? h("button", { class: "btn sm ghost", onclick: async () => { const n = await raiseNcr({ key, checklist: tpl, item: i.id, sample, description: `${i.text} — ${d.note}` }); if (n) location.hash = "#ncrs=" + n.number; } }, ic("flag"), "Raise NCR") : null) : h("span", { class: "muted" }, "—")),
         h("td", {}, h("div", { style: "display:flex;gap:6px;flex-wrap:wrap" }, noteIn,
           h("button", { class: "btn sm ok", disabled: i.auto?.state === "FAIL", title: i.auto?.state === "FAIL" ? "the evidence fails: it cannot be passed" : "", onclick: () => decide(i.id, "PASS", noteIn.value) }, ic("check"), "Pass"),
           h("button", { class: "btn sm bad", onclick: () => noteIn.value.trim() ? decide(i.id, "FAIL", noteIn.value) : (noteIn.focus(), toast("Fail needs a note", "warn")) }, ic("x"), "Fail"),
@@ -1700,16 +1710,97 @@ function checklistPane(key, sampleOf, templates) {
   return box;
 }
 
+// ---------- Nonconformances ----------
+const NCR_ST = { OPEN: ["bad", "alert", "Open"], CONTAINED: ["warn", "shield", "Contained"], DISPOSITIONED: ["info", "flag", "Dispositioned"],
+  CLOSED: ["ok", "check", "Closed"], CANCELLED: ["na", "ban", "Cancelled"] };
+const ncrPill = s => { const [t, i, l] = NCR_ST[s] || ["na", "info", s]; return pill(t, i, l); };
+async function raiseNcr(body) {
+  const by = (document.getElementById("reviewer")?.value || store.get("astracad.reviewer") || "").trim();
+  if (!by) { toast("Enter your name first — an NCR is raised by a named person.", "warn"); return null; }
+  try { const n = await post("/api/ncr", { action: "create", by, ...body }); toast(`${n.number} raised`); return n; }
+  catch (e) { toast("NCR not raised: " + e.message.replace(/^\w+Error: /, ""), "bad"); return null; }
+}
+function ncrForm(onSubmit, defaults = "") {
+  const t = h("textarea", { class: "input", placeholder: "what does not conform, and how was it found", "aria-label": "Description" }, defaults);
+  const f = h("div", { class: "form" }, h("label", { class: "field" }, h("span", {}, "Nonconformance"), t),
+    h("div", { class: "btns" }, h("button", { class: "btn sm ghost", onclick: () => f.remove() }, "Cancel"),
+      h("button", { class: "btn sm bad", onclick: () => { if (!t.value.trim()) { t.focus(); return; } onSubmit(t.value.trim()); } }, ic("flag"), "Raise NCR")));
+  setTimeout(() => t.focus(), 0);
+  return f;
+}
+
+async function viewNcrs(number) {
+  crumbs(number ? { href: "#ncrs", label: "Nonconformances" } : "Nonconformances", ...(number ? [number] : []));
+  const list = await api("/api/ncrs");
+  const counts = list.reduce((a, n) => (a[n.status] = (a[n.status] || 0) + 1, a), {});
+  const linkText = l => !l ? "–" : l.checklist ? `checklist ${l.checklist} / ${l.item}` : `balloon ${l.balloon_no ?? "?"} ${sym(l.requirement || "")}`;
+  const sel = list.find(n => n.number === number);
+  const detail = sel ? (() => {
+    const n = sel, l = n.link || {};
+    const by = h("input", { class: "input sm", value: store.get("astracad.reviewer"), placeholder: "your name", style: "width:160px" });
+    const act = async body => { store.set("astracad.reviewer", by.value.trim());
+      try { await post("/api/ncr", { number: n.number, by: by.value.trim(), ...body }); toast(`${n.number}: ${body.action} recorded`); viewNcrs(n.number); }
+      catch (e) { toast(e.message.replace(/^\w+Error: /, ""), "bad"); } };
+    const ta = ph => h("textarea", { class: "input", placeholder: ph });
+    const forms = [];
+    if (["OPEN", "CONTAINED"].includes(n.status)) {
+      const c = ta("e.g. lot quarantined, 100% sort of WIP");
+      forms.push(card("Containment", null, null, h("div", { class: "body stack" }, c, h("div", {}, h("button", { class: "btn sm", onclick: () => act({ action: "contain", text: c.value }) }, ic("shield"), "Record containment")))));
+      const d = h("select", { class: "input sm", style: "width:auto" }, ["REWORK", "REPAIR", "USE_AS_IS", "SCRAP", "RETURN_TO_SUPPLIER"].map(x => h("option", { value: x }, human(x.toLowerCase()))));
+      const j = ta("justification (engineering basis, calculation, customer concession ...)");
+      const ap = h("input", { class: "input sm", placeholder: "approved by (second person)", style: "width:200px" });
+      const apWrap = h("label", { class: "field" }, h("span", {}, "Approved by (needed for use-as-is / repair)"), ap);
+      const sync = () => apWrap.hidden = !["USE_AS_IS", "REPAIR"].includes(d.value); d.addEventListener("change", sync); sync();
+      forms.push(card("Disposition", null, null, h("div", { class: "body stack" }, d, j, apWrap,
+        h("div", {}, h("button", { class: "btn sm primary", onclick: () => act({ action: "disposition", disposition: d.value, justification: j.value, approved_by: ap.value }) }, ic("flag"), "Record disposition")))));
+      const cr = h("input", { class: "input sm", placeholder: "reason" });
+      forms.push(h("div", { style: "display:flex;gap:8px;align-items:center" }, cr, h("button", { class: "btn sm ghost", onclick: () => act({ action: "cancel", text: cr.value }) }, ic("ban"), "Cancel NCR")));
+    }
+    if (n.status === "DISPOSITIONED") {
+      const rc = ta("root cause"), ca = ta("corrective action"), ve = ta("how the corrective action was verified effective");
+      forms.push(card("Closure", null, null, h("div", { class: "body stack" }, rc, ca, ve,
+        h("div", {}, h("button", { class: "btn sm primary", onclick: () => act({ action: "close", root_cause: rc.value, corrective_action: ca.value, verification: ve.value }) }, ic("check"), "Close NCR")))));
+    }
+    return h("div", { class: "stack" },
+      card(n.number, n.title, [ncrPill(n.status)], h("div", { class: "body stack" },
+        h("p", { style: "margin:0" }, n.description),
+        h("dl", { class: "spec" },
+          h("div", {}, h("dt", {}, "Drawing"), h("dd", { class: "mono", style: "font-weight:500" }, `${(l.document || "").split(/[\\/]/).pop()} rev ${l.revision ?? "–"}`)),
+          h("div", {}, h("dt", {}, "About"), h("dd", {}, linkText(l))),
+          h("div", {}, h("dt", {}, "Sample / serial"), h("dd", { class: "mono" }, l.sample || "–")),
+          l.actual != null ? h("div", {}, h("dt", {}, "Actual vs limits"), h("dd", { class: "mono" }, `${fmt(l.actual)} (${fmt(l.minimum)} … ${fmt(l.maximum)} ${l.unit || ""})`)) : null,
+          n.disposition ? h("div", { class: "wide" }, h("dt", {}, "Disposition"), h("dd", {}, `${human(n.disposition.disposition.toLowerCase())} — ${n.disposition.justification}`, n.disposition.approved_by ? ` (approved by ${n.disposition.approved_by})` : "")) : null,
+          n.closure ? h("div", { class: "wide" }, h("dt", {}, "Closure"), h("dd", { style: "font-weight:400" }, `Root cause: ${n.closure.root_cause}. Action: ${n.closure.corrective_action}. Verified: ${n.closure.verification}`)) : null),
+        l.key ? h("a", { class: "btn sm ghost", style: "justify-self:start", href: "#inspection=" + encodeURIComponent(l.key) }, ic("link"), "Open the inspection") : null,
+        h("ol", { class: "tl" }, n.history.map(x => h("li", { class: "hum" }, h("div", {}, h("b", {}, human(x.action)), " · ", h("span", { class: "muted" }, x.by)), x.detail ? h("div", {}, x.detail) : null, h("div", { class: "when" }, when(x.at))))))),
+      forms.length ? h("div", { class: "stack" }, h("label", { class: "who", style: "display:flex;gap:8px;align-items:center" }, ic("user"), "Acting as", by), ...forms) : null);
+  })() : null;
+  main.replaceChildren(
+    h("div", { class: "ph" }, h("div", {}, h("h1", {}, "Nonconformances"),
+      h("p", {}, "Raised from a failed measurement or checklist item; contained, dispositioned (use-as-is and repair need a second person's approval) and closed with root cause, corrective action and verification."))),
+    h("div", { class: "kpis" }, ["OPEN", "CONTAINED", "DISPOSITIONED", "CLOSED"].map(s => h("div", { class: "card kpi" }, h("div", { class: "k" }, ncrPill(s)), h("div", { class: "v" }, counts[s] || 0)))),
+    h("div", { class: sel ? "split" : "stack" },
+      card("Reports", `${list.length}`, null, list.length ? dataTable([
+        { k: "number", label: "NCR", render: n => h("span", { class: "mono nowrap title" }, n.number) },
+        { k: "status", label: "Status", render: n => ncrPill(n.status) },
+        { k: "title", label: "What", render: n => h("div", {}, h("div", {}, n.title), h("div", { class: "subline" }, linkText(n.link))) },
+        { k: "sample", label: "Serial", sort: n => n.link?.sample, render: n => h("span", { class: "mono" }, n.link?.sample || "–") },
+        { k: "created", label: "Raised", sort: n => n.created.at, render: n => h("span", { class: "muted nowrap", title: n.created.at }, `${n.created.by} · ${ago(n.created.at)}`) },
+      ], list, { onRow: n => location.hash = "#ncrs=" + n.number, initial: { k: "number", dir: -1 } }) : empty("check", "No nonconformances", "Raise one from a failed value in an inspection (Measure section) or from a failed checklist item.")),
+      detail));
+}
+
 // ---------- router ----------
 async function route() {
   const hash = location.hash.slice(1);
-  const tab = hash.startsWith("inspection=") ? "inspections" : hash.startsWith("project=") ? "projects" : hash.startsWith("instruments=") ? "instruments" : hash.startsWith("machining") ? "machining" : (hash || "inspections");
+  const tab = hash.startsWith("inspection=") ? "inspections" : hash.startsWith("project=") ? "projects" : hash.startsWith("instruments=") ? "instruments" : hash.startsWith("machining") ? "machining" : hash.startsWith("ncrs") ? "ncrs" : (hash || "inspections");
   document.querySelectorAll(".nav").forEach(b => { if (b.dataset.tab === tab) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   viewKeys = null; palExtra = [];
   try {
     if (hash.startsWith("inspection=")) await viewInspection(decodeURIComponent(hash.slice(11)));
     else if (hash.startsWith("project=")) await viewProject(decodeURIComponent(hash.slice(8)));
     else if (tab === "projects") await viewProjects();
+    else if (tab === "ncrs") await viewNcrs(hash.startsWith("ncrs=") ? decodeURIComponent(hash.slice(5)) : null);
     else if (tab === "machining") await viewMachining(hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "");
     else if (tab === "instruments") await viewInstruments(hash.startsWith("instruments=") ? decodeURIComponent(hash.slice(12)) : null);
     else if (tab === "tasks") await viewTasks();
@@ -1725,6 +1816,7 @@ route();
 cadStatus(false);
 api("/api/inspections").then(l => { runsCache = l; document.getElementById("n-insp").textContent = l.length || ""; }).catch(() => {});
 api("/api/projects").then(l => { document.getElementById("n-proj").textContent = l.length || ""; }).catch(() => {});
+api("/api/ncrs").then(l => { const open = l.filter(n => !["CLOSED", "CANCELLED"].includes(n.status)).length; document.getElementById("n-ncr").textContent = open || ""; }).catch(() => {});
 api("/api/instruments").then(d => { const bad = d.instruments.filter(i => i.calibration.state === "EXPIRED" || i.calibration.state === "DUE_SOON").length;
   document.getElementById("n-inst").textContent = bad ? bad + "!" : (d.instruments.length || ""); }).catch(() => {});
 </script>
