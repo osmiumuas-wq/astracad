@@ -8,7 +8,7 @@ Every number below was produced by a command run on 2026-10-17. Detail: `docs/ar
 |---|---|---|
 | `astracad_inspect` | DXF, vector PDF **or a scan (two-engine OCR)** → characteristics incl. **GD&T frames** → ISO 286 limits → balloons → PDF/XLSX/JSON → reopen-and-verify; revision comparison | Prototype, verified on 2 synthetic drawings (+ a vector-PDF rendering of one) |
 | `astracad_cad` | Versioned CAD adapter contract (12 connection states, 16 ops, risk classes), permission-gated orchestrator, **SOLIDWORKS adapter over `mac`**, discovery-only Creo/Fusion/AutoCAD, kernel-independent **STEP re-reader** | SOLIDWORKS create: END_TO_END_VERIFIED on the real app; others discovery only |
-| `astracad_core` | Persistent SQLite task engine (8 states, bounded retry, irreversible-step guard, restart recovery); deterministic request interpreter with provenance per fact; **projects** (`projects.py`): uploaded drawings preserved by SHA-256, read-only, type checked by content, re-hashed before every inspection | Tested (17 project tests incl. disguised files, truncation, traversal, tampering) |
+| `astracad_core` | Persistent SQLite task engine (8 states, bounded retry, irreversible-step guard, restart recovery); deterministic request interpreter with provenance per fact (**Text → CAD**: blocks, discs / flanges, stepped shafts, tubes / washers, hole rows and bolt circles; "Text to CAD" page in the workspace); **projects** (`projects.py`): uploaded drawings preserved by SHA-256, read-only, type checked by content, re-hashed before every inspection | Tested (17 project tests incl. disguised files, truncation, traversal, tampering) |
 | `astracad_inspect.measure` | **Measurement results**: inspector-entered values per sample (serial) and characteristic, append-only log, PASS/FAIL/NOT_EVALUABLE from the plan's limits, sample states, Cp/Cpk with n; results XLSX and AS9102 Form 3 results, re-opened and verified. In the workspace: Sample/Instrument in the review bar, Measure section per balloon (type, Enter, next balloon), Measurements matrix, export. **Instrument register** (Instruments page): calibration state, refusals at entry (unregistered, retired, expired, outside range, finer than resolution), 10:1 warning, instrument snapshot stored with each value | Tested (19) + used live |
 | `astracad_web` | Local workspace (stdlib HTTP, 127.0.0.1 only): CAD status, task history, inspection runs, change sets; run an inspection; **review** (approve / reject / correct / dismiss, named + audit log) and **re-issue** as a new linked run — the reviewed plan is never edited | Tested (13 web + 13 review tests incl. host/CSRF/traversal/413 refusals); **Projects**: create a project, drag-and-drop upload with progress, inspect the preserved copy (runs + re-issues stay in the project, `run.json` names project + SHA-256), download the original; verified live with the SOLIDWORKS 7550-021 DXF/PDF; **redesigned UI** (design system in `docs/design-system/MASTER.md`): interactive pan/zoom drawing with balloons drawn from the plan, linked list + inspector (tolerance band vs geometry, checks, history), command palette, keyboard review (J/K/A/R/C), light/dark; viewed live at 1440, 1024 and 375 px |
 | `astracad_inspect.dossier` | Quality dossier per run / serial: ZIP of every record + cover PDF + SHA-256 manifest, re-verified after writing; honest conformance statement with the open items; "Quality dossier" button on each inspection. Checklist templates can be retired (running checklists finish) | Tested (4 + 1) + used live |
@@ -19,18 +19,18 @@ Every number below was produced by a command run on 2026-10-17. Detail: `docs/ar
 | `astracad_mfg.machining` | 12 machining calculations with equation, units, assumptions and warnings; no built-in material data; Machining page in the workspace; escalated roughness values link to "max turning feed for this Ra" | Tested (11) + used live |
 | `astracad_mfg` | Explainable machining cost: geometry from CAD evidence (kernel volume + STEP re-read bbox, both hashed), every rate sourced and dated, nothing defaulted, 13 traced lines, JSON+XLSX re-read | Tested against a hand calculation (12 tests); example rate book is placeholders only |
 | `astracad_tol` | Worst-case / RSS / Monte Carlo stacks with explicit distributions, ISO 286 fits, selective assembly (plan + measured matching) | Tested against closed-form references |
-| `mecagent-alternative/` (C#, sibling tree) | `mac` runtime: live SOLIDWORKS COM automation; now **revolve** (`sketch.profile` + `feature.revolve`) and **linear pattern** | Executed on SW 2026 SP04.1; `mac selftest` 34/34 |
+| `mecagent-alternative/` (C#, sibling tree) | `mac` runtime: live SOLIDWORKS COM automation; now **revolve** (`sketch.profile` + `feature.revolve`) and **linear pattern** | Executed on SW 2026 SP04.1; `mac selftest` 36/36 |
 
 ## Test baseline
 
 | Where | Command | Result |
 |---|---|---|
-| Windows PC (Python 3.14.7) | `py -m pytest -q` | **497 passed**, 0 failed, 0 skipped (after the quality dossier) |
+| Windows PC (Python 3.14.7) | `py -m pytest -q` | **514 passed**, 0 failed, 0 skipped (after Text → CAD) |
 | Windows | `py tools/benchmark_layout.py` | 22 real SOLIDWORKS sheets, 175 balloons: **0 crossing leaders, 0 balloons on drawing ink, 0 unplaced**, mean leader 0.20 balloon diameters (before: 8 / 12 / 5 / 8.39) |
 | Windows | `py tools/regression.py` | 3 labelled synthetic fixtures (incl. GD&T): 20/20 characteristics, 0 wrong fields, 0 invented, 57/57 export checks |
 | Windows | `py -m astracad_inspect run tests\fixtures\bracket_gdt_synthetic.dxf` | 5 frame rows (position ⌀0.05 MMC A\|B\|C, 2-row ⊥/∥, flatness, profile) + 3 dims; malformed frame escalated; frames drawn in the layout; 19/19 exports |
 | Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic_scan300.png --units mm` | 3 of 9 callouts accepted (all correct: 100 ±0.1, ⌀20 H7, 45°), 7 escalated with both engines' readings, **0 wrong values**; ~25 s/page |
-| Windows | `mac selftest` | 34/34 (Pappus revolve vs closed-form cylinder, pattern = seed × count, profile refusals) |
+| Windows | `mac selftest` | 36/36 (Pappus revolve vs closed-form cylinder, pattern = seed × count, profile refusals, non-finite kernel values written as null) |
 | Cloud workspace (Python 3.13) | `python3 -m pytest -q` | 224 passed, 29 skipped (ISO-table rebuild sources only on the PC) |
 | Windows | `py -m astracad_inspect selftest` | 34/34 |
 | Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic.dxf` | 19/19 export reopen checks, exit 3 (delivered, correctly NOT releasable) |
@@ -66,6 +66,26 @@ unstated place counts are refused with the reason. Blank template lines ("TWO PL
 | 60 x 40 x 20 mm block | SUCCEEDED | V = 48000.000000 mm³ | size 60×40×20, V = 48000.000000 (polyhedral) |
 | shaft Ø25 x 100 mm | SUCCEEDED | V = 49087.385212 mm³ | size 25×25×100 exact; volume not_verifiable (curved) |
 | block + Ø10 centred hole | SUCCEEDED | V = 46429.288889 (mac's own ~2 ppm through-all allowance) | size ok; volume not_verifiable |
+
+**Text → CAD** (2026-10-17, `astracad_cad build "<request>" --out _out\text2cad --authorize KM`, and once from the
+workspace "Text to CAD" page, task T-6cbfcf81a9ec):
+
+| Request (abridged) | Task | Kernel volume vs prediction | Independent STEP re-read |
+|---|---|---|---|
+| stepped shaft dia 20 x 50, dia 30 x 10, dia 20 x 40 mm | SUCCEEDED | 35342.917353 = 35342.917353 | 30×30×100 exact |
+| washer OD 30 ID 16 thickness 3 mm | SUCCEEDED | 1517.389252 = 1517.389252 | 3×30×30 exact |
+| tube OD 40 wall 3 length 120 mm | SUCCEEDED | 41846.014146 = 41846.014146 | 40×40×120 exact |
+| flange Ø120 x 12, 6 x Ø10 on 90 PCD | SUCCEEDED | 130061.935859 = 130061.935859 | 12×120×120 exact |
+| plate 100x40x10, 4 x Ø6 at 20 pitch along the width, centred | SUCCEEDED | 38869.026645 = 38869.026645 | 10×40×100 exact |
+| plate 80x80x10, 4 x Ø8 on Ø50 bolt circle, centred, from 45° | SUCCEEDED | 61989.380702 = 61989.380702 | 10×80×80 exact |
+| disc Ø50 x 5, central Ø10 bore | SUCCEEDED | 9424.777961 = 9424.777961 | 5×50×50 exact |
+
+STEP volume of curved solids is reported not_verifiable (no kernel), never passed. First attempt (kept in
+`_out\text2cad\attempt1_through_all`) used through-all holes: volumes 0.4–2 ppm high, STEP thickness 5.000006
+→ the disc run was correctly EXECUTED_UNVERIFIED; holes now use depth = thickness. The hole-row run also exposed
+two `mac` defects, fixed: a stale mass read (volume 0, density NaN) crashed the JSON report and left the part
+open in SOLIDWORKS; non-finite values are now written as null and a zero-volume read of a solid is re-read once
+after a forced rebuild (noted in the report; that retry did not trigger in the re-runs, so it is untested live).
 
 **Editing existing parts** (`astracad_cad edit` → `mac edit`, which edits a copy):
 

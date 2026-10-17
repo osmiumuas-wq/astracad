@@ -377,6 +377,46 @@ dialog.pal::backdrop { background: rgba(8, 10, 14, .45); backdrop-filter: blur(2
 
 pre.code { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 12px; background: var(--surface-2); padding: 10px; border-radius: 8px; border: 1px solid var(--line); max-height: 320px; overflow: auto; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.mk-compose { display: grid; gap: 12px; }
+.mk-in { font-size: 15px; line-height: 1.5; min-height: 84px; }
+.mk-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { height: 28px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--ink-2); font-size: 12.5px; cursor: pointer; }
+.chip:hover { border-color: var(--accent-line); background: var(--accent-soft); color: var(--ink); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mk-auth { display: grid; grid-template-columns: minmax(180px, 240px) 1fr auto; gap: 14px; align-items: end; padding-top: 12px; border-top: 1px solid var(--line); }
+.mk-note { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; line-height: 1.45; }
+.mk-note .i { flex: none; margin-top: 2px; }
+.mk-out { display: grid; gap: 14px; margin-top: 14px; }
+.mk-state { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); }
+.mk-state > .i { width: 22px; height: 22px; flex: none; }
+.mk-state b { font-size: 14px; } .mk-state div div { color: var(--ink-2); font-size: 13px; }
+.mk-state.t-ok { background: var(--ok-soft); border-color: transparent; } .mk-state.t-ok > .i { color: var(--ok); }
+.mk-state.t-warn { background: var(--warn-soft); border-color: transparent; } .mk-state.t-warn > .i { color: var(--warn); }
+.mk-state.t-bad { background: var(--bad-soft); border-color: transparent; } .mk-state.t-bad > .i { color: var(--bad); }
+.mk-state.t-na > .i { color: var(--na); }
+.mk-app { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.mk-todo { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.mk-todo li { display: flex; gap: 8px; align-items: flex-start; padding: 9px 12px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); font-size: 13px; }
+.mk-todo li .i { flex: none; margin-top: 2px; } .mk-todo li.t-warn .i { color: var(--warn); } .mk-todo li.t-bad .i { color: var(--bad); }
+.mk-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.mk-facts { display: grid; gap: 12px; min-width: 0; }
+.mk-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mk-kpis > div { padding: 12px 14px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); display: grid; gap: 4px; }
+.mk-kpis span { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.mk-kpis b { font-size: 18px; font-weight: 600; } .mk-kpis small { font-size: 12px; color: var(--muted); font-weight: 400; }
+.pv { margin: 0; padding: 14px; border-radius: var(--radius); border: 1px solid var(--line); min-width: 0;
+  background: var(--surface) radial-gradient(var(--desk-dot) 1px, transparent 1px) 0 0 / 16px 16px; }
+.pv svg { display: block; width: 100%; height: auto; max-height: 360px; overflow: visible; }
+.pv figcaption { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: center; }
+.pv-empty { display: grid; place-items: center; min-height: 220px; }
+.pv-solid { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.pv-hole { fill: var(--surface); stroke: var(--accent); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.pv-axis { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 10 3 2 3; vector-effect: non-scaling-stroke; }
+.pv-dim { fill: var(--ink-2); font-family: var(--mono); } .pv-dim.tag { fill: var(--accent); font-weight: 600; }
+.mk-spec { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.mk-spec summary { padding: 10px 14px; cursor: pointer; font-size: 13px; color: var(--ink-2); }
+.mk-spec pre { margin: 0; padding: 12px 14px; border-top: 1px solid var(--line); max-height: 320px; overflow: auto; font-size: 12px; background: var(--surface-2); }
+@media (max-width: 900px) { .mk-grid { grid-template-columns: 1fr; } .mk-auth { grid-template-columns: 1fr; } .mk-app { display: none; } }
 .appcard { padding: 16px; display: grid; gap: 10px; }
 .appcard .nm { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 15px; }
 .appcard .nm .ic { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; background: var(--surface-3); color: var(--ink-2); }
@@ -436,6 +476,7 @@ pre.code { margin: 0; white-space: pre-wrap; word-break: break-word; font-family
     <div class="navlabel">Manufacturing</div>
     <button class="nav" data-tab="machining"><svg class="i" data-i="cube"></svg><span class="lbl">Machining</span></button>
     <div class="navlabel">Automation</div>
+    <button class="nav" data-tab="make"><svg class="i" data-i="play"></svg><span class="lbl">Text to CAD</span></button>
     <button class="nav" data-tab="tasks"><svg class="i" data-i="tasks"></svg><span class="lbl">Tasks</span></button>
     <button class="nav" data-tab="cad"><svg class="i" data-i="cube"></svg><span class="lbl">CAD connections</span></button>
     <div class="foot">
@@ -623,6 +664,7 @@ function palBase() {
     { label: "Checklist templates", group: "Page", icon: "tasks", run: () => location.hash = "#templates" },
     { label: "Revision changes", group: "Page", icon: "diff", run: () => location.hash = "#changes" },
     { label: "Tasks", group: "Page", icon: "tasks", run: () => location.hash = "#tasks" },
+    { label: "Text to CAD", group: "Page", icon: "play", run: () => location.hash = "#make" },
     { label: "CAD connections", group: "Page", icon: "cube", run: () => location.hash = "#cad" },
     { label: "Toggle dark mode", group: "Action", icon: "moon", run: () => themeBtn.click() },
     ...runsCache.map(r => ({ label: `${r.name} · ${ROUTE[r.route] || r.route} · rev ${r.revision ?? "–"}`, group: "Run", icon: "file",
@@ -1435,7 +1477,148 @@ async function viewCad() {
       h("div", { class: "nm" }, h("span", { class: "ic" }, ic("cube", "i lg")), h("div", {}, a.application, h("div", { class: "muted mono", style: "font-size:12px;font-weight:400" }, a.version || "version unknown")),
         h("span", { style: "margin-left:auto" }, pill(tone(a), tone(a) === "ok" ? "check" : tone(a) === "na" ? "ban" : "alert", human(String(a.state).toLowerCase())))),
       h("div", { class: "muted", style: "font-size:13px" }, a.detail)))) : card(null, null, null, empty("cube", "CAD probing is off", "Start the workspace without --no-cad-status to probe installed CAD.")),
-    h("p", { class: "muted", style: "margin-top:16px;font-size:13px" }, "Creating or editing parts is deliberately not offered here. It runs from the CLI with an explicit --authorize: py -m astracad_cad build | spec | edit …"));
+    h("p", { class: "muted", style: "margin-top:16px;font-size:13px" }, "New parts are built from Text to CAD, each authorised by name. Editing an existing part runs from the CLI, which only ever writes a copy: py -m astracad_cad build | spec | edit …"));
+}
+
+// ---------- Text to CAD ----------
+const MAKE_EXAMPLES = [
+  ["Stepped shaft", "Create a stepped shaft in SolidWorks: dia 20 x 50, dia 30 x 10, dia 20 x 40 mm, export STEP"],
+  ["Flange", "SolidWorks flange disc diameter 120 mm thick 12 mm with 6 x 10 mm holes on a 90 mm PCD, export STEP"],
+  ["Plate, hole row", "SolidWorks 100 x 40 x 10 mm plate with 4 x 6 mm holes at 20 mm pitch along the width, centred, export STEP"],
+  ["Plate, bolt circle", "SolidWorks 80 x 80 x 10 mm plate with 4 x 8 mm holes on a 50 mm bolt circle, centred, starting at 45 deg, export STEP"],
+  ["Tube", "SolidWorks tube OD 40 mm wall thickness 3 mm length 120 mm, export STEP"],
+  ["Washer", "SolidWorks washer OD 30 mm ID 16 mm thickness 3 mm, export STEP"],
+];
+const PROV = { USER_SPECIFIED: ["ok", "user", "Stated"], CALCULATED: ["info", "check", "Calculated"], AI_PROPOSED: ["warn", "alert", "Proposed"] };
+const g6 = v => typeof v === "number" ? String(+v.toPrecision(10)) : Array.isArray(v) ? (v.length && Array.isArray(v[0]) ? v.map(p => "(" + p.map(g6).join(", ") + ")").join(" ") : v.map(g6).join(" × ")) : String(v);
+
+// Front view of a prism / disc with its holes, or the section of a revolved profile, drawn from
+// the spec itself (the same JSON that is sent to the CAD runtime), never from the request text.
+function partPreview(spec) {
+  const F = spec?.features || [], by = op => F.filter(f => f.$op === op);
+  const rect = by("sketch.rectangle")[0], circ = by("sketch.circle")[0], prof = by("sketch.profile")[0];
+  const ext = by("feature.extrude")[0];
+  let holes = by("feature.hole").map(f => ({ x: f.args.center[0], y: f.args.center[1], d: f.args.diameter }));
+  for (const p of by("feature.pattern.linear")) {
+    const seed = F.find(f => f.id === p.args.feature); if (!seed) continue;
+    for (let k = 1; k < p.args.count; k++) holes.push({ x: seed.args.center[0] + (p.args.direction === "X" ? k * p.args.spacing : 0), y: seed.args.center[1] + (p.args.direction === "Y" ? k * p.args.spacing : 0), d: seed.args.diameter });
+  }
+  let x0, y0, x1, y1; const kids = [], labels = [];
+  if (prof) {
+    const pts = prof.args.points, xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    x0 = Math.min(...xs); x1 = Math.max(...xs); y1 = Math.max(...ys); y0 = -y1;
+    const ring = pts.map(p => p.join(",")).join(" "), mirror = pts.map(p => p[0] + "," + (-p[1])).join(" ");
+    kids.push(s("polygon", { points: ring, class: "pv-solid" }), s("polygon", { points: mirror, class: "pv-solid" }));
+    kids.push(s("line", { x1: x0 - (x1 - x0) * .06, y1: 0, x2: x1 + (x1 - x0) * .06, y2: 0, class: "pv-axis" }));
+    // one Ø label per step (the outer edge segments parallel to the axis)
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      if (a[1] > 0 && Math.abs(a[1] - b[1]) < 1e-9 && Math.abs(a[0] - b[0]) > 1e-9) labels.push({ x: (a[0] + b[0]) / 2, y: a[1], t: `Ø${g6(2 * a[1])} × ${g6(Math.abs(a[0] - b[0]))}`, above: true });
+    }
+  } else if (rect || circ) {
+    if (rect) { x0 = 0; y0 = 0; x1 = rect.args.width; y1 = rect.args.height; kids.push(s("rect", { x: 0, y: 0, width: x1, height: y1, class: "pv-solid" })); }
+    else { const r = circ.args.radius; x0 = -r; y0 = -r; x1 = r; y1 = r; kids.push(s("circle", { cx: 0, cy: 0, r, class: "pv-solid" }), s("line", { x1: -r * 1.08, y1: 0, x2: r * 1.08, y2: 0, class: "pv-axis" }), s("line", { x1: 0, y1: -r * 1.08, x2: 0, y2: r * 1.08, class: "pv-axis" })); }
+    for (const c of holes) kids.push(s("circle", { cx: c.x, cy: c.y, r: c.d / 2, class: "pv-hole" }));
+    if (rect) labels.push({ x: x1 / 2, y: y0, t: g6(x1), below: true }, { x: x1, y: y1 / 2, t: g6(y1), side: true });
+    else labels.push({ x: 0, y: y0, t: "Ø" + g6(2 * circ.args.radius), below: true });
+    if (holes.length) labels.push({ x: holes[0].x, y: holes[0].y + holes[0].d / 2, t: `${holes.length > 1 ? holes.length + "× " : ""}Ø${g6(holes[0].d)}`, above: true, tag: true });
+  } else return null;
+  const span = Math.max(x1 - x0, y1 - y0), m = span * .16, fs = span * .052;
+  const vb = [x0 - m, -(y1 + m), (x1 - x0) + 2 * m, (y1 - y0) + 2 * m];
+  const g = s("g", { transform: "scale(1,-1)" }, ...kids);
+  const txt = labels.map(l => s("text", { x: l.side ? l.x + fs * .5 : l.x, y: -(l.below ? l.y - fs * 1.4 : l.above ? l.y + fs * .55 : l.y), "font-size": fs, class: "pv-dim" + (l.tag ? " tag" : ""), "text-anchor": l.side ? "start" : "middle", "dominant-baseline": "middle" }, l.t));
+  const depth = ext ? `extruded ${g6(ext.args.depth)} mm` : prof ? "revolved 360° about the axis" : "";
+  return h("figure", { class: "pv" }, s("svg", { viewBox: vb.join(" "), role: "img", "aria-label": "part preview" }, g, ...txt),
+    h("figcaption", {}, prof ? "Section through the axis" : "Front view", depth ? " · " + depth : "", " · mm"));
+}
+
+async function viewMake() {
+  crumbs("Text to CAD");
+  const req = h("textarea", { class: "input mk-in", rows: 3, maxlength: 2000, spellcheck: false, placeholder: "e.g. SolidWorks 100 x 40 x 10 mm plate with 4 x 6 mm holes at 20 mm pitch along the width, centred, export STEP" });
+  const who = h("input", { class: "input", maxlength: 80, autocomplete: "name", placeholder: "your name" });
+  const go = h("button", { class: "btn primary", disabled: true }, ic("play"), "Build in SolidWorks");
+  const out = h("div", { class: "mk-out" }), result = h("div", {});
+  let seq = 0, last = null, timer = null;
+  const chips = h("div", { class: "mk-chips" }, MAKE_EXAMPLES.map(([t, r]) => h("button", { class: "chip", onclick: () => { req.value = r; req.focus(); run(); } }, t)));
+  try { req.value = sessionStorage.getItem("mk.req") || ""; who.value = localStorage.getItem("mk.who") || ""; } catch (e) {}
+
+  const gate = () => {
+    const ok = last && last.executable && last.intent === "create_part" && last.cad_enabled && who.value.trim();
+    go.disabled = !ok;
+    go.title = !last ? "describe a part first" : !last.executable ? "the request is incomplete or ambiguous" : last.intent !== "create_part" ? "edits of existing parts run from the command line" : !last.cad_enabled ? "CAD is switched off in this workspace" : !who.value.trim() ? "type your name to authorise the build" : "runs once, in a new folder, then re-measures the result";
+  };
+  async function run() {
+    const text = req.value.trim(); const my = ++seq;
+    try { sessionStorage.setItem("mk.req", req.value); } catch (e) {}
+    if (!text) { last = null; out.replaceChildren(empty("cube", "Describe a part", "A shape, its sizes with units, the CAD application, and where any holes go.")); gate(); return; }
+    let it; try { it = await post("/api/cad/interpret", { request: text }); } catch (e) { if (my === seq) out.replaceChildren(empty("alert", "Not interpreted", e.message)); return; }
+    if (my !== seq) return;
+    last = it; gate(); render(it);
+  }
+  function render(it) {
+    const state = it.executable ? ["ok", "check", "Ready to build", "Every value is stated or calculated from stated values."]
+      : it.intent === "unrecognised" ? ["na", "ban", "Not recognised", "The request does not name a supported shape."]
+      : it.ambiguities.length ? ["warn", "alert", "Needs a decision", "Something could be read more than one way. Nothing is guessed."]
+      : ["warn", "info", "Needs information", "Add what is listed below; nothing is defaulted."];
+    const pv = it.spec ? partPreview(it.spec) : null;
+    const exp = it.expect || {};
+    out.replaceChildren(
+      h("div", { class: `mk-state t-${state[0]}` }, ic(state[1]), h("div", {}, h("b", {}, state[2]), h("div", {}, state[3])),
+        h("span", { class: "mk-app" }, it.application ? human(it.application) : "no application", it.exports?.length ? " · " + it.exports.map(e => e.toUpperCase()).join(", ") : "")),
+      it.missing.length || it.ambiguities.length ? h("ul", { class: "mk-todo" },
+        it.missing.map(m => h("li", { class: "t-warn" }, ic("info"), h("span", {}, h("b", {}, "Missing: "), m))),
+        it.ambiguities.map(m => h("li", { class: "t-warn" }, ic("alert"), h("span", {}, h("b", {}, "Decide: "), m)))) : null,
+      h("div", { class: "mk-grid" },
+        pv || h("div", { class: "pv pv-empty" }, empty("cube", "No geometry yet", "A preview appears once the shape and its sizes are known.")),
+        h("div", { class: "mk-facts" },
+          exp.size_mm ? h("div", { class: "mk-kpis" },
+            h("div", {}, h("span", {}, "Envelope"), h("b", { class: "mono" }, exp.size_mm.map(g6).join(" × "), h("small", {}, " mm"))),
+            h("div", {}, h("span", {}, "Volume"), h("b", { class: "mono" }, (+exp.volume_mm3).toLocaleString(undefined, { maximumFractionDigits: 3 }), h("small", {}, " mm³")))) : null,
+          it.facts.length ? dataTable([
+            { k: "name", label: "Value", render: f => h("span", { class: "mono" }, f.name) },
+            { k: "value", label: "Reads as", render: f => h("span", { class: "mono" }, g6(f.value), f.unit ? " " + f.unit : "") },
+            { k: "provenance", label: "Source", render: f => { const p = PROV[f.provenance] || ["na", null, f.provenance]; return h("span", { title: f.source_text || "" }, pill(p[0], p[1], p[2])); } },
+          ], it.facts, {}) : null)),
+      it.spec ? h("details", { class: "mk-spec" }, h("summary", {}, "Part spec sent to the CAD runtime (JSON)"), h("pre", { class: "mono" }, JSON.stringify(it.spec, null, 2))) : null);
+  }
+  req.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 220); });
+  req.addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !go.disabled) go.click(); });
+  who.addEventListener("input", () => { try { localStorage.setItem("mk.who", who.value); } catch (e) {} gate(); });
+  go.addEventListener("click", async () => {
+    go.disabled = true; go.replaceChildren(h("span", { class: "spin" }), " Building in SolidWorks…");
+    result.replaceChildren(card("Build", "SolidWorks is building the part, exporting STEP, then ASTraCAD re-reads the file independently.", null, h("div", { class: "body" }, h("div", { class: "skel", style: "height:14px;width:70%" }), h("div", { class: "skel", style: "height:14px;width:45%;margin-top:8px" }))));
+    try {
+      const r = await post("/api/cad/build", { request: req.value.trim(), authorize: who.value.trim() });
+      const tone = r.status === "SUCCEEDED" ? "ok" : r.status === "EXECUTED_UNVERIFIED" ? "warn" : "bad";
+      const head = r.status === "SUCCEEDED" ? "Built and verified" : r.status === "EXECUTED_UNVERIFIED" ? "Built, NOT verified" : "Not built";
+      toast(`${head} · task ${r.task_id}`, tone);
+      const outc = { passed: ["ok", "check"], failed: ["bad", "x"], not_verifiable: ["na", "info"] };
+      result.replaceChildren(card(head, `Task ${r.task_id} · authorised by ${r.authorized_by} · evidence ${String(r.evidence || "none").toLowerCase().replace(/_/g, " ")}`,
+        r.files.map(f => h("a", { class: "btn sm", href: "/file?key=" + encodeURIComponent(f.key), download: f.name }, ic("file"), f.name.split(".").pop().toUpperCase(), h("span", { class: "muted", style: "margin-left:4px" }, fmtBytes(f.bytes)))),
+        h("div", { class: `mk-state t-${tone}`, style: "margin:0 16px 12px" }, ic(tone === "ok" ? "shield" : "alert"), h("div", {}, h("b", {}, head),
+          h("div", {}, `${r.checks.filter(c => c.outcome === "passed").length} checks passed, ${r.checks.filter(c => c.outcome === "failed").length} failed, ${r.checks.filter(c => c.outcome === "not_verifiable").length} not verifiable (stated, never counted as passed)`))),
+        r.errors.length ? h("ul", { class: "mk-todo", style: "margin:0 16px 12px" }, r.errors.slice(0, 4).map(e => h("li", { class: "t-bad" }, ic("x"), h("span", { class: "mono", style: "white-space:pre-wrap" }, String(e).slice(0, 600))))) : null,
+        dataTable([
+          { k: "name", label: "Check", render: c => h("span", { class: "mono" }, c.name.replace(/^step:[^:]+:/, "STEP re-read: ").replace(/^kernel:/, "SolidWorks: ")) },
+          { k: "expected", label: "Expected", render: c => h("span", { class: "mono subline" }, String(c.expected ?? "").slice(0, 60)) },
+          { k: "actual", label: "Measured", render: c => h("span", { class: "mono subline", title: c.why || "" }, String(c.actual ?? "").slice(0, 60)) },
+          { k: "outcome", label: "Outcome", render: c => { const o = outc[c.outcome] || ["na", null]; return h("span", { title: c.why || "" }, pill(o[0], o[1], human(c.outcome))); } },
+        ], r.checks.filter(c => !/^kernel:feature:/.test(c.name)), {})));
+    } catch (e) { toast("Not built: " + e.message.replace(/^\w+Error: /, ""), "bad"); result.replaceChildren(card("Not built", null, null, empty("alert", "The build did not run", e.message))); }
+    finally { go.replaceChildren(ic("play"), "Build in SolidWorks"); gate(); }
+  });
+
+  main.replaceChildren(
+    h("div", { class: "ph" }, h("div", {}, h("h1", {}, "Text to CAD"), h("p", {}, "Describe a part in plain words. You see exactly what was understood, and where every number came from, before anything runs."))),
+    card(null, null, null, h("div", { class: "body mk-compose" },
+      req, chips,
+      h("div", { class: "mk-auth" },
+        h("label", { class: "field" }, h("span", {}, "Authorised by"), who),
+        h("div", { class: "muted mk-note" }, ic("shield"), "Your name authorises one build into a new folder. The part is re-measured by SolidWorks and its STEP file re-read independently; a value that cannot be checked is reported as not verifiable."),
+        go))),
+    out, result);
+  if (req.value.trim()) run(); else run();
+  gate();
 }
 
 // ---------- Projects ----------
@@ -1936,6 +2119,7 @@ async function route() {
     else if (tab === "tasks") await viewTasks();
     else if (tab === "changes") await viewChanges();
     else if (tab === "cad") await viewCad();
+    else if (tab === "make") await viewMake();
     else await viewInspections();
   } catch (e) { main.replaceChildren(card(null, null, null, empty("alert", "Could not load this page", e.message))); }
   window.scrollTo(0, 0);

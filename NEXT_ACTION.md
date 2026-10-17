@@ -1,5 +1,16 @@
 # NEXT ACTION
 
+## Done 2026-10-17: Text → CAD (constitution Part 6 / C-18)
+
+    py -m astracad_cad build "SolidWorks 80 x 80 x 10 mm plate with 4 x 8 mm holes on a 50 mm bolt circle, centred, starting at 45 deg, export STEP" --out OUT --authorize KM
+    py -m astracad_web --db DB --runs OUT   ->  Text to CAD
+
+Seven shape requests built live in SOLIDWORKS 2026, each END_TO_END_VERIFIED (kernel volume = prediction,
+STEP size exact; see CURRENT_STATE). Next here: fillets / chamfers on named edges (needs a way to name an
+edge without guessing - e.g. "all outside vertical edges" resolved from the kernel and listed for
+confirmation), slots and pockets, a circular-pattern op in `mac` (bolt circles are N separate holes today),
+and the same requests through a second CAD system when one is installed.
+
 Done 2026-10-17: open an existing SOLIDWORKS part and change a named dimension — live, END_TO_END_VERIFIED
 (see `CURRENT_STATE.md`). The constitution's own example now runs when the request names the file
 and the dimension:

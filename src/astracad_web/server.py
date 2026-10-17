@@ -49,6 +49,7 @@ class Workspace:
         self._status: tuple[float, list] | None = None
         self._status_ttl = status_ttl_s
         self._lock = threading.Lock()
+        self._cad_lock = threading.Lock()
 
     # ---- CAD status ---------------------------------------------------------------------------
     def status(self, refresh: bool = False) -> dict:
@@ -71,6 +72,69 @@ class Workspace:
                  "created_utc": t.created_utc, "updated_utc": t.updated_utc,
                  "outcome": t.outcome, "retries": t.retries}
                 for t in TaskStore(self.db).list()]
+
+    # ---- text -> CAD --------------------------------------------------------------------------
+    def cad_interpret(self, request: str) -> dict:
+        """Parse a part request. Never executes and never contacts a CAD application."""
+        from astracad_core.requests import interpret
+        text = str(request or "").strip()
+        if not text or len(text) > 2000:
+            raise ValueError("a request of 1 to 2000 characters is needed")
+        d = interpret(text).to_dict()
+        d["cad_enabled"] = self._orch_factory is not None
+        return d
+
+    def cad_build(self, request: str, authorize: str) -> dict:
+        """Build a fully specified new part, once, under the name the user typed.
+
+        The typed name is the authorisation for this one CREATE_FEATURE run, scoped to a fresh
+        folder; nothing runs if the interpretation has anything missing or ambiguous. One build at
+        a time: a second request while one runs is refused, not queued.
+        """
+        from astracad_cad.contract import Authorization, Op
+        from astracad_cad.orchestrator import CadRequest
+        from astracad_core.requests import interpret
+        who = re.sub(r"\s+", " ", str(authorize or "")).strip()
+        if not who:
+            raise PermissionError("type your name to authorise this build")
+        if len(who) > 80:
+            raise ValueError("authoriser name is limited to 80 characters")
+        if self._orch_factory is None:
+            raise PermissionError("CAD is switched off in this workspace (started with --no-cad-status)")
+        text = str(request or "").strip()
+        it = interpret(text)
+        if not it.executable:
+            raise ValueError("not executable: " + "; ".join(it.missing + it.ambiguities or [it.intent]))
+        if it.intent != "create_part":
+            raise ValueError("the workspace builds new parts; edits of existing parts run from "
+                             "the command line (astracad_cad build / edit), which never writes the source")
+        if not self._cad_lock.acquire(blocking=False):
+            raise PermissionError("another CAD build is running; wait for it to finish")
+        try:
+            out = (self.runs[0] / "cad" / f"{time.strftime('%Y%m%d-%H%M%S')}_{it.spec['name']}").resolve()
+            out.mkdir(parents=True, exist_ok=False)
+            auth = Authorization(who, frozenset({Op.CREATE_FEATURE}), (str(out),),
+                                 note="granted in the workspace for one build")
+            req = CadRequest(it.application, Op.CREATE_FEATURE,
+                             {"spec": it.spec, "out_dir": str(out), "expect": dict(it.expect)},
+                             summary=it.request)
+            tid, res = self._orch_factory(str(self.db)).submit(req, auth)
+        finally:
+            self._cad_lock.release()
+        if res is None:
+            raise RuntimeError(f"task {tid} did not run")
+        r = res.to_dict()
+        files = []
+        for a in r.get("artifacts") or []:
+            p = Path(a["path"] if isinstance(a, dict) else a)
+            try:
+                files.append({"name": p.name, "key": self.key_for(p), "bytes": p.stat().st_size})
+            except (OSError, ValueError):
+                continue
+        return {"task_id": tid, "status": r.get("status"), "evidence": r.get("evidence"),
+                "checks": r.get("checks") or [], "errors": r.get("errors") or [],
+                "files": files, "folder": self.key_for(out), "authorized_by": who,
+                "expect": it.expect, "spec": it.spec}
 
     def task(self, task_id: str) -> dict:
         t = TaskStore(self.db).get(task_id)
@@ -895,6 +959,10 @@ def make_handler(ws: Workspace):
                     return self._json(ws.ncr_action(body))
                 if u.path == "/api/checklist_template":
                     return self._json(ws.save_checklist_template(body))
+                if u.path == "/api/cad/interpret":
+                    return self._json(ws.cad_interpret(body.get("request", "")))
+                if u.path == "/api/cad/build":
+                    return self._json(ws.cad_build(body.get("request", ""), body.get("authorize", "")))
                 if u.path == "/api/dossier":
                     return self._json(ws.dossier(str(body.get("key", "")), body.get("sample")))
                 if u.path == "/api/export_checklist":

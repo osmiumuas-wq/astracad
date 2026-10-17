@@ -259,6 +259,21 @@ covered by a check that now fails if it regresses.
 - The design method (UI UX Pro Max) has no manufacturing-inspection category; the nearest rows were
   combined — see `docs/design-system/MASTER.md`.
 
+## H. Text → CAD (2026-10-17)
+
+- Shapes: block / plate, cylinder / disc / flange, stepped shaft, tube / washer / spacer, plus through holes
+  (one, a straight row, a bolt circle) in the front face. No fillets, chamfers, threads, slots, pockets,
+  blind holes, counterbores or features on other faces; such words are not read and the request still
+  builds without them only if nothing in it is missing - check the facts table, which lists what was read.
+- Patterns are interpreted from fixed phrasings ("4 x 6 mm holes at 20 mm pitch along the width,
+  centred", "6 x 10 mm holes on a 90 mm PCD starting at 30 deg"). Anything else is reported missing.
+- Bolt circles are built as N separate hole features (`mac` has no circular pattern), so a later edit of
+  the hole size touches N dimensions.
+- On a round part the start angle of a bolt circle is AI_PROPOSED (0°) without blocking the build, because
+  it does not change size or volume; it does change where the holes are. Say "starting at A deg" if it matters.
+- Only SOLIDWORKS executes. Builds run one at a time in the workspace; the page waits for the build
+  (about 10-60 s) and a second build is refused, not queued.
+
 ## G. Measurement results (2026-10-17)
 
 - Values are typed by the inspector; nothing reads a CMM or gauge file yet. The instrument register
