@@ -91,3 +91,10 @@ After that: explainable costing module (`astracad_mfg`) with sourced, dated inpu
 2. Drawing route: add a sheet format/title block and tolerances (from a spec or ISO 2768 class chosen by the
    user) so the inspection plan has limits; investigate the one-off Model Items hang.
 3. Dimension the revolve profile so revolved parts reach drawings with their diameters.
+
+## 9. Done 2026-10-17: industrial-drawing benchmark (see CURRENT_STATE)
+
+Next to raise it further:
+1. Your own drawings into `_sources\corpus\` (any CAD), scored the same way — vendor samples are one style.
+2. PDF: GD&T frames drawn as graphics (gtolwitnessline frame missed), remaining balloons on `leg`.
+3. OCR route on the same sheets (see evaluation-results), then raise its recall with region re-reads.

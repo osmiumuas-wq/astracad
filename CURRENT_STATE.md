@@ -18,7 +18,7 @@ Every number below was produced by a command run on 2026-10-17. Detail: `docs/ar
 
 | Where | Command | Result |
 |---|---|---|
-| Windows PC (Python 3.14.7) | `py -m pytest -q` | **329 passed**, 0 failed, 0 skipped (after costing module) |
+| Windows PC (Python 3.14.7) | `py -m pytest -q` | **333 passed**, 0 failed, 0 skipped (after the real-drawing benchmark fixes) |
 | Windows | `py tools/regression.py` | 3 labelled synthetic fixtures (incl. GD&T): 20/20 characteristics, 0 wrong fields, 0 invented, 57/57 export checks |
 | Windows | `py -m astracad_inspect run tests\fixtures\bracket_gdt_synthetic.dxf` | 5 frame rows (position ⌀0.05 MMC A\|B\|C, 2-row ⊥/∥, flatness, profile) + 3 dims; malformed frame escalated; frames drawn in the layout; 19/19 exports |
 | Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic_scan300.png --units mm` | 3 of 9 callouts accepted (all correct: 100 ±0.1, ⌀20 H7, 45°), 7 escalated with both engines' readings, **0 wrong values**; ~25 s/page |
@@ -27,6 +27,19 @@ Every number below was produced by a command run on 2026-10-17. Detail: `docs/ar
 | Windows | `py -m astracad_inspect selftest` | 34/34 |
 | Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic.dxf` | 19/19 export reopen checks, exit 3 (delivered, correctly NOT releasable) |
 | Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic.pdf --units mm` | every callout the DXF route resolves (9) read with the same kind, nominal and limits; stacked + rotated tolerances joined; 19/19 export checks; every row needs review (no geometry cross-check from a PDF) |
+
+## Industrial-drawing accuracy (first real benchmark, 2026-10-17)
+
+13 SOLIDWORKS sample drawings / 18 sheets (mould bases, punch holder, AutoCAD-origin flange in inches,
+food-processor housing, weldments), scored against dimensions read from the SOLIDWORKS API
+(`mac export-drawing` -> `py tools/benchmark_sw.py`; detail in docs/competitive/evaluation-results.md):
+
+| Route | Recall | Precision | Tolerances | Same-day start |
+|---|---|---|---|---|
+| DXF | 82.8% (97.5% of dims present in the file) | 97.5% | 2/2 | 61.3% / 72.2% |
+| Vector PDF | 79.6% | 80.4% | 2/2 | 69.9% / 19.3% |
+
+Found a real drafting error in a SOLIDWORKS sample (prints 15 for a 150 mm span) — now a blocking finding.
 
 ## Real-application evidence (SOLIDWORKS 2026 SP04.1, 2026-10-17)
 
@@ -100,7 +113,8 @@ Earlier this session: pipeline crashed when PyMuPDF was absent → pluggable rea
 
 ## Known limitations (top)
 
-- Inspection accuracy measured only on synthetic DXF; no real-drawing corpus (M2).
+- Real-drawing accuracy measured on 18 SOLIDWORKS sample sheets only (vendor samples, one CAD system);
+  no customer drawings yet. SOLIDWORKS cannot export DXF from assembly drawings here (error 1): PDF only.
 - Scans: OCR recall is low on cluttered text (3/9 on the synthetic scan — circles/lines crossing text, stacked
   tolerances, vertical text); precision is the gate (both engines must agree). Windows-only (Windows.Media.Ocr).
 - GD&T: frames read from DXF TOLERANCE entities and Unicode text; MMC/LMC bonus not computed; datum feature

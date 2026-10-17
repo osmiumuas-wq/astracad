@@ -102,3 +102,67 @@ def test_sheet_numbers_that_are_not_callouts_are_classified(tmp_path):
             "PDF_TEXT:table cell"} <= kinds
     dia = next(ch for ch in b.characteristics if ch.kind is CharKind.DIAMETER)
     assert any("vector graphics" in h.detail for h in dia.history)
+
+
+def _frame_pdf(path, frames):
+    """Draw feature control frames as graphics (like SOLIDWORKS): boxes, a stroked symbol, the
+    zone and datum letters as text."""
+    c = canvas.Canvas(str(path), pagesize=landscape(A3))
+    c.setLineWidth(0.25)
+    for k, (symbol, zone, datums) in enumerate(frames):
+        x, y, h = 60 * mm, (250 - 22 * k) * mm, 7 * mm
+        cells = [h, 14 * mm] + [h] * len(datums)
+        c.rect(x, y, sum(cells), h)
+        xx = x
+        for w in cells[:-1]:
+            xx += w
+            c.line(xx, y, xx, y + h)
+        sx, sy, r = x + h / 2, y + h / 2, h * 0.3
+        if symbol == "position":
+            c.circle(sx, sy, r * 0.7); c.line(sx - r, sy, sx + r, sy); c.line(sx, sy - r, sx, sy + r)
+        elif symbol == "perpendicularity":
+            c.line(sx - r, sy - r, sx + r, sy - r); c.line(sx, sy - r, sx, sy + r)
+        elif symbol == "parallelism":
+            c.line(sx - r, sy - r, sx - r * 0.2, sy + r); c.line(sx + r * 0.2, sy - r, sx + r, sy + r)
+        elif symbol == "flatness":
+            p = c.beginPath(); p.moveTo(sx - r, sy - r * 0.6); p.lineTo(sx + r * 0.5, sy - r * 0.6)
+            p.lineTo(sx + r, sy + r * 0.6); p.lineTo(sx - r * 0.5, sy + r * 0.6); p.close(); c.drawPath(p)
+        elif symbol == "circularity":
+            c.circle(sx, sy, r)
+        elif symbol == "cylindricity":
+            c.circle(sx, sy, r * 0.6); c.line(sx - r, sy - r, sx - r * 0.3, sy + r); c.line(sx + r * 0.3, sy - r, sx + r, sy + r)
+        c.setFont("Helvetica", 9)
+        c.drawString(x + h + 2 * mm, y + 2.2 * mm, zone)
+        xx = x + h + 14 * mm
+        for d in datums:
+            c.drawString(xx + 2.2 * mm, y + 2.2 * mm, d)
+            xx += h
+    c.showPage()
+    c.save()
+    return path
+
+
+def test_frames_drawn_as_graphics_are_read_with_symbol_and_datums(tmp_path):
+    frames = [("position", "0.05", ["A", "B", "C"]), ("perpendicularity", "0.02", ["A"]),
+              ("parallelism", "0.03", ["B"]), ("flatness", "0.01", []),
+              ("circularity", "0.008", []), ("cylindricity", "0.015", [])]
+    b = read_pdf(_frame_pdf(tmp_path / "f.pdf", frames), "mm")
+    got = {(c.tolerance.symbol, c.tolerance.zone, c.tolerance.datums)
+           for c in b.characteristics if c.kind is CharKind.GEOMETRIC}
+    want = {(s, float(z), tuple(d)) for s, z, d in frames}
+    assert got == want
+    assert not [c for c in b.characteristics if c.kind is not CharKind.GEOMETRIC]
+
+
+def test_unrecognised_symbol_is_escalated_not_guessed(tmp_path):
+    p = tmp_path / "u.pdf"
+    c = canvas.Canvas(str(p), pagesize=landscape(A3))
+    x, y, h = 60 * mm, 200 * mm, 7 * mm
+    c.rect(x, y, h + 14 * mm, h); c.line(x + h, y, x + h, y + h)
+    for k in range(4):                                     # a scribble: not an ISO 1101 symbol
+        c.line(x + 1.5 * mm + k * mm, y + 1.5 * mm, x + 2 * mm + k * mm, y + 5.5 * mm)
+    c.setFont("Helvetica", 9); c.drawString(x + h + 2 * mm, y + 2.2 * mm, "0.10")
+    c.showPage(); c.save()
+    b = read_pdf(p, "mm")
+    assert not b.characteristics
+    assert any("not recognised" in u.reason for u in b.uninterpreted)

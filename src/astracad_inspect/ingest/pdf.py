@@ -114,7 +114,7 @@ def _path_segments(o) -> list[tuple[float, float, float, float]]:
 
     import pypdfium2.raw as raw
     a, b, c, d, e, f = o.get_matrix().get()
-    out, prev, ctrl = [], None, []
+    out, prev, ctrl, start = [], None, [], None
     x, y = ctypes.c_float(), ctypes.c_float()
     for i in range(raw.FPDFPath_CountSegments(o.raw)):
         sg = raw.FPDFPath_GetPathSegment(o.raw, i)
@@ -134,11 +134,20 @@ def _path_segments(o) -> list[tuple[float, float, float, float]]:
                     out.append((last[0], last[1], qx, qy))
                     last = (qx, qy)
                 prev, ctrl = (x3, y3), []
+                if raw.FPDFPathSegment_GetClose(sg) and start is not None and prev != start:
+                    out.append((prev[0], prev[1], start[0], start[1]))
+                    prev = start
             continue
         ctrl = []
-        if kind != raw.FPDF_SEGMENT_MOVETO and prev is not None:
+        if kind == raw.FPDF_SEGMENT_MOVETO:
+            start = (px, py)
+        elif prev is not None:
             out.append((prev[0], prev[1], px, py))
         prev = (px, py)
+        # a closing flag means an edge back to the subpath start (rectangles are drawn this way)
+        if raw.FPDFPathSegment_GetClose(sg) and start is not None and prev != start:
+            out.append((prev[0], prev[1], start[0], start[1]))
+            prev = start
     return out
 
 
@@ -153,6 +162,7 @@ class SheetGeometry:
     def __init__(self, segs, page_w: float, page_h: float, centres=()):
         import numpy as np
         self.centres = list(centres)          # centres of every text group on the page
+        self.texts: list = []                 # (cx, cy, text) of every text group on the page
         self.w, self.h = page_w, page_h
         a = np.asarray(segs or [(0, 0, 0, 0)], dtype=float)
         self.seg = a
@@ -211,6 +221,62 @@ class SheetGeometry:
         slope = np.degrees(np.arctan2(np.abs(L[:, 3] - L[:, 1]), np.abs(L[:, 2] - L[:, 0]) + 1e-9))
         return bool(((ln > 0.6 * med * 2) & (slope > 30) & (slope < 80)).any())
 
+    def frame_at(self, box, th: float):
+        """A feature control frame drawn as graphics around a number: a row of square-ish cells of
+        one height, a stroke-only symbol cell left of the value. Returns (symbol or None, datums,
+        evidence) or None when the number is not in such a frame."""
+        import numpy as np
+        x0, y0, x1, y1 = box
+        cy = (y0 + y1) / 2
+        H, V = self.horiz, self.vert
+        hx0, hx1 = np.minimum(H[:, 0], H[:, 2]), np.maximum(H[:, 0], H[:, 2])
+        top = H[(hx0 <= x0) & (hx1 >= x1) & (H[:, 1] > y1 - 0.1) & (H[:, 1] < cy + 2.1 * th)]
+        bot = H[(hx0 <= x0) & (hx1 >= x1) & (H[:, 1] < y0 + 0.1) & (H[:, 1] > cy - 2.1 * th)]
+        if not len(top) or not len(bot):
+            return None
+        yt, yb = top[:, 1].min(), bot[:, 1].max()
+        fh = yt - yb
+        if not (1.2 * th <= fh <= 4.0 * th):           # SOLIDWORKS 1.96, reportlab 3.02 measured
+            return None
+        vy0, vy1 = np.minimum(V[:, 1], V[:, 3]), np.maximum(V[:, 1], V[:, 3])
+        # cell dividers of a frame start and end ON its top and bottom rules; part edges and
+        # extension lines that merely pass through do not (measured: a leg dimension '1500' boxed
+        # by part edges had been read as a frame)
+        seps = V[(np.abs(vy0 - yb) < 0.3) & (np.abs(vy1 - yt) < 0.3)]
+        xs = np.unique(np.round(seps[:, 0], 1))
+        left = xs[xs <= x0 + 0.2]
+        if len(left) < 2:
+            return None
+        cl1 = left.max()
+        cl0 = left[left < cl1 - 0.3 * fh]
+        if not len(cl0):
+            return None
+        cl0 = cl0.max()
+        if not (0.6 * fh <= cl1 - cl0 <= 1.6 * fh):        # the symbol cell is about square
+            return None
+        # and the frame's top and bottom rules begin at its left edge
+        def starts_at(rule_y):
+            R = H[np.abs(H[:, 1] - rule_y) < 0.3]
+            return bool(len(R)) and bool((np.abs(np.minimum(R[:, 0], R[:, 2]) - cl0) < 0.3).any())
+        if not (starts_at(yt) and starts_at(yb)):
+            return None
+        if any(cl0 < tx < cl1 and yb < ty < yt for tx, ty, _ in self.texts):
+            return None                                    # a text cell, not a symbol cell
+        S = self.seg
+        m = 0.08 * fh
+        inside = S[(np.minimum(S[:, 0], S[:, 2]) > cl0 + m) & (np.maximum(S[:, 0], S[:, 2]) < cl1 - m)
+                   & (np.minimum(S[:, 1], S[:, 3]) > yb + m) & (np.maximum(S[:, 1], S[:, 3]) < yt - m)]
+        symbol, why = _classify_symbol(inside, ((cl0 + cl1) / 2, (yb + yt) / 2), fh)
+        right = xs[xs >= x1 - 0.2]
+        datums = []
+        if len(right):
+            fr_end = H[(np.abs(H[:, 1] - yt) < 0.3)]
+            end = max(np.maximum(fr_end[:, 0], fr_end[:, 2]).max(), right.max())
+            for tx, ty, tt in sorted(self.texts):
+                if x1 < tx < end and yb < ty < yt and re.fullmatch(r"[A-Z](?:-[A-Z])?", tt.strip()):
+                    datums.append(tt.strip())
+        return symbol, datums, why
+
     def is_table_cell(self, box, th: float) -> bool:
         """Ruled on all four sides by lines that run past the text: a table cell, not a callout."""
         import numpy as np
@@ -241,6 +307,64 @@ class SheetGeometry:
             if (at_a & (hx0 <= ox) & (hx1 >= ox)).any() and (at_b & (hx0 <= ox) & (hx1 >= ox)).any():
                 return True
         return False
+
+
+def _classify_symbol(segs, centre, size):
+    """Name the ISO 1101 characteristic from the strokes inside a symbol cell, or None.
+    Rules use stroke direction counts and rings (points at one radius all round)."""
+    import numpy as np
+    if not len(segs):
+        return None, "empty symbol cell"
+    dx, dy = segs[:, 2] - segs[:, 0], segs[:, 3] - segs[:, 1]
+    ln = np.hypot(dx, dy)
+    ang = np.degrees(np.arctan2(np.abs(dy), np.abs(dx) + 1e-12))
+    long_ = ln > 0.25 * size
+    nh = int((long_ & (ang < 10)).sum())
+    nv = int((long_ & (ang > 80)).sum())
+    ns = int((long_ & (ang >= 10) & (ang <= 80)).sum())
+    pts = np.vstack([segs[:, :2], segs[:, 2:]])
+    cx, cy = pts[:, 0].mean(), pts[:, 1].mean()
+    d = np.hypot(pts[:, 0] - cx, pts[:, 1] - cy)
+    short = ln < 0.25 * size
+    rings = []
+    if short.sum() >= 8:
+        sp = np.vstack([segs[short, :2], segs[short, 2:]])
+        sd = np.hypot(sp[:, 0] - cx, sp[:, 1] - cy)
+        for r in sorted(set(np.round(sd / (0.08 * size)).astype(int))):
+            band = np.abs(sd - r * 0.08 * size) < 0.06 * size
+            if band.sum() >= 8:
+                a = np.degrees(np.arctan2(sp[band, 1] - cy, sp[band, 0] - cx))
+                cov = len(np.unique((a // 30).astype(int)))
+                if not rings or abs(r * 0.08 * size - rings[-1][0]) > 0.1 * size:
+                    rings.append((r * 0.08 * size, cov))
+    full = [r for r in rings if r[1] >= 9]
+    arcs = [r for r in rings if 3 <= r[1] < 9]
+    sig = f"h={nh} v={nv} slanted={ns} rings={len(full)} arcs={len(arcs)}"
+    if len(full) >= 2 and not (nh or nv or ns):
+        return "concentricity", sig
+    if len(full) == 1:
+        if nh == 1 and nv == 1:
+            return "position", sig
+        if ns == 2 and not (nh or nv):
+            return "cylindricity", sig
+        if not (nh or nv or ns):
+            return "circularity", sig
+        return None, sig
+    if arcs and not full:
+        return ("profile of a surface" if nh >= 1 else "profile of a line"), sig
+    if nh == 1 and not (nv or ns):
+        return "straightness", sig
+    if nh == 3 and not (nv or ns):
+        return "symmetry", sig
+    if nh == 1 and nv == 1 and not ns:
+        return "perpendicularity", sig
+    if ns == 2 and not (nh or nv):
+        return "parallelism", sig
+    if nh == 2 and ns == 2 and not nv:
+        return "flatness", sig
+    if nh == 1 and ns == 1 and not nv:
+        return "angularity", sig
+    return None, sig
 
 
 def _orthogonal(angle: float) -> bool:
@@ -359,6 +483,7 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
     groups = group_runs(all_runs)
     for pg_no, geo_ in sheet_geo.items():
         geo_.centres = [gr.centre for gr in groups if gr.page == pg_no]
+        geo_.texts = [(gr.centre[0], gr.centre[1], normalise(gr.text)) for gr in groups if gr.page == pg_no]
     from collections import Counter
     skipped: Counter = Counter()
     characteristics: list[Characteristic] = []
@@ -390,9 +515,42 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
             if geo.is_balloon(norm, cx, cy, th):
                 skipped["balloon item number"] += 1
                 continue
-            if _orthogonal(g.angle) and g.angle % 180 < 1 and geo.is_table_cell(g.box, th):
+            if (_orthogonal(g.angle) and g.angle % 180 < 1 and geo.is_table_cell(g.box, th)
+                    and geo.frame_at(g.box, th) is None):       # a frame with datum cells is not a table row
                 skipped["table cell"] += 1
                 notes.append(f"table cell (page {g.page}): {norm}")
+                continue
+        if geo is not None and g.angle % 360 < 1 and re.fullmatch(r"[⌀Øø]?\s*\d*\.?\d+", norm.strip()):
+            fr = geo.frame_at(g.box, th)
+            if fr is not None:
+                symbol, datums, evidence = fr
+                zone = float(re.sub(r"[^\d.]", "", norm))
+                diam = bool(re.match(r"\s*[⌀Øø]", norm))
+                if symbol is None:
+                    uninterpreted.append(UninterpretedAnnotation(
+                        str(p), handle, "", g.text, "number inside a feature control frame drawn as "
+                        f"graphics; its symbol was not recognised from the strokes ({evidence}); "
+                        f"zone {zone:g}, datums {datums or 'none'}", g.page, cx, cy))
+                    continue
+                from ..gdt import GeometricTolerance
+                n += 1
+                tol = GeometricTolerance(symbol, zone, diam, None, tuple(datums))
+                c = Characteristic(
+                    cid=f"CH-{n:03d}", kind=CharKind.GEOMETRIC, raw_callout=g.text, unit=unit,
+                    tolerance=tol, state=ProvenanceState.PARSED, review=ReviewStatus.NEEDS_REVIEW,
+                    source=SourceLocation(document=str(p), document_sha256=doc_sha, revision=revision,
+                                          page=g.page, entity_handle=handle, entity_type="PDF_FRAME",
+                                          layer="", anchor_x=cx, anchor_y=cy),
+                    limits=(0.0, zone))
+                c.record("extractor", "extracted",
+                         f"zone {norm} inside a frame drawn as vector graphics; symbol {symbol} "
+                         f"recognised from its strokes ({evidence}); datums {datums or 'none'}")
+                c.checks.append(Check("geometry_cross_check", CheckOutcome.NOT_VERIFIABLE,
+                                      "callout matches drawn geometry", "-",
+                                      "a feature control frame states a zone, not a size"))
+                c.fail("pdf_frame_from_graphics", "frame and symbol read from vector strokes, not "
+                                                  "text: confirm the characteristic", "warning")
+                characteristics.append(c)
                 continue
         glyph_note = None
         if (geo is not None and g.angle % 360 < 1 and not re.match(r"^\s*(?:\d+\s*[xX]\s*)?[⌀Øø∅]", g.text)
