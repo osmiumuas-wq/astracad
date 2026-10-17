@@ -327,6 +327,9 @@ table.dt { border-collapse: separate; border-spacing: 0; width: 100%; font-size:
 .esc .tx { font-family: var(--mono); font-weight: 600; overflow-wrap: anywhere; }
 .esc .why { font-size: 12.5px; color: var(--muted); }
 
+/* instruments */
+.instform { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; align-items: end; }
+
 /* measurements */
 .mrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .mval { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
@@ -419,6 +422,7 @@ pre.code { margin: 0; white-space: pre-wrap; word-break: break-word; font-family
     <div class="navlabel">Quality</div>
     <button class="nav" data-tab="projects"><svg class="i" data-i="file"></svg><span class="lbl">Projects</span><span class="count" id="n-proj"></span></button>
     <button class="nav" data-tab="inspections"><svg class="i" data-i="scan"></svg><span class="lbl">Inspections</span><span class="count" id="n-insp"></span></button>
+    <button class="nav" data-tab="instruments"><svg class="i" data-i="crosshair"></svg><span class="lbl">Instruments</span><span class="count" id="n-inst"></span></button>
     <button class="nav" data-tab="changes"><svg class="i" data-i="diff"></svg><span class="lbl">Revision changes</span></button>
     <div class="navlabel">Automation</div>
     <button class="nav" data-tab="tasks"><svg class="i" data-i="tasks"></svg><span class="lbl">Tasks</span></button>
@@ -602,6 +606,7 @@ function palBase() {
   return [
     { label: "Projects", group: "Page", icon: "file", run: () => location.hash = "#projects" },
     { label: "Inspections", group: "Page", icon: "scan", run: () => location.hash = "#inspections" },
+    { label: "Instruments", group: "Page", icon: "crosshair", run: () => location.hash = "#instruments" },
     { label: "Revision changes", group: "Page", icon: "diff", run: () => location.hash = "#changes" },
     { label: "Tasks", group: "Page", icon: "tasks", run: () => location.hash = "#tasks" },
     { label: "CAD connections", group: "Page", icon: "cube", run: () => location.hash = "#cad" },
@@ -979,7 +984,11 @@ async function viewInspection(key, keepSel, focusId) {
   const M = d.measurements || { samples: [], cells: {}, sample_state: {}, capability: {}, entries: 0 };
   const sampleIn = h("input", { class: "input sm", id: "sample", placeholder: "e.g. SN-001", value: store.get("astracad.sample"), "aria-label": "Sample or serial number", list: "samples-dl", style: "width:120px" });
   const samplesDl = h("datalist", { id: "samples-dl" }, M.samples.map(s => h("option", { value: s })));
-  const instrIn = h("input", { class: "input sm", id: "instrument", placeholder: "instrument ID", value: store.get("astracad.instrument"), "aria-label": "Instrument", style: "width:130px" });
+  let REG = [];
+  try { REG = (await api("/api/instruments")).instruments; } catch (e) {}
+  const instrDl = h("datalist", { id: "instr-dl" }, REG.filter(i => i.calibration.state !== "RETIRED" && i.calibration.state !== "EXPIRED")
+    .map(i => h("option", { value: i.id }, `${i.kind} ${fmt(i.range_min)}–${fmt(i.range_max)} ${i.unit}, res ${fmt(i.resolution)}`)));
+  const instrIn = h("input", { class: "input sm", id: "instrument", list: "instr-dl", placeholder: "instrument ID", value: store.get("astracad.instrument"), "aria-label": "Instrument", style: "width:130px" });
   sampleIn.addEventListener("change", () => { store.set("astracad.sample", sampleIn.value.trim()); viewInspection(key, sel); });
   instrIn.addEventListener("change", () => store.set("astracad.instrument", instrIn.value.trim()));
   const curSample = () => sampleIn.value.trim();
@@ -994,6 +1003,7 @@ async function viewInspection(key, keepSel, focusId) {
       const r = await post("/api/measure", { key, inspector: reviewer.value.trim(), sample: curSample(), instrument: instrIn.value.trim(), ...body });
       const c = r.measurements.cells[`${curSample()}|${body.cid}`];
       toast(body.withdraw ? "Measurement withdrawn" : `Recorded ${fmt(r.entry.value)} — ${(VERD[c?.verdict] || [, , c?.verdict])[2]}`, c?.verdict === "FAIL" ? "bad" : "ok");
+      for (const w of r.entry.warnings || []) toast(w, "warn");
       // data entry flow: a recorded value moves on to the next balloon, ready for the next value
       const vis = visible(), i = vis.findIndex(x => x.cid === body.cid);
       const next = !body.withdraw && i >= 0 && i < vis.length - 1 ? vis[i + 1].cid : sel;
@@ -1154,7 +1164,8 @@ async function viewInspection(key, keepSel, focusId) {
     return h("section", {}, h("h3", {}, "Measure", curSample() ? h("span", { class: "mono", style: "text-transform:none;letter-spacing:0;margin-left:6px;color:var(--ink-2)" }, curSample()) : null),
       curSample() ? [
         cur ? h("div", { class: "mrow" }, verdictPill(cur.verdict), h("b", { class: "mono" }, cur.value != null ? `${fmt(cur.value)} ${r.unit || ""}` : "—"),
-          h("span", { class: "muted", style: "font-size:12px" }, `${cur.inspector}${cur.instrument ? " · " + cur.instrument : ""} · ${when(cur.at)}${cur.history.length ? ` · supersedes ${cur.history.length}` : ""}`)) : null,
+          h("span", { class: "muted", style: "font-size:12px" }, `${cur.inspector}${cur.instrument ? " · " + cur.instrument : ""}${cur.instrument_record?.calibration_ref ? " (cal " + cur.instrument_record.calibration_ref + ")" : ""} · ${when(cur.at)}${cur.history.length ? ` · supersedes ${cur.history.length}` : ""}`)) : null,
+        cur && (cur.warnings || []).length ? h("ul", { class: "list", style: "margin-top:6px" }, cur.warnings.map(w => h("li", {}, h("span", { class: "c-warn" }, ic("flag")), h("div", { class: "x" }, w)))) : null,
         h("div", { class: "actbar", style: "align-items:center;margin-top:8px" }, val, h("span", { class: "muted" }, r.unit || ""),
           h("button", { class: "btn sm primary", onclick: save }, ic("check"), cur ? "Record correction" : "Record", h("kbd", {}, "M")), live,
           cur && cur.value != null ? h("button", { class: "btn sm ghost", onclick: withdraw }, ic("undo"), "Withdraw") : null), wbox]
@@ -1251,7 +1262,7 @@ async function viewInspection(key, keepSel, focusId) {
   const reviewbar = h("div", { class: "reviewbar" + (pending ? " live" : ""), role: "region", "aria-label": "Review" },
     h("label", { class: "who" }, ic("user"), h("span", { class: "hide-sm", style: "font-size:13px;font-weight:600" }, "Reviewer"), reviewer),
     h("label", { class: "who" }, h("span", { class: "hide-sm", style: "font-size:13px;font-weight:600" }, "Sample"), sampleIn, samplesDl),
-    h("label", { class: "who" }, h("span", { class: "hide-sm", style: "font-size:13px;font-weight:600" }, "Instrument"), instrIn),
+    h("label", { class: "who" }, h("span", { class: "hide-sm", style: "font-size:13px;font-weight:600" }, "Instrument"), instrIn, instrDl),
     h("div", { class: "pend" }, pending ? [h("b", {}, pending), " decision(s) recorded, not yet applied."] : "Decisions are signed and logged; this run is never edited. Re-issuing makes a new run from the unchanged drawing."),
     h("div", { class: "go" }, reissue));
 
@@ -1473,16 +1484,78 @@ async function viewProject(pid) {
   palExtra = d.sources.map(s => ({ label: `${s.filename} · ${KIND[s.media_type] || ""}`, group: "Drawing", icon: "file", run: () => document.querySelector(".dt")?.scrollIntoView() }));
 }
 
+// ---------- Instruments ----------
+const CAL = { CALIBRATED: ["ok", "shield", "Calibrated"], DUE_SOON: ["warn", "clock", "Due soon"], EXPIRED: ["bad", "x", "Expired"], RETIRED: ["na", "ban", "Retired"] };
+const calPill = c => { const [t, i, l] = CAL[c?.state] || ["na", "info", c?.state || "?"]; return h("span", { title: c?.text || "" }, pill(t, i, l)); };
+
+async function viewInstruments(editId) {
+  crumbs("Instruments");
+  const d = await api("/api/instruments");
+  const list = d.instruments;
+  const edit = list.find(i => i.id === editId) || null;
+  const f = (name, label, el, hint) => h("label", { class: "field" }, h("span", {}, label), el, hint ? h("small", {}, hint) : null);
+  const inp = (attrs) => h("input", { class: "input", ...attrs });
+  const by = inp({ value: store.get("astracad.reviewer"), placeholder: "your name", autocomplete: "name" });
+  const id = inp({ value: edit?.id || "", placeholder: "e.g. MIC-07", required: true, readOnly: !!edit, maxlength: 32 });
+  const desc = inp({ value: edit?.description || "", placeholder: "e.g. outside micrometer 75-100" });
+  const kind = h("select", { class: "input" }, d.kinds.map(k => h("option", { value: k, selected: edit?.kind === k }, k)));
+  const unit = h("select", { class: "input" }, ["mm", "in", "um", "deg"].map(u => h("option", { value: u, selected: (edit?.unit || "mm") === u }, u)));
+  const lo = inp({ value: edit?.range_min ?? "", inputmode: "decimal", placeholder: "0", required: true });
+  const hi = inp({ value: edit?.range_max ?? "", inputmode: "decimal", placeholder: "150", required: true });
+  const res = inp({ value: edit?.resolution ?? "", inputmode: "decimal", placeholder: "0.01", required: true });
+  const due = inp({ type: "date", value: edit?.calibration_due || "", required: true });
+  const ref = inp({ value: edit?.calibration_ref || "", placeholder: "certificate no." });
+  const retired = h("input", { type: "checkbox", checked: edit?.status === "retired" });
+  const go = h("button", { class: "btn primary", type: "submit" }, ic("check"), edit ? "Save changes" : "Add instrument");
+  const form = h("form", { class: "instform", onsubmit: async ev => {
+      ev.preventDefault();
+      store.set("astracad.reviewer", by.value.trim());
+      try {
+        await post("/api/instruments", { by: by.value.trim(), id: id.value.trim(), description: desc.value, kind: kind.value, unit: unit.value,
+          range_min: lo.value, range_max: hi.value, resolution: res.value, calibration_due: due.value, calibration_ref: ref.value,
+          status: retired.checked ? "retired" : "active" });
+        toast(edit ? `${id.value} updated` : `${id.value} added to the register`);
+        if (editId) location.hash = "#instruments"; else viewInstruments();   // same hash: no navigation event
+      } catch (e) { toast("Not saved: " + e.message, "bad"); }
+    } },
+    f("id", "Instrument ID", id, edit ? "the ID is the key; it does not change" : null), f("desc", "Description", desc), f("kind", "Kind", kind), f("unit", "Unit", unit),
+    f("lo", "Range from", lo), f("hi", "Range to", hi), f("res", "Resolution", res, "smallest step it reads"),
+    f("due", "Calibration due", due), f("ref", "Certificate", ref),
+    h("label", { class: "field" }, h("span", {}, "Status"), h("span", { style: "display:flex;gap:8px;align-items:center;height:36px" }, retired, "Retired (no longer usable)")),
+    f("by", "Changed by", by, "every change is attributed"),
+    h("div", { class: "field" }, h("div", { style: "display:flex;gap:8px" }, go, edit ? h("button", { class: "btn ghost", type: "button", onclick: () => location.hash = "#instruments" }, "Cancel") : null)));
+  const counts = list.reduce((a, i) => (a[i.calibration.state] = (a[i.calibration.state] || 0) + 1, a), {});
+  main.replaceChildren(
+    h("div", { class: "ph" }, h("div", {}, h("h1", {}, "Instruments"),
+      h("p", {}, "The register every measurement is checked against: an expired, retired or unregistered instrument is refused, and so is a value written finer than the instrument reads."))),
+    h("div", { class: "kpis" },
+      ["CALIBRATED", "DUE_SOON", "EXPIRED", "RETIRED"].map(k => h("div", { class: "card kpi" }, h("div", { class: "k" }, calPill({ state: k })), h("div", { class: "v" }, counts[k] || 0), h("div", { class: "d" }, k === "DUE_SOON" ? "within 30 days" : k === "EXPIRED" ? "refused at entry" : k === "RETIRED" ? "refused at entry" : "usable")))),
+    h("div", { class: "stack" },
+      card(edit ? `Edit ${edit.id}` : "Add an instrument", null, null, h("div", { class: "body" }, form)),
+      card("Register", `${list.length}`, null, list.length ? dataTable([
+        { k: "id", label: "ID", render: i => h("div", {}, h("div", { class: "title mono" }, i.id), h("div", { class: "subline" }, i.description || i.kind)) },
+        { k: "kind", label: "Kind" },
+        { k: "range_max", label: "Range", render: i => h("span", { class: "mono nowrap" }, `${fmt(i.range_min)} – ${fmt(i.range_max)} ${i.unit}`) },
+        { k: "resolution", label: "Resolution", num: true, render: i => `${fmt(i.resolution)} ${i.unit}` },
+        { k: "calibration_due", label: "Calibration", render: i => h("div", {}, calPill(i.calibration), h("div", { class: "hlegend" }, i.calibration.text)) },
+        { k: "calibration_ref", label: "Certificate", render: i => h("span", { class: "mono" }, i.calibration_ref || "–") },
+        { k: "changed", label: "Last change", sort: i => i.history.at(-1)?.at, render: i => { const x = i.history.at(-1); return x ? h("span", { class: "muted nowrap", title: x.at }, `${x.action} by ${x.by} · ${ago(x.at)}`) : "–"; } },
+      ], list, { onRow: i => { location.hash = "#instruments=" + encodeURIComponent(i.id); }, initial: { k: "calibration_due", dir: 1 } })
+        : empty("cube", "The register is empty", "Until an instrument is added, instrument IDs are recorded as text and marked as unregistered."))));
+  if (!list.length) id.focus();
+}
+
 // ---------- router ----------
 async function route() {
   const hash = location.hash.slice(1);
-  const tab = hash.startsWith("inspection=") ? "inspections" : hash.startsWith("project=") ? "projects" : (hash || "inspections");
+  const tab = hash.startsWith("inspection=") ? "inspections" : hash.startsWith("project=") ? "projects" : hash.startsWith("instruments=") ? "instruments" : (hash || "inspections");
   document.querySelectorAll(".nav").forEach(b => { if (b.dataset.tab === tab) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   viewKeys = null; palExtra = [];
   try {
     if (hash.startsWith("inspection=")) await viewInspection(decodeURIComponent(hash.slice(11)));
     else if (hash.startsWith("project=")) await viewProject(decodeURIComponent(hash.slice(8)));
     else if (tab === "projects") await viewProjects();
+    else if (tab === "instruments") await viewInstruments(hash.startsWith("instruments=") ? decodeURIComponent(hash.slice(12)) : null);
     else if (tab === "tasks") await viewTasks();
     else if (tab === "changes") await viewChanges();
     else if (tab === "cad") await viewCad();
@@ -1496,6 +1569,8 @@ route();
 cadStatus(false);
 api("/api/inspections").then(l => { runsCache = l; document.getElementById("n-insp").textContent = l.length || ""; }).catch(() => {});
 api("/api/projects").then(l => { document.getElementById("n-proj").textContent = l.length || ""; }).catch(() => {});
+api("/api/instruments").then(d => { const bad = d.instruments.filter(i => i.calibration.state === "EXPIRED" || i.calibration.state === "DUE_SOON").length;
+  document.getElementById("n-inst").textContent = bad ? bad + "!" : (d.instruments.length || ""); }).catch(() => {});
 </script>
 </body>
 </html>

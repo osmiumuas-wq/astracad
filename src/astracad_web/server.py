@@ -408,10 +408,26 @@ class Workspace:
     def measure(self, key: str, body: dict) -> dict:
         """Append one inspector-entered measurement (or a withdrawal) to the run's log."""
         from astracad_inspect.measure import evaluate, read_log, record
+        from astracad_inspect.instruments import load
         plan_path = self._plan_path(key)
         plan = json.loads(plan_path.read_text(encoding="utf-8"))
-        entry = record(plan_path, plan, body)
+        entry = record(plan_path, plan, body, register=load(self.instruments_path))
         return {"entry": entry, "measurements": evaluate(plan, read_log(plan_path))}
+
+    @property
+    def instruments_path(self) -> Path:
+        return (self.projects.root if self.projects is not None else self.runs[0]) / "instruments.json"
+
+    def instruments(self) -> list[dict]:
+        from astracad_inspect.instruments import KINDS, load, status
+        reg = load(self.instruments_path)
+        return {"kinds": list(KINDS), "instruments": [
+            {**i, "calibration": status(i)} for i in sorted(reg["instruments"].values(), key=lambda i: i["id"])]}
+
+    def save_instrument(self, body: dict) -> dict:
+        from astracad_inspect.instruments import status, upsert
+        i = upsert(self.instruments_path, body)
+        return {**i, "calibration": status(i)}
 
     def export_results(self, key: str, sample: str | None = None) -> dict:
         """Results workbook (+ an AS9102 workbook for one sample), each re-opened and checked."""
@@ -564,6 +580,8 @@ def make_handler(ws: Workspace):
                     return self._json({**ws.inspection(k), **ws.review_state(k)})
                 if u.path == "/api/projects":
                     return self._json(ws.projects_list())
+                if u.path == "/api/instruments":
+                    return self._json(ws.instruments())
                 if u.path == "/api/project":
                     return self._json(ws.project(q.get("id", [""])[0]))
                 if u.path == "/api/changes":
@@ -671,6 +689,8 @@ def make_handler(ws: Workspace):
                                                         body.get("general_tolerance")))
                 if u.path == "/api/review":
                     return self._json(ws.review(str(body.get("key", "")), body))
+                if u.path == "/api/instruments":
+                    return self._json(ws.save_instrument(body))
                 if u.path == "/api/measure":
                     return self._json(ws.measure(str(body.get("key", "")), body))
                 if u.path == "/api/export_results":

@@ -48,8 +48,10 @@ def read_log(plan_path: Path) -> list[dict]:
     return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
 
 
-def record(plan_path: Path, plan: dict, body: dict) -> dict:
-    """Validate and append one entry. Raises ValueError with the reason when it is refused."""
+def record(plan_path: Path, plan: dict, body: dict, register: dict | None = None) -> dict:
+    """Validate and append one entry. Raises ValueError with the reason when it is refused.
+    With an instrument `register`, the instrument is checked (see instruments.check) and a snapshot
+    of it - resolution, calibration due date and certificate - is stored with the value."""
     inspector = str(body.get("inspector", "")).strip()
     if not _NAME.fullmatch(inspector):
         raise ValueError("inspector name required (letters, digits, space . ' - ; up to 64)")
@@ -78,6 +80,13 @@ def record(plan_path: Path, plan: dict, body: dict) -> dict:
         if not math.isfinite(x) or abs(x) > 1e6:
             raise ValueError("value must be a finite number")
         entry["value"] = x
+    if register is not None and not entry.get("withdrawn"):
+        from .instruments import check
+        snap, warnings = check(register, entry["instrument"], entry["value"], rows[cid])
+        if snap:
+            entry["instrument_record"] = snap
+        if warnings:
+            entry["warnings"] = warnings
     with _lock:
         with log_path(plan_path).open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -200,9 +209,11 @@ def write_results(plan: dict, log: list[dict], out_xlsx: Path) -> Path:
         cap.append([cid, c["n"], c["mean"], c.get("stdev"), c["min"], c["max"], c.get("cp"), c.get("cpk"), c.get("note", "")])
     lg = wb.create_sheet("Log")
     keys = ["id", "at", "inspector", "sample", "balloon_no", "cid", "value", "unit", "instrument", "note", "withdrawn"]
-    lg.append(keys)
+    lg.append(keys + ["instrument resolution", "calibration due", "calibration ref", "warnings"])
     for e in log:
-        lg.append([e.get(k) for k in keys])
+        ir = e.get("instrument_record") or {}
+        lg.append([e.get(k) for k in keys] + [ir.get("resolution"), ir.get("calibration_due"),
+                                              ir.get("calibration_ref"), "; ".join(e.get("warnings") or [])])
     out_xlsx = Path(out_xlsx)
     wb.save(out_xlsx)
     return out_xlsx

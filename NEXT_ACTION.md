@@ -18,8 +18,10 @@ Inspection workspace → Sample + Instrument in the bar → select a balloon →
 Enter (moves to the next balloon) → Measurements tab → Export results + FAI. Values are only ever
 what an inspector typed; verdicts come from the drawing's own limits; rows without limits are
 recorded but not judged; a sample against an open (not releasable) plan is never "acceptable".
-Next here: an instrument register (ID, range, resolution, calibration due date) checked at entry,
-and refusing a value finer than the instrument's resolution.
+Done next (same day): the instrument register (Instruments page) is checked at entry - verified
+live: an expired caliper refused, 99.9964 from a 0.001 mm micrometer refused, 99.996 recorded.
+Next here: import CMM / gauge results (CSV) into the same log, each row attributed to the file it
+came from, with the same instrument checks.
 
 ## 0. Done 2026-10-17: projects, upload, preserved originals (Part 9 items 1-3)
 
