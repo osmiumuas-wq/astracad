@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import re
 import threading
 import time
 from http import HTTPStatus
@@ -170,7 +171,9 @@ class Workspace:
         return sorted(out, key=lambda r: -r["modified"])
 
     # ---- the one action -----------------------------------------------------------------------
-    def run_inspection(self, drawing: str, units: str | None, revision: str | None) -> dict:
+    def run_inspection(self, drawing: str, units: str | None, revision: str | None,
+                       general_tolerance: str | None = None, overrides: str | None = None,
+                       parent: str | None = None, folder_name: str | None = None) -> dict:
         from astracad_inspect.pipeline import inspect_drawing
         src = Path(drawing).expanduser()
         if not src.is_file():
@@ -180,14 +183,165 @@ class Workspace:
             raise ValueError("only .dxf, .pdf and scanned images are read")
         # Stem + type + second is not unique (part.dxf and part.pdf in one second collided and the
         # second run overwrote the first), so a counter makes every run its own folder.
-        base = f"{src.stem}_{src.suffix.lower().lstrip('.')}_{time.strftime('%Y%m%d-%H%M%S')}"
+        base = folder_name or f"{src.stem}_{src.suffix.lower().lstrip('.')}_{time.strftime('%Y%m%d-%H%M%S')}"
         out, n = self.runs[0] / base, 1
         while out.exists():
             n += 1
             out = self.runs[0] / f"{base}_{n}"
-        res = inspect_drawing(src, out, declared_unit=units or None, revision=revision or None)
+        res = inspect_drawing(src, out, declared_unit=units or None, revision=revision or None,
+                              general_tolerance=general_tolerance or None, overrides=overrides)
+        meta = {"drawing": str(src.resolve()), "units": units or None, "revision": revision or None,
+                "general_tolerance": general_tolerance or None, "overrides": overrides,
+                "parent": parent, "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        (out / f"{src.stem}.run.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
         return {"key": self.key_for(res.artifacts["plan_json"]), "delivered": res.delivered,
                 "approvable": res.plan.approvable, "folder": str(out)}
+
+    # ---- review: approve / reject / correct, then re-issue -----------------------------------
+    def _plan_path(self, key: str) -> Path:
+        p = self.resolve_key(key)
+        if not p.name.endswith(".plan.json"):
+            raise PermissionError("not an inspection plan")
+        return p
+
+    @staticmethod
+    def _review_paths(plan_path: Path) -> tuple[Path, Path]:
+        stem = plan_path.name[:-len(".plan.json")]
+        return plan_path.with_name(f"{stem}.review.json"), plan_path.with_name(f"{stem}.review_log.jsonl")
+
+    def review_state(self, key: str) -> dict:
+        plan_path = self._plan_path(key)
+        stem = plan_path.name[:-len(".plan.json")]
+        mp = plan_path.with_name(f"{stem}.run.json")
+        meta = json.loads(mp.read_text(encoding="utf-8")) if mp.exists() else {}
+        al = plan_path.with_name(f"{stem}.review_applied_log.jsonl")
+        applied = [json.loads(x) for x in al.read_text(encoding="utf-8").splitlines() if x.strip()]             if al.exists() else []
+        rp, lp = self._review_paths(plan_path)
+        review = json.loads(rp.read_text(encoding="utf-8")) if rp.exists() else {}
+        log = [json.loads(x) for x in lp.read_text(encoding="utf-8").splitlines() if x.strip()] \
+            if lp.exists() else []
+        return {"review": review, "log": log, "parent": meta.get("parent"), "applied_log": applied}
+
+    def review(self, key: str, body: dict) -> dict:
+        """Record one reviewer decision in the run's review file (overrides format) and the log.
+        The plan itself is never edited: decisions take effect only when the run is re-issued."""
+        plan_path = self._plan_path(key)
+        reviewer = str(body.get("reviewer", "")).strip()
+        if not _REVIEWER.fullmatch(reviewer):
+            raise ValueError("reviewer name required (letters, digits, space . ' - ; up to 64)")
+        action = body.get("action")
+        reason = str(body.get("reason") or "")[:500]
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        rp, lp = self._review_paths(plan_path)
+        review = json.loads(rp.read_text(encoding="utf-8")) if rp.exists() else \
+            {"characteristics": [], "annotations": []}
+        if action in ("approve", "reject", "correct", "clear"):
+            cid = str(body.get("cid", ""))
+            if cid not in {c["cid"] for c in plan.get("characteristics") or []}:
+                raise ValueError(f"unknown characteristic {cid!r}")
+            entry = {"cid": cid, "reviewer": reviewer}
+            if action == "approve":
+                entry["approve"] = True
+            elif action == "reject":
+                if not reason:
+                    raise ValueError("a rejection needs a reason")
+                entry.update(reject=True, reason=reason)
+            elif action == "correct":
+                entry.update(_correction(body))
+            before = next((e for e in review["characteristics"] if e.get("cid") == cid), None)
+            review["characteristics"] = [e for e in review["characteristics"] if e.get("cid") != cid]
+            if action != "clear":
+                review["characteristics"].append(entry)
+            target = cid
+        elif action in ("dismiss", "as_characteristic"):
+            text = str(body.get("text", ""))
+            if text not in {u.get("text") for u in plan.get("uninterpreted") or []}:
+                raise ValueError("unknown escalated annotation")
+            entry = {"text": text, "action": action, "reviewer": reviewer, "reason": reason}
+            if action == "as_characteristic":
+                entry.update(_correction(body, need_kind=True))
+            before = next((e for e in review["annotations"] if e.get("text") == text), None)
+            review["annotations"] = [e for e in review["annotations"] if e.get("text") != text]
+            review["annotations"].append(entry)
+            target = text
+        else:
+            raise ValueError(f"unsupported review action {action!r}")
+        rp.write_text(json.dumps(review, indent=1, ensure_ascii=False), encoding="utf-8")
+        with lp.open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                "reviewer": reviewer, "action": action, "target": target,
+                                "before": before, "after": entry if action != "clear" else None,
+                                "reason": reason}, ensure_ascii=False) + "\n")
+        return self.review_state(key)
+
+    def reissue(self, key: str) -> dict:
+        """A NEW run from the same drawing with the review applied. Refused when the drawing has
+        changed since the plan was made: the review's characteristic IDs would not mean the same."""
+        import hashlib
+        plan_path = self._plan_path(key)
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        rp, _ = self._review_paths(plan_path)
+        if not rp.exists():
+            raise ValueError("nothing to re-issue: no review decisions recorded")
+        stem = plan_path.name[:-len(".plan.json")]
+        mp = plan_path.with_name(f"{stem}.run.json")
+        meta = json.loads(mp.read_text(encoding="utf-8")) if mp.exists() else {}
+        drawing = Path(meta.get("drawing") or plan["source_document"])
+        if not drawing.is_file():
+            raise FileNotFoundError(f"source drawing not found: {drawing}")
+        sha = hashlib.sha256(drawing.read_bytes()).hexdigest()
+        if sha != plan.get("source_sha256"):
+            raise ValueError("the drawing changed since this plan was made; re-run and review again")
+        n = 2
+        base = plan_path.parent.name.split("_rev")[0]
+        while (self.runs[0] / f"{base}_rev{n}").exists():
+            n += 1
+        res = self.run_inspection(str(drawing), meta.get("units") or plan.get("unit"),
+                                  meta.get("revision"), meta.get("general_tolerance"),
+                                  overrides=str(rp), parent=key, folder_name=f"{base}_rev{n}")
+        # the new run carries the decisions it was made from, so its own folder is the full record
+        new_dir = Path(res["folder"])
+        import shutil
+        shutil.copy(rp, new_dir / f"{stem}.review_applied.json")
+        lp = plan_path.with_name(f"{stem}.review_log.jsonl")
+        if lp.exists():
+            shutil.copy(lp, new_dir / f"{stem}.review_applied_log.jsonl")
+        return res
+
+
+_REVIEWER = re.compile(r"[\w .'-]{1,64}")
+_TOL_KINDS = {"none": (), "symmetric": ("plus_minus",), "deviations": ("upper", "lower"),
+              "limit_pair": ("maximum", "minimum")}
+
+
+def _num(v, name):
+    import math
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be a number") from None
+    if not math.isfinite(x):
+        raise ValueError(f"{name} must be finite")
+    return x
+
+
+def _correction(body: dict, need_kind: bool = False) -> dict:
+    out = {}
+    if body.get("kind") is not None or need_kind:
+        if body.get("kind") not in ("linear", "diameter", "radius", "angular"):
+            raise ValueError("kind must be linear, diameter, radius or angular")
+        out["kind"] = body["kind"]
+    if "nominal" in body:
+        out["nominal"] = None if body["nominal"] in (None, "") else _num(body["nominal"], "nominal")
+    tol = body.get("tolerance")
+    if tol is not None:
+        kind = tol.get("kind")
+        if kind not in _TOL_KINDS:
+            raise ValueError(f"tolerance kind must be one of {sorted(_TOL_KINDS)}")
+        out["tolerance"] = {"kind": kind, **{f: _num(tol.get(f), f) for f in _TOL_KINDS[kind]}}
+    if not out:
+        raise ValueError("a correction needs a nominal, a tolerance or a kind")
+    return out
 
 
 def make_handler(ws: Workspace):
@@ -242,7 +396,8 @@ def make_handler(ws: Workspace):
                 if u.path == "/api/inspections":
                     return self._json(ws.inspections())
                 if u.path == "/api/inspection":
-                    return self._json(ws.inspection(q.get("key", [""])[0]))
+                    k = q.get("key", [""])[0]
+                    return self._json({**ws.inspection(k), **ws.review_state(k)})
                 if u.path == "/api/changes":
                     return self._json(ws.changes())
                 if u.path == "/file":
@@ -280,8 +435,15 @@ def make_handler(ws: Workspace):
                 body = json.loads(raw or b"{}")
                 if u.path == "/api/inspect":
                     return self._json(ws.run_inspection(str(body.get("drawing", "")),
-                                                        body.get("units"), body.get("revision")))
+                                                        body.get("units"), body.get("revision"),
+                                                        body.get("general_tolerance")))
+                if u.path == "/api/review":
+                    return self._json(ws.review(str(body.get("key", "")), body))
+                if u.path == "/api/reissue":
+                    return self._json(ws.reissue(str(body.get("key", ""))))
                 return self._error(HTTPStatus.NOT_FOUND, "not found")
+            except PermissionError as ex:
+                return self._error(HTTPStatus.FORBIDDEN, str(ex))
             except (FileNotFoundError, ValueError) as ex:
                 return self._error(HTTPStatus.BAD_REQUEST, f"{type(ex).__name__}: {ex}")
             except Exception as ex:

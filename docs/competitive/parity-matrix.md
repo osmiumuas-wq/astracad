@@ -27,6 +27,7 @@ what the vendor **documents** (D), what was **observed** (O), or UNKNOWN (U). Ev
 | C-18 | Text → CAD | D (F-03) | — | PLANNED | structured spec exists; NL interpretation not built |
 | C-19 | CAD → drawing (.SLDDRW) | D (F-06) | — | **END_TO_END_VERIFIED** | `mac drawing` + independent DXF inspection; 3 live parts; no title block/tolerances yet |
 | C-23 | Accuracy measured against an independent answer key | U | claims "near 100%" (P6-03), no method | **TESTED** | SOLIDWORKS API answer keys, 13 drawings / 18 sheets, method in `tools/benchmark_sw.py` |
+| C-27 | Manual correction, review and approval with audit trail | U | D (P6-05) | **TESTED** + viewed live | web workspace: approve / reject (reason required) / correct nominal+tolerance / dismiss or promote escalated text, each named and logged; re-issue makes a NEW run from the unchanged drawing (refused if its SHA-256 changed), history names the reviewer, run links its parent; 13 tests |
 | C-26 | Drawing zone (grid) references | U | D (P6-20) | **TESTED** | PDF and scan routes, from the sheet's own border labels; DXF not yet |
 | C-25 | General tolerances (ISO 2768 / title-block rules) | U | D (P6-19: scans tolerance tables) | **TESTED** | 24 tests incl. table values and refusals; table values transcribed, to verify against a licensed ISO copy |
 | C-24 | Detects a drawing's own drafting errors | U | U | **TESTED** | found a SOLIDWORKS sample printing 15 for a 150 mm span (blocking) |

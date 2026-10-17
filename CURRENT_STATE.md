@@ -9,7 +9,7 @@ Every number below was produced by a command run on 2026-10-17. Detail: `docs/ar
 | `astracad_inspect` | DXF, vector PDF **or a scan (two-engine OCR)** → characteristics incl. **GD&T frames** → ISO 286 limits → balloons → PDF/XLSX/JSON → reopen-and-verify; revision comparison | Prototype, verified on 2 synthetic drawings (+ a vector-PDF rendering of one) |
 | `astracad_cad` | Versioned CAD adapter contract (12 connection states, 16 ops, risk classes), permission-gated orchestrator, **SOLIDWORKS adapter over `mac`**, discovery-only Creo/Fusion/AutoCAD, kernel-independent **STEP re-reader** | SOLIDWORKS create: END_TO_END_VERIFIED on the real app; others discovery only |
 | `astracad_core` | Persistent SQLite task engine (8 states, bounded retry, irreversible-step guard, restart recovery); deterministic request interpreter with provenance per fact | Tested |
-| `astracad_web` | Local workspace (stdlib HTTP, 127.0.0.1 only): CAD status, task history, inspection runs, change sets; one action = run an inspection | Tested (9 tests incl. host/CSRF/traversal refusals); viewed live |
+| `astracad_web` | Local workspace (stdlib HTTP, 127.0.0.1 only): CAD status, task history, inspection runs, change sets; run an inspection; **review** (approve / reject / correct / dismiss, named + audit log) and **re-issue** as a new linked run — the reviewed plan is never edited | Tested (11 web + 13 review tests incl. host/CSRF/traversal/413 refusals); review → re-issue viewed live |
 | `astracad_mfg` | Explainable machining cost: geometry from CAD evidence (kernel volume + STEP re-read bbox, both hashed), every rate sourced and dated, nothing defaulted, 13 traced lines, JSON+XLSX re-read | Tested against a hand calculation (12 tests); example rate book is placeholders only |
 | `astracad_tol` | Worst-case / RSS / Monte Carlo stacks with explicit distributions, ISO 286 fits, selective assembly (plan + measured matching) | Tested against closed-form references |
 | `mecagent-alternative/` (C#, sibling tree) | `mac` runtime: live SOLIDWORKS COM automation; now **revolve** (`sketch.profile` + `feature.revolve`) and **linear pattern** | Executed on SW 2026 SP04.1; `mac selftest` 34/34 |
@@ -18,7 +18,7 @@ Every number below was produced by a command run on 2026-10-17. Detail: `docs/ar
 
 | Where | Command | Result |
 |---|---|---|
-| Windows PC (Python 3.14.7) | `py -m pytest -q` | **371 passed**, 0 failed, 0 skipped (after OCR decimal-point rule + stacked tolerances) |
+| Windows PC (Python 3.14.7) | `py -m pytest -q` | **401 passed**, 0 failed, 0 skipped (after the review / re-issue workflow) |
 | Windows | `py tools/regression.py` | 3 labelled synthetic fixtures (incl. GD&T): 20/20 characteristics, 0 wrong fields, 0 invented, 57/57 export checks |
 | Windows | `py -m astracad_inspect run tests\fixtures\bracket_gdt_synthetic.dxf` | 5 frame rows (position ⌀0.05 MMC A\|B\|C, 2-row ⊥/∥, flatness, profile) + 3 dims; malformed frame escalated; frames drawn in the layout; 19/19 exports |
 | Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic_scan300.png --units mm` | 3 of 9 callouts accepted (all correct: 100 ±0.1, ⌀20 H7, 45°), 7 escalated with both engines' readings, **0 wrong values**; ~25 s/page |

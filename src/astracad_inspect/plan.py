@@ -565,23 +565,25 @@ def apply_overrides(bundle, path: str | Path) -> list[str]:
         c = by_cid.get(entry.get("cid"))
         if c is None:
             raise ValueError(f"override references unknown characteristic {entry.get('cid')!r}")
+        # every change names the person who made it, not only the file it arrived in
+        who = f"{actor} by {entry['reviewer']}" if entry.get("reviewer") else actor
         if "kind" in entry:
             c.kind = CharKind(entry["kind"])
-            c.record(actor, "kind_overridden", f"kind set to {c.kind.value}")
+            c.record(who, "kind_overridden", f"kind set to {c.kind.value}")
         if "nominal" in entry:
             raw_nominal = entry["nominal"]
             # An explicit null is a statement, not an omission: a limit-pair callout has no
             # nominal, and clearing one is a legitimate correction.
             c.nominal = None if raw_nominal is None else float(raw_nominal)
             c.state = ProvenanceState.USER_SPECIFIED
-            c.record(actor, "nominal_overridden",
+            c.record(who, "nominal_overridden",
                      "nominal cleared (limit pair states no nominal)" if c.nominal is None
                      else f"nominal set to {c.nominal}")
         if "tolerance" in entry:
             c.tolerance = _parse_tolerance_spec(entry["tolerance"])
             c.state = ProvenanceState.USER_SPECIFIED
             c.limits = resolve_limits(c.nominal, c.tolerance, c.unit)
-            c.record(actor, "tolerance_overridden",
+            c.record(who, "tolerance_overridden",
                      f"tolerance set to {describe_tolerance(c.tolerance, c.limits)}")
         if entry.get("reject"):
             c.state = ProvenanceState.REJECTED

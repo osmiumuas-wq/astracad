@@ -143,34 +143,128 @@ async function viewInspections() {
       ["Run", "Route", "Rev", "Rows", "Review", "Escalated", "Exports", "Gate"], rows) : empty("No runs yet in the run folders.")));
 }
 
+const store = { get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
+                set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+const post = (path, body) => api(path, { method: "POST",
+  headers: { "Content-Type": "application/json", "X-AstraCAD": "1" }, body: JSON.stringify(body) });
+
+function tolForm(prefix) {
+  // tolerance editor: kind + the fields that kind needs (nothing pre-filled, nothing assumed)
+  const kind = h("select", { name: prefix + "kind" },
+    h("option", { value: "" }, "tolerance: keep"), h("option", { value: "none" }, "none stated"),
+    h("option", { value: "symmetric" }, "± symmetric"), h("option", { value: "deviations" }, "+upper / lower"),
+    h("option", { value: "limit_pair" }, "limits max / min"));
+  const a = h("input", { name: prefix + "a", size: 7, placeholder: "±" }), b = h("input", { name: prefix + "b", size: 7, placeholder: "" });
+  const sync = () => {
+    const k = kind.value;
+    a.hidden = !k || k === "none"; b.hidden = !["deviations", "limit_pair"].includes(k);
+    a.placeholder = { symmetric: "±", deviations: "upper +", limit_pair: "max" }[k] || "";
+    b.placeholder = { deviations: "lower −", limit_pair: "min" }[k] || "";
+  };
+  kind.addEventListener("change", sync); sync();
+  const read = () => {
+    const k = kind.value;
+    if (!k) return undefined;
+    if (k === "none") return { kind: "none" };
+    if (k === "symmetric") return { kind: k, plus_minus: a.value };
+    if (k === "deviations") return { kind: k, upper: a.value, lower: b.value };
+    return { kind: k, maximum: a.value, minimum: b.value };
+  };
+  return { el: h("span", { class: "tolform" }, kind, " ", a, " ", b), read };
+}
+
 async function viewInspection(key) {
   const d = await api("/api/inspection?key=" + encodeURIComponent(key));
   const p = d.plan;
+  const decided = Object.fromEntries((d.review?.characteristics || []).map(e => [e.cid, e]));
+  const annDecided = Object.fromEntries((d.review?.annotations || []).map(e => [e.text, e]));
+  const msg = h("div", { class: "muted", "aria-live": "polite" });
+  const reviewer = h("input", { id: "reviewer", size: 18, placeholder: "your name", value: store.get("astracad.reviewer") });
+  reviewer.addEventListener("change", () => store.set("astracad.reviewer", reviewer.value.trim()));
+  const act = async body => {
+    msg.textContent = "Saving…";
+    try { await post("/api/review", { key, reviewer: reviewer.value.trim(), ...body }); await viewInspection(key); }
+    catch (e) { msg.textContent = "Not saved: " + e.message; }
+  };
+  const decisionChip = e => !e ? "" : e.approve ? chip("approve (pending)", "ok")
+    : e.reject ? chip("reject (pending)", "bad") : chip("correction (pending)", "warn");
   const files = h("div", { class: "files" }, Object.entries(d.files).map(([k, v]) =>
     h("a", { href: "/file?key=" + encodeURIComponent(v), target: "_blank", rel: "noopener" }, k)));
-  const rows = (p.rows || []).map(r => h("tr", {},
-    h("td", { class: "num" }, r.balloon_no ?? "–"), h("td", {}, r.kind), h("td", { class: "mono" }, sym(r.callout)),
-    h("td", { class: "num" }, fmt(r.nominal)), h("td", { class: "mono" }, r.tolerance_text),
-    h("td", { class: "num" }, fmt(r.minimum)), h("td", { class: "num" }, fmt(r.maximum)),
-    h("td", {}, chip(r.status, r.blocking ? "bad" : r.status === "needs_review" ? "warn" : "ok"),
-      ...(r.issues || []).map(i => h("div", { class: "muted" }, i)))));
+  const tbody = h("tbody");
+  for (const r of (p.rows || [])) {
+    const editor = h("tr", { hidden: true });
+    const nominal = h("input", { size: 8, placeholder: "nominal", value: r.nominal ?? "" });
+    const tf = tolForm("t");
+    editor.append(h("td", { colspan: 9 }, h("span", { class: "muted" }, `Correct ${r.cid}: `), nominal, " ", tf.el, " ",
+      h("button", { class: "primary", onclick: () => {
+        const body = { action: "correct", cid: r.cid };
+        if (String(nominal.value) !== String(r.nominal ?? "")) body.nominal = nominal.value;
+        const t = tf.read(); if (t) body.tolerance = t;
+        act(body);
+      } }, "Save correction"), " ", h("button", { class: "link", onclick: () => editor.hidden = true }, "cancel")));
+    tbody.append(h("tr", {},
+      h("td", { class: "num" }, r.balloon_no ?? "–"), h("td", {}, r.kind), h("td", { class: "mono" }, sym(r.callout)),
+      h("td", { class: "num" }, fmt(r.nominal)), h("td", { class: "mono" }, r.tolerance_text),
+      h("td", { class: "num" }, fmt(r.minimum)), h("td", { class: "num" }, fmt(r.maximum)),
+      h("td", {}, chip(r.status, r.blocking ? "bad" : r.status === "needs_review" ? "warn" : "ok"),
+        ...(r.issues || []).map(i => h("div", { class: "muted" }, i))),
+      h("td", { class: "nowrap" }, decisionChip(decided[r.cid]), h("div", {},
+        h("button", { class: "link", onclick: () => act({ action: "approve", cid: r.cid }) }, "approve"), " · ",
+        h("button", { class: "link", onclick: () => { const why = prompt(`Reason for rejecting ${r.cid}?`); if (why) act({ action: "reject", cid: r.cid, reason: why }); } }, "reject"), " · ",
+        h("button", { class: "link", onclick: () => { editor.hidden = !editor.hidden; } }, "correct"),
+        decided[r.cid] ? [" · ", h("button", { class: "link", onclick: () => act({ action: "clear", cid: r.cid }) }, "undo")] : ""))),
+      editor);
+  }
   const checks = (p.checks || []).map(c => h("tr", {},
     h("td", {}, chip(c.outcome, outcomeCls(c.outcome))), h("td", { class: "mono" }, c.name),
     h("td", {}, c.expected), h("td", {}, c.actual), h("td", { class: "muted" }, c.why || "")));
-  const esc = (p.uninterpreted || []).map(u => h("tr", {}, h("td", { class: "mono" }, u.text), h("td", { class: "muted" }, u.reason)));
+  const esc = (p.uninterpreted || []).map(u => {
+    const kind = h("select", {}, ...["linear", "diameter", "radius", "angular"].map(k => h("option", { value: k }, k)));
+    const nominal = h("input", { size: 8, placeholder: "nominal" });
+    const tf = tolForm("a");
+    const form = h("div", { hidden: true }, kind, " ", nominal, " ", tf.el, " ",
+      h("button", { class: "primary", onclick: () => {
+        const body = { action: "as_characteristic", text: u.text, kind: kind.value, nominal: nominal.value };
+        const t = tf.read(); if (t) body.tolerance = t;
+        act(body);
+      } }, "Add"));
+    const dec = annDecided[u.text];
+    return h("tr", {}, h("td", { class: "mono" }, sym(u.text)), h("td", { class: "muted" }, u.reason),
+      h("td", { class: "nowrap" }, dec ? chip(dec.action + " (pending)", "warn") : "", h("div", {},
+        h("button", { class: "link", onclick: () => { const why = prompt("Why is this not a characteristic?"); if (why) act({ action: "dismiss", text: u.text, reason: why }); } }, "dismiss"), " · ",
+        h("button", { class: "link", onclick: () => { form.hidden = !form.hidden; } }, "add as characteristic")), form));
+  });
   const ver = (d.provenance?.export_verification || []).map(c => h("tr", {},
     h("td", {}, chip(c.outcome, outcomeCls(c.outcome))), h("td", { class: "mono" }, c.name), h("td", {}, c.actual)));
+  const pending = (d.review?.characteristics || []).length + (d.review?.annotations || []).length;
+  const reissue = h("button", { class: "primary", disabled: !pending, onclick: async () => {
+      msg.textContent = "Re-issuing a new run with the review applied…";
+      try { const r = await post("/api/reissue", { key }); location.hash = "#inspection=" + encodeURIComponent(r.key); }
+      catch (e) { msg.textContent = "Not re-issued: " + e.message; }
+    } }, `Re-issue with ${pending} decision(s)`);
+  const log = (d.log || []).slice().reverse().map(e => h("tr", {},
+    h("td", { class: "mono nowrap" }, e.at), h("td", {}, e.reviewer), h("td", {}, e.action),
+    h("td", { class: "mono" }, sym(e.target)), h("td", { class: "muted" }, e.reason || "")));
   main.replaceChildren(
     h("p", {}, h("button", { class: "link", onclick: () => location.hash = "" }, "← all runs")),
     panel(d.name,
       h("div", { class: "banner " + (p.approvable ? "ok" : "warn") }, p.gate || (p.approvable ? "releasable" : "not releasable")),
       h("div", { class: "muted mono" }, `${p.source_document}  ·  rev ${p.revision}  ·  ${p.unit}  ·  route ${d.provenance?.route ?? "?"}`),
       h("div", { class: "muted mono" }, "sha256 " + p.source_sha256), files),
+    panel("Review", d.parent ? h("p", {}, "Re-issued from ", h("button", { class: "link", onclick: () => location.hash = "#inspection=" + encodeURIComponent(d.parent) }, "the reviewed run"),
+        ` with ${(d.applied_log || []).length} recorded decision(s) applied.`) : "",
+      h("div", { class: "run" }, h("label", {}, "Reviewer", reviewer), reissue), msg,
+      h("p", { class: "muted" }, "Decisions are recorded with your name and applied only when you re-issue: that makes a new run from the unchanged drawing; this run is never edited.")),
     panel("Layout", d.files.layout ? h("img", { class: "layout", alt: "drawing with inspection balloons", src: "/file?key=" + encodeURIComponent(d.files.layout) }) : empty("no layout image")),
-    panel(`Characteristics (${rows.length})`, rows.length ? table(["#", "Kind", "Callout", "Nominal", "Tolerance", "Min", "Max", "Status"], rows) : empty("none")),
+    panel(`Characteristics (${(p.rows || []).length})`, (p.rows || []).length ? h("div", { class: "tablewrap" },
+      h("table", {}, h("thead", {}, h("tr", {}, ["#", "Kind", "Callout", "Nominal", "Tolerance", "Min", "Max", "Status", "Review"].map(x => h("th", {}, x)))), tbody)) : empty("none")),
+    esc.length ? panel(`Escalated text (${esc.length})`, table(["Text", "Why it was not accepted", "Review"], esc)) : "",
     panel("Plan checks", table(["", "Check", "Expected", "Actual", "Why"], checks)),
-    esc.length ? panel(`Escalated text (${esc.length})`, table(["Text", "Why it was not accepted"], esc)) : "",
     panel("Export read-back", ver.length ? table(["", "Check", "Actual"], ver) : empty("no verification record")),
+    log.length ? panel(`Audit trail (${log.length})`, table(["When (UTC)", "Reviewer", "Action", "Target", "Reason"], log)) : "",
+    (d.applied_log || []).length ? panel(`Decisions applied in this run (${d.applied_log.length})`, table(["When (UTC)", "Reviewer", "Action", "Target", "Reason"],
+      d.applied_log.slice().reverse().map(e => h("tr", {}, h("td", { class: "mono nowrap" }, e.at), h("td", {}, e.reviewer), h("td", {}, e.action),
+        h("td", { class: "mono" }, sym(e.target)), h("td", { class: "muted" }, e.reason || ""))))) : "",
     (p.warnings || []).length ? panel("Warnings", h("ul", {}, p.warnings.map(w => h("li", {}, w)))) : "");
 }
 
