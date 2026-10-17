@@ -62,3 +62,19 @@ per-drawing table (recall, precision, field accuracy, invented limits = 0) in
 - Pair stacked deviation runs to their nominal by position (as the PDF route does).
 - Read a third engine only as a tie-breaker, never as a sole source.
 - Score OCR recall/precision on the real-drawing corpus (still needs your DXF/PDF/scan files).
+
+## 7. IN PROGRESS (next session starts here): SOLIDWORKS drawing generation → inspection loop
+
+Both trees are now git repos (`astracad` b110afc, `mecagent-alternative` 28e774c; local only, not pushed).
+
+Add `mac drawing <part.SLDPRT> --out DIR --name N [--angle first|third]` in `mecagent-alternative/src/Mac/EditCommands.cs`:
+- open the part read-only (reuse `Open`), hash before/after;
+- template from `GetUserPreferenceStringValue(swDefaultTemplateDrawing)`;
+- `IDrawingDoc.Create1stAngleViews2(partPath)` (ISO default) or `Create3rdAngleViews2`;
+- `IDrawingDoc.InsertModelAnnotations3(swImportModelItemsFromEntireModel, swInsertDimensionsMarkedForDrawing, true, false, false, false)`;
+- walk views (`GetFirstView`/`GetNextView`, `GetDisplayDimensions`) and report every dimension's full name and value;
+- `Extension.SaveAs3` to .SLDDRW, .DXF and .PDF; write `<name>.drawing.json`.
+Acceptance: every driving model dimension from `mac inspect` appears in the drawing with an equal value, and
+`py -m astracad_inspect run <name>.dxf` passes its geometry cross-check on each one (an independent check of
+the CAD drawing). Then add `Op.CREATE_DRAWING` to `astracad_cad/contract.py` and the SOLIDWORKS adapter.
+After that: explainable costing module (`astracad_mfg`) with sourced, dated inputs (charter Part 12).
