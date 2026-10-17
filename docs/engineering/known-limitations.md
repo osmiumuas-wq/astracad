@@ -223,3 +223,11 @@ covered by a check that now fails if it regresses.
 - **One unexplained hang**: a drawing run blocked inside SOLIDWORKS once (Model Items prompt left active);
   recovery needed Esc and a SOLIDWORKS restart. Not reproduced since. The adapter now turns a timeout into a
   FAILED task with recovery advice.
+
+## Added 2026-10-17 (costing)
+
+- **One cost model**: a part machined from a rectangular block (bbox + allowance). Turned parts from bar,
+  castings, sheet metal and multi-operation routings are not modelled. Cycle time is given, or derived from a
+  user-stated MRR; no CAM-based time. Fixturing, tool wear, finishing, inspection and logistics are excluded.
+- **No prices are shipped.** The example rate book is placeholders labelled EXAMPLE; real use needs the
+  user's own sourced, dated figures. Inputs older than 90 days are flagged, not refreshed.

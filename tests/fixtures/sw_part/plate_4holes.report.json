@@ -1,0 +1,252 @@
+{
+  "spec": "plate_4holes",
+  "session": {
+    "process_id": 10288,
+    "base_version": "sw2026_SP04",
+    "service_pack": "d260814.002",
+    "open_documents": 0,
+    "started_by_this_process": false
+  },
+  "execution": {
+    "title": "Part14",
+    "success": true,
+    "failures": [],
+    "log": [
+      "document: Part14 from C:\\ProgramData\\SOLIDWORKS\\SOLIDWORKS 2026\\templates\\Part.PRTDOT",
+      "s: 2 sketch dimension(s) added",
+      "s: rectangle 100x40 at (0,0) on front; segments=4",
+      "b: kernel returned no feature on the first attempt; re-selecting Sketch1 and retrying",
+      "b: Boss-Extrude1 depth=10",
+      "h: 1 sketch dimension(s) added",
+      "h: kernel returned no feature on the first attempt; re-selecting Sketch2 and retrying",
+      "h: Cut-Extrude1 dia=6 depth=10",
+      "lp: LPattern1 4 x 20 along X of Cut-Extrude1",
+      "saved plate_4holes.sldprt 65736 B",
+      "saved plate_4holes.step 36971 B"
+    ],
+    "artifacts": [
+      "C:\\New folder (4)\\astracad\\_win\\sw4\\py\\plate_4holes.sldprt",
+      "C:\\New folder (4)\\astracad\\_win\\sw4\\py\\plate_4holes.step"
+    ],
+    "notes": {}
+  },
+  "measured": {
+    "document_title": "plate_4holes",
+    "document_type": 1,
+    "solid_bodies": 1,
+    "surface_bodies": 0,
+    "volume_mm3": 38869.02664470769,
+    "surface_area_mm2": 11327.787565803086,
+    "mass_grams": 38.86902664470768,
+    "density_g_per_cm3": 1,
+    "center_of_mass_mm": [
+      50,
+      20,
+      5
+    ],
+    "bounding_box_mm": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "feature_tree": [
+      "Comments [CommentsFolder]",
+      "Favorites [FavoriteFolder]",
+      "History [HistoryFolder]",
+      "Selection Sets [SelectionSetFolder]",
+      "Sensors [SensorFolder]",
+      "Design Binder [DocsFolder]",
+      "Annotations [DetailCabinet]",
+      "Surface Bodies [SurfaceBodyFolder]",
+      "Solid Bodies [SolidBodyFolder]",
+      "Lights and Cameras [EnvFolder]",
+      "Markups [InkMarkupFolder]",
+      "Equations [EqnFolder]",
+      "Material \u003Cnot specified\u003E [MaterialFolder]",
+      "Front Plane [RefPlane]",
+      "Top Plane [RefPlane]",
+      "Right Plane [RefPlane]",
+      "Origin [OriginProfileFeature]",
+      "Sketch1 [ProfileFeature]",
+      "Boss-Extrude1 [Extrusion]",
+      "Sketch2 [ProfileFeature]",
+      "Cut-Extrude1 [ICE]",
+      "LPattern1 [LPattern]"
+    ],
+    "dimensions": {
+      "d1@sketch1@plate_4holes.part": 100,
+      "d2@sketch1@plate_4holes.part": 40,
+      "d1@boss-extrude1@plate_4holes.part": 10,
+      "d1@sketch2@plate_4holes.part": 5.999999999999995,
+      "d1@cut-extrude1@plate_4holes.part": 10,
+      "d2@cut-extrude1@plate_4holes.part": 10,
+      "d3@l_pattern1@plate_4holes.part": 20
+    },
+    "material": "Steel",
+    "material_database": null,
+    "errors": [],
+    "template_units": null
+  },
+  "verification": {
+    "spec_name": "plate_4holes",
+    "checks": [
+      {
+        "name": "solid_body_count",
+        "kind": 1,
+        "outcome": 0,
+        "expected": "1.000000",
+        "actual": "1.000000",
+        "delta": 0,
+        "tolerance": 0,
+        "why": null
+      },
+      {
+        "name": "volume_mm3",
+        "kind": 0,
+        "outcome": 0,
+        "expected": "38869.026645",
+        "actual": "38869.026645",
+        "delta": 0,
+        "tolerance": 0.038869026644707684,
+        "why": null
+      },
+      {
+        "name": "surface_area_mm2",
+        "kind": 0,
+        "outcome": 0,
+        "expected": "11327.787566",
+        "actual": "11327.787566",
+        "delta": 3.637978807091713E-12,
+        "tolerance": 0.011327787565803082,
+        "why": null
+      },
+      {
+        "name": "feature:Sketch",
+        "kind": 1,
+        "outcome": 0,
+        "expected": "contains \u0027Sketch\u0027",
+        "actual": "Comments [CommentsFolder], Favorites [FavoriteFolder], History [HistoryFolder], Selection Sets [SelectionSetFolder], Sensors [SensorFolder], Design Binder [DocsFolder], Annotations [DetailCabinet], Surface Bodies [SurfaceBodyFolder], Solid Bodies [SolidBodyFolder], Lights and Cameras [EnvFolder], Markups [InkMarkupFolder], Equations [EqnFolder], Material \u003Cnot specified\u003E [MaterialFolder], Front Plane [RefPlane], Top Plane [RefPlane], Right Plane [RefPlane], Origin [OriginProfileFeature], Sketch1 [ProfileFeature], Boss-Extrude1 [Extrusion], Sketch2 [ProfileFeature], Cut-Extrude1 [ICE], LPattern1 [LPattern]",
+        "delta": null,
+        "tolerance": 0,
+        "why": null
+      },
+      {
+        "name": "feature:Extrusion",
+        "kind": 1,
+        "outcome": 0,
+        "expected": "contains \u0027Extrusion\u0027",
+        "actual": "Comments [CommentsFolder], Favorites [FavoriteFolder], History [HistoryFolder], Selection Sets [SelectionSetFolder], Sensors [SensorFolder], Design Binder [DocsFolder], Annotations [DetailCabinet], Surface Bodies [SurfaceBodyFolder], Solid Bodies [SolidBodyFolder], Lights and Cameras [EnvFolder], Markups [InkMarkupFolder], Equations [EqnFolder], Material \u003Cnot specified\u003E [MaterialFolder], Front Plane [RefPlane], Top Plane [RefPlane], Right Plane [RefPlane], Origin [OriginProfileFeature], Sketch1 [ProfileFeature], Boss-Extrude1 [Extrusion], Sketch2 [ProfileFeature], Cut-Extrude1 [ICE], LPattern1 [LPattern]",
+        "delta": null,
+        "tolerance": 0,
+        "why": null
+      },
+      {
+        "name": "feature:Cut",
+        "kind": 1,
+        "outcome": 0,
+        "expected": "contains \u0027Cut\u0027",
+        "actual": "Comments [CommentsFolder], Favorites [FavoriteFolder], History [HistoryFolder], Selection Sets [SelectionSetFolder], Sensors [SensorFolder], Design Binder [DocsFolder], Annotations [DetailCabinet], Surface Bodies [SurfaceBodyFolder], Solid Bodies [SolidBodyFolder], Lights and Cameras [EnvFolder], Markups [InkMarkupFolder], Equations [EqnFolder], Material \u003Cnot specified\u003E [MaterialFolder], Front Plane [RefPlane], Top Plane [RefPlane], Right Plane [RefPlane], Origin [OriginProfileFeature], Sketch1 [ProfileFeature], Boss-Extrude1 [Extrusion], Sketch2 [ProfileFeature], Cut-Extrude1 [ICE], LPattern1 [LPattern]",
+        "delta": null,
+        "tolerance": 0,
+        "why": null
+      },
+      {
+        "name": "feature:LPattern",
+        "kind": 1,
+        "outcome": 0,
+        "expected": "contains \u0027LPattern\u0027",
+        "actual": "Comments [CommentsFolder], Favorites [FavoriteFolder], History [HistoryFolder], Selection Sets [SelectionSetFolder], Sensors [SensorFolder], Design Binder [DocsFolder], Annotations [DetailCabinet], Surface Bodies [SurfaceBodyFolder], Solid Bodies [SolidBodyFolder], Lights and Cameras [EnvFolder], Markups [InkMarkupFolder], Equations [EqnFolder], Material \u003Cnot specified\u003E [MaterialFolder], Front Plane [RefPlane], Top Plane [RefPlane], Right Plane [RefPlane], Origin [OriginProfileFeature], Sketch1 [ProfileFeature], Boss-Extrude1 [Extrusion], Sketch2 [ProfileFeature], Cut-Extrude1 [ICE], LPattern1 [LPattern]",
+        "delta": null,
+        "tolerance": 0,
+        "why": null
+      },
+      {
+        "name": "artifact:plate_4holes.sldprt",
+        "kind": 2,
+        "outcome": 0,
+        "expected": "non-empty file",
+        "actual": "65736 B sha256=33ec59e6fd1ada7288165575e28b9c659db2150f91ae83f6868e8d21b245e1b8",
+        "delta": null,
+        "tolerance": 0,
+        "why": "ok"
+      },
+      {
+        "name": "artifact:plate_4holes.step",
+        "kind": 2,
+        "outcome": 0,
+        "expected": "non-empty file",
+        "actual": "36971 B sha256=c358f7f8b8bc4983faae09cd2895a14f155c8e4f34462725cff3cd83b6baca4b",
+        "delta": null,
+        "tolerance": 0,
+        "why": "ok"
+      }
+    ],
+    "measured": {
+      "document_title": "plate_4holes",
+      "document_type": 1,
+      "solid_bodies": 1,
+      "surface_bodies": 0,
+      "volume_mm3": 38869.02664470769,
+      "surface_area_mm2": 11327.787565803086,
+      "mass_grams": 38.86902664470768,
+      "density_g_per_cm3": 1,
+      "center_of_mass_mm": [
+        50,
+        20,
+        5
+      ],
+      "bounding_box_mm": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "feature_tree": [
+        "Comments [CommentsFolder]",
+        "Favorites [FavoriteFolder]",
+        "History [HistoryFolder]",
+        "Selection Sets [SelectionSetFolder]",
+        "Sensors [SensorFolder]",
+        "Design Binder [DocsFolder]",
+        "Annotations [DetailCabinet]",
+        "Surface Bodies [SurfaceBodyFolder]",
+        "Solid Bodies [SolidBodyFolder]",
+        "Lights and Cameras [EnvFolder]",
+        "Markups [InkMarkupFolder]",
+        "Equations [EqnFolder]",
+        "Material \u003Cnot specified\u003E [MaterialFolder]",
+        "Front Plane [RefPlane]",
+        "Top Plane [RefPlane]",
+        "Right Plane [RefPlane]",
+        "Origin [OriginProfileFeature]",
+        "Sketch1 [ProfileFeature]",
+        "Boss-Extrude1 [Extrusion]",
+        "Sketch2 [ProfileFeature]",
+        "Cut-Extrude1 [ICE]",
+        "LPattern1 [LPattern]"
+      ],
+      "dimensions": {
+        "d1@sketch1@plate_4holes.part": 100,
+        "d2@sketch1@plate_4holes.part": 40,
+        "d1@boss-extrude1@plate_4holes.part": 10,
+        "d1@sketch2@plate_4holes.part": 5.999999999999995,
+        "d1@cut-extrude1@plate_4holes.part": 10,
+        "d2@cut-extrude1@plate_4holes.part": 10,
+        "d3@l_pattern1@plate_4holes.part": 20
+      },
+      "material": "Steel",
+      "material_database": null,
+      "errors": [],
+      "template_units": null
+    },
+    "all_passed": true,
+    "passed": 9,
+    "failed": 0,
+    "unknown": 0
+  }
+}

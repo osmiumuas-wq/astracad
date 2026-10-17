@@ -1,0 +1,16 @@
+{
+  "_notice": "EXAMPLE rate book: every value below is a placeholder, NOT a real price. Replace each with your own figure, its source and the date it was valid for.",
+  "currency": "INR",
+  "materials": {
+    "AL6061-T6": {
+      "density_g_cm3": {"value": 2.70, "unit": "g/cm^3", "source": "EXAMPLE - replace with your material data sheet", "as_of": "2026-10-17"},
+      "price_per_kg": {"value": 300.0, "unit": "INR/kg", "source": "EXAMPLE - replace with a supplier quote", "as_of": "2026-10-17"}
+    }
+  },
+  "machines": {
+    "VMC-3ax": {"rate_per_hour": {"value": 900.0, "unit": "INR/h", "source": "EXAMPLE - replace with your shop rate", "as_of": "2026-10-17"}}
+  },
+  "labour_rate_per_hour": {"value": 300.0, "unit": "INR/h", "source": "EXAMPLE - replace", "as_of": "2026-10-17"},
+  "overhead_fraction": {"value": 0.20, "unit": "1", "source": "EXAMPLE - replace", "as_of": "2026-10-17"},
+  "scrap_fraction": {"value": 0.05, "unit": "1", "source": "EXAMPLE - replace", "as_of": "2026-10-17"}
+}

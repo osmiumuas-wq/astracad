@@ -83,7 +83,9 @@ After that: explainable costing module (`astracad_mfg`) with sourced, dated inpu
 
 ## 8. Next (highest value, no external dependency)
 
-1. **Explainable costing** (`astracad_mfg`, charter Part 12): machining cost from part volume/size (kernel or
+1. DONE 2026-10-17 — `py -m astracad_mfg cost --kernel-report R --step S --rates RATES --job JOB --out DIR`
+   (see docs/examples/costing/*.EXAMPLE.json; placeholders, not prices). Original plan:
+   **Explainable costing** (`astracad_mfg`, charter Part 12): machining cost from part volume/size (kernel or
    STEP re-read) and explicit, sourced, dated inputs (material price, machine/labour rates, setup, cycle,
    quantity, overhead, scrap). Every figure carries its formula and source; no invented prices.
 2. Drawing route: add a sheet format/title block and tolerances (from a spec or ISO 2768 class chosen by the

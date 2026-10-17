@@ -32,6 +32,7 @@ ocr = ["rapidocr_onnxruntime==1.2.3", "winrt-runtime==3.2.1", "winrt-Windows.Med
 inspect = "astracad_inspect.cli:main"
 astracad-cad = "astracad_cad.cli:main"
 astracad-web = "astracad_web.__main__:main"
+astracad-mfg = "astracad_mfg.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,0 +1,8 @@
+{
+  "material": "AL6061-T6", "machine": "VMC-3ax", "quantity": 50,
+  "stock_allowance_mm": {"value": 2.0, "unit": "mm", "source": "EXAMPLE - your stock policy", "as_of": "2026-10-17"},
+  "setup_time_min": {"value": 30.0, "unit": "min", "source": "EXAMPLE - your estimate", "as_of": "2026-10-17"},
+  "operator_attendance": {"value": 0.5, "unit": "1", "source": "EXAMPLE - your shop", "as_of": "2026-10-17"},
+  "mrr_cm3_per_min": {"value": 5.0, "unit": "cm^3/min", "source": "EXAMPLE - your process data", "as_of": "2026-10-17"},
+  "handling_time_min": {"value": 2.0, "unit": "min", "source": "EXAMPLE - your estimate", "as_of": "2026-10-17"}
+}
