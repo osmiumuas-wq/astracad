@@ -7,7 +7,7 @@ what the vendor **documents** (D), what was **observed** (O), or UNKNOWN (U). Ev
 
 | # | Capability | MecAgent | Pre6 | ASTraCAD status | Evidence / gap |
 |---|---|---|---|---|---|
-| C-01 | Auto-ballooning of 2D drawings | U | D/O (P6-03, P6-26) | **VERIFIED** (DXF, vector PDF, scans) | 18 real SOLIDWORKS sheets: DXF recall 82.8% / precision 97.5%, PDF 78.6% / 86.2% (evaluation-results); layout: balloons next to each callout on measured clear paper, 0 crossings / 0 on ink / 0 unplaced on 22 sheets (`tools/benchmark_layout.py`) |
+| C-01 | Auto-ballooning of 2D drawings | U | D/O (P6-03, P6-26) | **VERIFIED** (DXF, vector PDF, scans) | 22 SOLIDWORKS sample drawings / 29 sheets, printed dimensions: DXF recall 98.2% / precision 98.2%, vector PDF 97.5% / 96.7% (evaluation-results; every remaining error named); layout: balloons next to each callout on measured clear paper, 0 crossings / 0 on ink / 0 unplaced on 22 sheets (`tools/benchmark_layout.py`) |
 | C-02 | Inspection register PDF + XLSX | U | D (P6-05) | **VERIFIED** | `validate.py` reopen checks |
 | C-03 | Scanned/raster drawing + OCR | U | D/O (P6-04, P6-25) | **TESTED** (two-engine consensus) | 18 sheets at 300 dpi: recall 50.5%, precision 81.3%, no misread value accepted; far below Lens on recall |
 | C-04 | GD&T frames and datums | U | D/O (P6-03, P6-27) | **TESTED** | DXF TOLERANCE entities; PDF text frames and frames drawn as graphics (14 symbols by strokes); 1/1 real frame; MMC/LMC bonus not computed |

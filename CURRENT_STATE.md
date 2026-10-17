@@ -19,7 +19,7 @@ Every number below was produced by a command run on 2026-10-17. Detail: `docs/ar
 
 | Where | Command | Result |
 |---|---|---|
-| Windows PC (Python 3.14.7) | `py -m pytest -q` | **450 passed**, 0 failed, 0 skipped (after the instrument register) |
+| Windows PC (Python 3.14.7) | `py -m pytest -q` | **456 passed**, 0 failed, 0 skipped (after the enlarged-corpus reader fixes) |
 | Windows | `py tools/benchmark_layout.py` | 22 real SOLIDWORKS sheets, 175 balloons: **0 crossing leaders, 0 balloons on drawing ink, 0 unplaced**, mean leader 0.20 balloon diameters (before: 8 / 12 / 5 / 8.39) |
 | Windows | `py tools/regression.py` | 3 labelled synthetic fixtures (incl. GD&T): 20/20 characteristics, 0 wrong fields, 0 invented, 57/57 export checks |
 | Windows | `py -m astracad_inspect run tests\fixtures\bracket_gdt_synthetic.dxf` | 5 frame rows (position ⌀0.05 MMC A\|B\|C, 2-row ⊥/∥, flatness, profile) + 3 dims; malformed frame escalated; frames drawn in the layout; 19/19 exports |
@@ -40,6 +40,7 @@ food-processor housing, weldments), scored against dimensions read from the SOLI
 |---|---|---|---|---|
 | DXF | 82.8% (97.5% of dims present in the file) | 97.5% | 2/2 | 61.3% / 72.2% |
 | Vector PDF | 78.6% | 86.2% (item-balloon detection by circle fit; was 79.6% / 81.2%) | 2/2 (+GD&T frames drawn as graphics 1/1) | 69.9% / 19.3% |
+| **Enlarged corpus, printed dims only** (22 drawings / 29 sheets; 15 SOLIDWORKS-hidden dims excluded) | DXF **98.2%** / **98.2%**; vector PDF **97.5%** / **96.7%** (was 90.8% / 85.7% on the same keys) | tolerances 2/2, GD&T 2/2 | generated tier (40 drawings, 416 dims, reported separately): DXF 99.8% / 100%, PDF 99.5% / 99.8% | |
 | OCR (scan @300 dpi) | 50.5% | 81.3% | unread stacks block the row | 30.1% / 28.4% |
 | OCR on SIMULATED scans (+deskew) | 42.7% | 83.0% | — | — |
 

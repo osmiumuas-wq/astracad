@@ -12,6 +12,59 @@ Only recorded runs appear here.
 Synthetic results do not predict accuracy on production drawings (M2 corpus not yet acquired).
 No reference-product run exists, so no comparative result exists.
 
+## 2026-10-17 (later) — enlarged corpus, printed-only keys, five reader fixes
+
+**Dataset (tier 1, headline).** Every sample drawing SOLIDWORKS 2026 installs that exports: 22 drawings,
+29 sheets (`samples\introsw`, `tutorial\*`, `sldBenchmarking`). Added since the first benchmark:
+bolt-assembly, cabinet_bath (3 sheets), mobile gantry and six API-tutorial drawings that carry no
+dimensions (they test false positives only). Excluded: `2012-sm` (sheet metal) - its export hung
+SOLIDWORKS twice; `dissectiontemplate` is a template. Licensed sample files stay in `_sources/` (git-ignored).
+
+**Answer key change.** `mac export-drawing` now records each dimension's annotation visibility, layer
+visibility and view visibility. 15 key dimensions are hidden in SOLIDWORKS (9 on foodprocessor, 5 on
+universal beam, 1 on mobile gantry): they exist in the model but are not on the sheet, so no reader of
+the DXF or PDF can find them. `tools/benchmark_sw.py` now scores against printed dimensions only and
+reports `hidden_excluded` per sheet. The earlier figures counted them, which understated recall.
+
+**Reader fixes found by this corpus** (each has a regression test in `tests/test_industrial_patterns.py`):
+
+| Defect (where seen) | Fix |
+|---|---|
+| ⌀ drawn as graphics missed on callouts along angled leaders; φ-style ring with an upright stroke (bolt-assembly, leg, can, foodprocessor) | glyph searched in the number's own rotated frame; ring found by a centre/radius search instead of averaging; any stroke through the ring centre |
+| Revision/note text read as a size: "90° ROTATION FOR FULL ..." (cabinet_bath) | a number followed on its line by prose words is a note |
+| Roughness value on a drawn √ read as a size: "32" (cabinet_bath) | escalated as "surface finish value", with its reason |
+| Ordinate origin "0" as a characteristic (cabinet_bath DXF) | skipped and counted in the census |
+| Hole-table tags "1".."4" beside holes as sizes (simplehole) | horizontal 1-2 digit label touching a curve with no axis-aligned or long line near it |
+| Scorer: parallelism frame not credited (`<IGTOL-PARA>`) | unambiguous-prefix symbol mapping in the scorer |
+
+**Results (printed dimensions; one-to-one match within half a unit of the printed last digit):**
+
+| Route | Sheets | Printed key dims | Recall | Precision | Tolerances | GD&T frames |
+|---|---|---|---|---|---|---|
+| DXF | 27 | 109 | **98.2%** (107) | **98.2%** (107/109 rows) | 2/2 | 2/2 |
+| Vector PDF | 29 | 119 | **97.5%** (116) | **96.7%** (116/120 rows) | 2/2 | 2/2 |
+| DXF, same keys and scorer, before the fixes | 27 | 109 | 98.2% (107) | 97.3% (107/110 rows) | 2/2 | 2/2 |
+| Vector PDF, same keys and scorer, before the fixes | 29 | 119 | 90.8% (108) | 85.7% (108/126 rows) | 2/2 | 2/2 |
+
+Every remaining error, named:
+
+| Sheet | Route | What | Why it is not counted as solved |
+|---|---|---|---|
+| foodprocessor | DXF + PDF | prints "15" and "⌀0.92" where the model is 150 and 9.2 | a drafting error in the sample (scale factor), not a reading error; the DXF route flags it BLOCKING (`dimension_scale_factor_outlier`). Counted as 2 misses + 2 false rows anyway |
+| box_intro | PDF | "95" printed inside a tight empty circle | indistinguishable from an item balloon by geometry; counted in the census as a balloon number |
+| acad_7550_021 Model | PDF | "6X, ⌀.149" from the revision history cell | text is a valid hole callout on its own; the word that makes it history is not on its baseline |
+| acad_7550_021 Layout1 | PDF | "4x ⌀0.201 ⌀3.25 B.C." hole note | a real hole requirement written as a leader note; SOLIDWORKS' dimension key does not list notes, so it scores as a false row |
+
+**Tier 2 (generated, reported separately).** 40 drawings that SOLIDWORKS generated from sample parts
+(`tools/make_generated_corpus.py`: `mac drawing` then `mac export-drawing`; part hashes recorded and
+unchanged): 416 dimensions. DXF 99.8% recall / 100% precision; PDF 99.5% / 99.8%. The only errors:
+two dimensions SOLIDWORKS placed on top of each other (`g_blade_shaft`, the PDF holds "21.15" and "08" at
+one spot) and one hidden-by-overlap "8" (`g_food_shover`). This tier is easier than tier 1 (automatic
+placement, no notes, no title-block clutter) and is never merged into the headline figures.
+
+**Limits of this evidence.** All drawings are SOLIDWORKS output (one CAD system's conventions); tolerance
+and GD&T counts are small (2 each); no customer drawings yet; scans are not in these figures.
+
 ## 2026-10-17 — Industrial drawings scored against the SOLIDWORKS API (first real-drawing benchmark)
 
 **Dataset.** 13 drawings / 18 sheets shipped with SOLIDWORKS 2026 (`samples\tutorial`, `introsw`,

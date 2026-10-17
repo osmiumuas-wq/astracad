@@ -4,6 +4,7 @@ scoring ASTraCAD against the SOLIDWORKS API's own answer key."""
 from pathlib import Path
 
 import ezdxf
+import pytest
 from reportlab.lib.pagesizes import A3, landscape
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
@@ -166,3 +167,84 @@ def test_unrecognised_symbol_is_escalated_not_guessed(tmp_path):
     b = read_pdf(p, "mm")
     assert not b.characteristics
     assert any("not recognised" in u.reason for u in b.uninterpreted)
+
+
+def _rotated_phi_pdf(path, deg):
+    """A ⌀ drawn as graphics (ring + upright stroke, SOLIDWORKS 'bolt-assembly' style) before a number,
+    the whole callout rotated along an angled leader."""
+    import math
+    c = canvas.Canvas(str(path), pagesize=landscape(A3))
+    c.setLineWidth(0.3)
+    c.saveState()
+    c.translate(150 * mm, 150 * mm)
+    c.rotate(deg)
+    c.circle(-3.2 * mm, 1.6 * mm, 1.5 * mm)
+    c.line(-3.2 * mm, -0.6 * mm, -3.2 * mm, 3.8 * mm)
+    c.setFont("Helvetica", 12)
+    c.drawString(0, 0, "16")
+    c.restoreState()
+    c.line(100 * mm, 140 * mm, 140 * mm, 148 * mm)          # a leader passing nearby
+    c.showPage()
+    c.save()
+
+
+@pytest.mark.parametrize("deg", [0, 21.5, 315])
+def test_diameter_glyph_found_on_rotated_callouts(tmp_path, deg):
+    p = tmp_path / "phi.pdf"
+    _rotated_phi_pdf(p, deg)
+    b = read_pdf(p, "mm")
+    assert [(ch.kind.value, ch.nominal) for ch in b.characteristics] == [("diameter", 16.0)]
+
+
+def test_number_starting_a_note_and_a_roughness_value_are_not_dimensions(tmp_path):
+    p = tmp_path / "notes.pdf"
+    c = canvas.Canvas(str(p), pagesize=landscape(A3))
+    c.setLineWidth(0.3)
+    c.setFont("Helvetica", 10)
+    c.drawString(60 * mm, 60 * mm, "90")
+    c.drawString(66 * mm, 60 * mm, "ROTATION FOR FULL FLOW")
+    # surface finish symbol: short arm, long arm rising at 60 deg, bar at its top; value above-left
+    vx, vy = 200 * mm, 100 * mm
+    c.line(vx - 7 * mm, vy + 12 * mm, vx, vy)
+    c.line(vx, vy, vx + 12.5 * mm, vy + 21.2 * mm)
+    c.line(vx + 12.5 * mm, vy + 21.2 * mm, vx + 18.5 * mm, vy + 21.2 * mm)
+    c.drawString(vx - 4 * mm, vy + 13 * mm, "32")
+    c.line(60 * mm, 120 * mm, 100 * mm, 120 * mm)            # and one real dimension
+    c.drawString(76 * mm, 122 * mm, "40")
+    c.showPage()
+    c.save()
+    b = read_pdf(p, "mm")
+    assert [(ch.kind.value, ch.nominal) for ch in b.characteristics] == [("linear", 40.0)]
+    assert any(u.text == "32" and "surface finish" in u.reason for u in b.uninterpreted)
+    assert any(r.dxftype == "PDF_TEXT:number at the start of a note" for r in b.census)
+
+
+def test_ordinate_origin_zero_is_not_a_characteristic(tmp_path):
+    doc = ezdxf.new("R2010", setup=True)
+    doc.dimstyles.get("Standard").dxf.dimlfac = 1          # ezdxf's setup default is 100
+    msp = doc.modelspace()
+    msp.add_lwpolyline([(0, 0), (60, 0), (60, 30), (0, 30)], close=True)
+    for x in (0, 25, 60):
+        msp.add_ordinate_x_dim(feature_location=(x, 30), offset=(0, 10), origin=(0, 0),
+                               override={"dimlfac": 1}).render()
+    p = tmp_path / "ord.dxf"
+    doc.saveas(p)
+    b = read_dxf(p)
+    assert sorted(ch.nominal for ch in b.characteristics) == [25.0, 60.0]
+    assert any(r.dxftype == "DIMENSION:ordinate origin" and r.total == 1 for r in b.census)
+
+
+def test_hole_table_tag_beside_a_hole_is_not_a_dimension(tmp_path):
+    p = tmp_path / "tags.pdf"
+    c = canvas.Canvas(str(p), pagesize=landscape(A3))
+    c.setLineWidth(0.3)
+    c.setFont("Helvetica", 10)
+    c.circle(100 * mm, 100 * mm, 8 * mm)
+    c.drawString(107 * mm, 107 * mm, "3")                    # tag touching the hole's edge, no line
+    c.line(60 * mm, 140 * mm, 100 * mm, 140 * mm)           # a real dimension on its line
+    c.drawString(78 * mm, 141.5 * mm, "40")
+    c.showPage()
+    c.save()
+    b = read_pdf(p, "mm")
+    assert [(ch.kind.value, ch.nominal) for ch in b.characteristics] == [("linear", 40.0)]
+    assert any("feature tag" in r.dxftype for r in b.census)

@@ -223,34 +223,125 @@ class SheetGeometry:
                 return True
         return False
 
-    def diameter_glyph_left_of(self, box, th: float) -> bool:
-        """SOLIDWORKS draws the ⌀ sign as vector graphics, not text: a small ring with a slash just
-        left of the number. Looked for in a box one text-height wide left of the run."""
+    def diameter_glyph_left_of(self, box, th: float, angle: float = 0.0, quad=None) -> bool:
+        """SOLIDWORKS draws the ⌀ sign as vector graphics, not text: a small ring crossed by a stroke,
+        just before the number. Looked for in the NUMBER'S OWN FRAME (a callout along an angled
+        leader is rotated), in a box about one text-height wide before the run. The stroke may be a
+        slash (⌀) or upright (φ style, SOLIDWORKS "bolt-assembly"); it must cross the ring's centre,
+        which keeps extension and leader lines that merely pass nearby from counting."""
         import numpy as np
-        x0, y0, x1, y1 = box
+        a = math.radians(-(angle or 0.0))
+        ca, sa = math.cos(a), math.sin(a)
+
+        def rot(arr):
+            return np.column_stack([arr[:, 0] * ca - arr[:, 1] * sa, arr[:, 0] * sa + arr[:, 1] * ca])
+
+        if quad is not None and abs(angle or 0.0) > 0.5:
+            q = rot(np.asarray(quad, dtype=float))
+            x0, y0, x1, y1 = q[:, 0].min(), q[:, 1].min(), q[:, 0].max(), q[:, 1].max()
+        elif abs(angle or 0.0) > 0.5:
+            c = rot(np.asarray([(box[0], box[1]), (box[2], box[1]), (box[0], box[3]), (box[2], box[3])], dtype=float))
+            x0, y0, x1, y1 = c[:, 0].min(), c[:, 1].min(), c[:, 0].max(), c[:, 1].max()
+        else:
+            x0, y0, x1, y1 = box
         cy = (y0 + y1) / 2
-        lo_x, hi_x = x0 - 1.4 * th, x0 + 0.1 * th
-        P = self.pts
+        lo_x, hi_x = x0 - 2.0 * th, x0 + 0.1 * th
+        P = rot(self.pts) if abs(angle or 0.0) > 0.5 else self.pts
         sel = (P[:, 0] >= lo_x) & (P[:, 0] <= hi_x) & (P[:, 1] >= cy - 0.75 * th) & (P[:, 1] <= cy + 0.75 * th)
         if sel.sum() < 6:
             return False
         q = P[sel]
-        cxg, cyg = q[:, 0].mean(), q[:, 1].mean()
-        d = np.hypot(q[:, 0] - cxg, q[:, 1] - cyg)
-        med = np.median(d)
-        if not (0.15 * th <= med <= 0.6 * th):
+        # the window also holds the dimension's own arc, leader and extension lines, so the ring is
+        # found by search rather than by averaging: candidate centres on a grid, and for each the
+        # radius band (0.15-0.6 text heights) whose points surround it best
+        gx = np.arange(lo_x, hi_x + 1e-9, 0.06 * th)
+        gy = np.arange(cy - 0.6 * th, cy + 0.6 * th + 1e-9, 0.06 * th)
+        C = np.array([(x, y) for x in gx for y in gy])
+        D = np.hypot(q[None, :, 0] - C[:, None, 0], q[None, :, 1] - C[:, None, 1])
+        best = None
+        for rad in np.arange(0.15 * th, 0.6 * th + 1e-9, 0.04 * th):
+            band = np.abs(D - rad) < 0.08 * rad
+            cnt = band.sum(axis=1)
+            for k in np.argsort(-cnt)[:5]:
+                if cnt[k] < 8:
+                    break
+                pts_k = q[band[k]]
+                ang = np.degrees(np.arctan2(pts_k[:, 1] - C[k, 1], pts_k[:, 0] - C[k, 0]))
+                cov = len(np.unique((ang // 45).astype(int)))
+                if cov >= 6 and (best is None or (cov, cnt[k]) > best[0]):
+                    best = ((cov, cnt[k]), C[k, 0], C[k, 1], rad)
+        if best is None:
             return False
-        ring = np.abs(d - med) < 0.25 * med
-        ang = np.degrees(np.arctan2(q[ring, 1] - cyg, q[ring, 0] - cxg))
-        if len(np.unique((ang // 45).astype(int))) < 6:
-            return False
+        _, cxg, cyg, med = best
         S = self.seg
+        if abs(angle or 0.0) > 0.5:
+            S = np.column_stack([rot(S[:, :2]), rot(S[:, 2:])])
         sx = (np.minimum(S[:, 0], S[:, 2]) >= lo_x - 0.2 * th) & (np.maximum(S[:, 0], S[:, 2]) <= hi_x + 0.2 * th)
         sy = (np.minimum(S[:, 1], S[:, 3]) >= cy - 0.9 * th) & (np.maximum(S[:, 1], S[:, 3]) <= cy + 0.9 * th)
         L = S[sx & sy]
-        ln = np.hypot(L[:, 2] - L[:, 0], L[:, 3] - L[:, 1])
-        slope = np.degrees(np.arctan2(np.abs(L[:, 3] - L[:, 1]), np.abs(L[:, 2] - L[:, 0]) + 1e-9))
-        return bool(((ln > 0.6 * med * 2) & (slope > 30) & (slope < 80)).any())
+        if not len(L):
+            return False
+        dx, dy = L[:, 2] - L[:, 0], L[:, 3] - L[:, 1]
+        ln = np.hypot(dx, dy)
+        slope = np.degrees(np.arctan2(np.abs(dy), np.abs(dx) + 1e-9))
+        # distance from the ring centre to each stroke's line
+        through = np.abs(dx * (cyg - L[:, 1]) - dy * (cxg - L[:, 0])) / np.maximum(ln, 1e-9) < 0.35 * med
+        return bool(((ln > 0.6 * med * 2) & (slope > 30) & through).any())
+
+    def is_feature_tag(self, text: str, box, th: float) -> bool:
+        """A bare 1-2 digit label beside a hole with no dimension line near it: a hole-table tag
+        (SOLIDWORKS "simplehole" sheet 2: 1, 2, 3, 4 beside each hole). A size callout sits on or at
+        its dimension / extension line; a tag only touches the curve it names."""
+        import numpy as np
+        if not re.fullmatch(r"\d{1,2}", text.strip()):
+            return False
+        x0, y0, x1, y1 = box
+        S = self.seg
+        # distance from each segment's midpoint and ends to the text box
+        def gap(px, py):
+            dx = np.maximum(np.maximum(x0 - px, 0), px - x1)
+            dy = np.maximum(np.maximum(y0 - py, 0), py - y1)
+            return np.hypot(dx, dy)
+        ln = np.hypot(S[:, 2] - S[:, 0], S[:, 3] - S[:, 1])
+        near = np.minimum.reduce([gap(S[:, 0], S[:, 1]), gap(S[:, 2], S[:, 3]),
+                                  gap((S[:, 0] + S[:, 2]) / 2, (S[:, 1] + S[:, 3]) / 2)])
+        ang = np.degrees(np.arctan2(np.abs(S[:, 3] - S[:, 1]), np.abs(S[:, 2] - S[:, 0]) + 1e-12))
+        axis = (ang < 1.0) | (ang > 89.0)               # dimension / extension lines are axis-aligned
+        if (((ln > 1.5 * th) | ((ln > 0.5 * th) & axis)) & (near < 0.8 * th)).any():
+            return False                                  # a line to sit on: a dimension
+        curve = (ln <= 1.5 * th) & (near < 1.5 * th)
+        return int(curve.sum()) >= 3
+
+    def surface_finish_at(self, box, th: float) -> bool:
+        """A roughness value sits on a drawn finish symbol (√ with a bar): a long arm rising to the
+        right at about 60 degrees from a vertex below the number, with a near-horizontal bar leaving
+        its top end. Observed on SOLIDWORKS "cabinet_bath" ("32" on a √ with lay C)."""
+        import numpy as np
+        x0, y0, x1, y1 = box
+        S = self.seg
+        dx, dy = S[:, 2] - S[:, 0], S[:, 3] - S[:, 1]
+        # orient every segment left -> right
+        flip = dx < 0
+        a = np.where(flip[:, None], S[:, 2:], S[:, :2])
+        b = np.where(flip[:, None], S[:, :2], S[:, 2:])
+        ddx, ddy = b[:, 0] - a[:, 0], b[:, 1] - a[:, 1]
+        ln = np.hypot(ddx, ddy)
+        ang = np.degrees(np.arctan2(ddy, ddx + 1e-12))
+        # the long arm spans the number's whole height and passes just to its right: the number
+        # sits in the mouth of the V (the symbol's size is its own, not tied to the text height)
+        cy = (y0 + y1) / 2
+        x_mid = a[:, 0] + (cy - a[:, 1]) * ddx / np.where(np.abs(ddy) < 1e-9, 1e-9, ddy)
+        arm = ((ln > 1.0 * th) & (ang > 45) & (ang < 75)
+               & (a[:, 1] <= y0 + 0.2 * th) & (b[:, 1] >= y1 - 0.2 * th)
+               & (x_mid >= x1 - 0.5 * th) & (x_mid <= x1 + 0.45 * ln))
+        if not arm.any():
+            return False
+        horiz = (np.abs(ang) < 8) & (ln > 0.5 * th)
+        for top in b[arm]:
+            near = horiz & (np.hypot(a[:, 0] - top[0], a[:, 1] - top[1]) < 0.15 * th)
+            if near.any():
+                return True
+        return False
 
     def frame_at(self, box, th: float):
         """A feature control frame drawn as graphics around a number: a row of square-ish cells of
@@ -338,6 +429,53 @@ class SheetGeometry:
             if (at_a & (hx0 <= ox) & (hx1 >= ox)).any() and (at_b & (hx0 <= ox) & (hx1 >= ox)).any():
                 return True
         return False
+
+
+_CALLOUT_WORDS = re.compile(r"^(THRU|THROUGH|DEEP|DP|TYP|TYPICAL|PLACES|PLCS|EQ|EQSP|SP|SPACED|"
+                            r"MAX|MIN|REF|BSC|BASIC|CSK|CBORE|SPOTFACE|SFACE|X|HOLES?|TAP|DRILL|ALL|AROUND|"
+                            r"OVER|ON|BC|PCD|B\.?C\.?|UNC|UNF|UNS|THD|THREAD|FULL|ROUND|R|SR|DIA)\b", re.I)
+
+
+def _continues_as_prose(g, groups, th: float) -> bool:
+    """A number that a line of words follows ("90° ROTATION FOR FULL ...") is the start of a note.
+    Only horizontal text, same page and baseline, starting within 1.5 text heights to the right;
+    words that belong to callouts (THRU, DEEP, TYP, X ...) do not count as prose."""
+    if not (_orthogonal(g.angle) and g.angle % 180 < 1):
+        return False
+    x0, y0, x1, y1 = g.box
+    for o in groups:
+        if o is g or o.page != g.page or not (_orthogonal(o.angle) and o.angle % 180 < 1):
+            continue
+        ox0, oy0, ox1, oy1 = o.box
+        if not (-0.2 * th <= ox0 - x1 <= 1.5 * th):
+            continue
+        if min(y1, oy1) - max(y0, oy0) < 0.5 * min(y1 - y0, oy1 - oy0):
+            continue                                   # not on the same line
+        t = o.text.strip().lstrip("°º˚ ")
+        words = re.findall(r"[A-Za-z]{3,}", t)
+        if words and not _CALLOUT_WORDS.match(t) and not re.match(r"^[A-Za-z]?\d", t):
+            return True
+    return False
+
+
+def _ends_prose(g, groups, th: float) -> bool:
+    """A number that ends a line of words ("4X, ⌀ was 6x, ⌀.149" in a revision description) is part
+    of that note. Same line, the words ending within 1.5 text heights to the left."""
+    if not (_orthogonal(g.angle) and g.angle % 180 < 1):
+        return False
+    x0, y0, x1, y1 = g.box
+    for o in groups:
+        if o is g or o.page != g.page or not (_orthogonal(o.angle) and o.angle % 180 < 1):
+            continue
+        ox0, oy0, ox1, oy1 = o.box
+        if not (-0.2 * th <= x0 - ox1 <= 1.5 * th):
+            continue
+        if min(y1, oy1) - max(y0, oy0) < 0.5 * min(y1 - y0, oy1 - oy0):
+            continue
+        t = o.text.strip()
+        if re.search(r"\b(?!(?:THRU|DEEP|TYP|PLACES|PLCS|HOLES?|EQ|SP|X)\b)[A-Za-z]{3,}\b", t, re.I):
+            return True
+    return False
 
 
 def _classify_symbol(segs, centre, size):
@@ -552,6 +690,19 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
             if geo.is_balloon(norm, cx, cy, th):
                 skipped["balloon item number"] += 1
                 continue
+            if _orthogonal(g.angle) and g.angle % 180 < 1 and geo.is_feature_tag(norm, g.box, th) and not geo.diameter_glyph_left_of(g.box, th, g.angle, g.quad):
+                skipped["feature tag beside a hole (hole-table label)"] += 1
+                continue
+            if _continues_as_prose(g, groups, th) or _ends_prose(g, groups, th):
+                skipped["number at the start of a note"] += 1
+                notes.append(norm)
+                continue
+            if geo.surface_finish_at(g.box, th):
+                uninterpreted.append(UninterpretedAnnotation(
+                    str(p), f"P{g.page}-T{g.idx:03d}", "", g.text,
+                    "surface finish value (roughness) on a drawn finish symbol: a requirement, but not "
+                    "a dimension - recorded for review, not read as a size", g.page, cx, cy))
+                continue
             if (_orthogonal(g.angle) and g.angle % 180 < 1 and geo.is_table_cell(g.box, th)
                     and geo.frame_at(g.box, th) is None):       # a frame with datum cells is not a table row
                 skipped["table cell"] += 1
@@ -591,8 +742,8 @@ def read_pdf(path: str | Path, declared_unit: str | None = None,
                 characteristics.append(c)
                 continue
         glyph_note = None
-        if (geo is not None and g.angle % 360 < 1 and not re.match(r"^\s*(?:\d+\s*[xX]\s*)?[⌀Øø∅]", g.text)
-                and re.match(r"^\s*\.?\d", g.text) and geo.diameter_glyph_left_of(g.box, th)):
+        if (geo is not None and not re.match(r"^\s*(?:\d+\s*[xX]\s*)?[⌀Øø∅]", g.text)
+                and re.match(r"^\s*\.?\d", g.text) and geo.diameter_glyph_left_of(g.box, th, g.angle, g.quad)):
             g = TextRun(g.idx, g.page, "⌀" + g.text, g.angle, g.size, g.box, g.local, g.parts, g.quad)
             glyph_note = ("diameter sign drawn as vector graphics left of the text (a ring with a "
                           "slash), not as a character; added from the sheet geometry")

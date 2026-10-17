@@ -44,6 +44,16 @@ GTOL_SYMBOL = {"STRAIGHT": "straightness", "FLAT": "flatness", "CIRC": "circular
                "RUNOUT": "circular runout"}
 
 
+def _gtol_name(code: str) -> str:
+    """SOLIDWORKS symbol code -> characteristic name: the table first, then a code that is a prefix
+    of exactly one name ("PARA" -> parallelism, observed on cabinet_bath). Ambiguous: left as is."""
+    if code in GTOL_SYMBOL:
+        return GTOL_SYMBOL[code]
+    names = sorted(set(GTOL_SYMBOL.values()))
+    hits = [n for n in names if n.replace(" ", "").startswith(code.lower())] if len(code) >= 3 else []
+    return hits[0] if len(hits) == 1 else code.lower()
+
+
 def _half_digit(text: str) -> float:
     m = re.findall(r"\d+(?:\.(\d+))?", text or "")
     if not m:
@@ -99,6 +109,11 @@ def score_sheet(key_dims: list[dict], rows: list) -> dict:
     }
 
 
+def _hidden(d: dict) -> bool:
+    return (d.get("visibility") == "swAnnotationHidden" or d.get("layer_visible") is False
+            or d.get("view_visible") is False)
+
+
 def score_gtols(key_gtols: list[dict], rows: list) -> dict:
     want = []
     for g in key_gtols:
@@ -106,7 +121,7 @@ def score_gtols(key_gtols: list[dict], rows: list) -> dict:
             sym = next((s for s in (f.get("symbols") or []) if s), "")
             code = re.sub(r"[<>]|IGTOL-", "", sym).upper()
             vals = [v for v in (f.get("values") or []) if v]
-            want.append((GTOL_SYMBOL.get(code, code.lower()), vals[0] if vals else None))
+            want.append((_gtol_name(code), vals[0] if vals else None))
     got = [(r.callout.split(" | ")[0], r.maximum) for r in rows if r.kind == "geometric"]
     hit = 0
     pool = list(got)
@@ -127,8 +142,13 @@ def run(corpus: Path, ocr: bool, scans: Path | None = None) -> dict:
     for kp in sorted(corpus.glob("*.answer.json")):
         key = json.loads(kp.read_text(encoding="utf-8"))
         for sh in key["sheets"]:
+            # a dimension SOLIDWORKS hides (annotation hidden, hidden layer or view) is in the model
+            # but not on the sheet a reader receives: it is not part of what can be read. Keys made
+            # before visibility was recorded carry no field and are all counted (the old behaviour).
+            hidden = [d for d in sh["dimensions"] if _hidden(d)]
+            sh = {**sh, "dimensions": [d for d in sh["dimensions"] if not _hidden(d)]}
             entry = {"drawing": kp.name[:-len(".answer.json")], "sheet": sh["name"],
-                     "key_dimensions": len(sh["dimensions"]),
+                     "key_dimensions": len(sh["dimensions"]), "hidden_excluded": len(hidden),
                      "key_gtol_frames": sum(len(g["frames"]) for g in sh["gtols"]), "routes": {}}
             routes = []
             if "dxf" in sh["files"]:
@@ -181,7 +201,7 @@ def run(corpus: Path, ocr: bool, scans: Path | None = None) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--corpus", default=str(ROOT / "_sources" / "corpus_sw"))
+    ap.add_argument("--corpus", default=str(ROOT / "_sources" / "corpus_sw_v2"))
     ap.add_argument("--ocr", action="store_true")
     ap.add_argument("--out", default=str(ROOT / "_out" / "benchmark_sw.json"))
     ap.add_argument("--scans", default=None,

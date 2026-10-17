@@ -12,6 +12,15 @@ now inspects the part read-only and lists candidate dimensions with ready comman
 selected (exit 3). Verified live on SW 2026, including sketch dimensions: "change the diameter of
 shaft.SLDPRT to 30 mm" → pick D1@Sketch1 → edit → STEP re-read 30×30×100.
 
+## 0b. Done 2026-10-17: enlarged verified corpus + reader fixes
+
+All 22 exportable SOLIDWORKS sample drawings (29 sheets) with API answer keys that now record
+visibility (hidden dims excluded), plus a separate generated tier (40 drawings, 416 dims,
+`tools/make_generated_corpus.py`). Five reader fixes from what the corpus exposed; vector PDF went
+from 90.8% / 85.7% to 97.5% / 96.7% recall / precision on the same keys. Remaining errors are named in
+evaluation-results.md. All of it is still one CAD system's output: the next accuracy step is drawings
+from other sources (AutoCAD, Creo, Inventor, hand-drafted, customer) - see 1.
+
 ## 0a. Done 2026-10-17: measurement results (C-09)
 
 Inspection workspace → Sample + Instrument in the bar → select a balloon → `M`, type the value,

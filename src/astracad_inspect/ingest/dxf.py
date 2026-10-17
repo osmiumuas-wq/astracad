@@ -568,6 +568,14 @@ def read_dxf(path: str | Path, declared_unit: str | None = None,
 
         text, text_from = _callout_text(doc, e)
         parsed = parse_callout(text, unit)
+        if low_type == 6 and parsed.nominal == 0 and parsed.tolerance.kind == "none":
+            # the "0" of an ordinate set marks the datum origin the other ordinates are measured
+            # from - not a feature to inspect (SOLIDWORKS lists none in its own dimension set);
+            # counted, not silently dropped
+            o = census.setdefault("DIMENSION:ordinate origin", EntityCensusRow(
+                "DIMENSION:ordinate origin", 0, 0, "ordinate datum origins printed as 0; not characteristics"))
+            o.total += 1
+            continue
         if text_from:
             parsed.notes.append("callout read from " + text_from)
         else:
