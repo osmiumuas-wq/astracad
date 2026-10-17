@@ -38,7 +38,7 @@ food-processor housing, weldments), scored against dimensions read from the SOLI
 |---|---|---|---|---|
 | DXF | 82.8% (97.5% of dims present in the file) | 97.5% | 2/2 | 61.3% / 72.2% |
 | Vector PDF | 79.6% | 81.2% | 2/2 (+GD&T frames drawn as graphics 1/1) | 69.9% / 19.3% |
-| OCR (scan @300 dpi) | 43.7% | 80.4% | unread stacks block the row | 30.1% / 28.4% |
+| OCR (scan @300 dpi) | 50.5% | 81.3% | unread stacks block the row | 30.1% / 28.4% |
 | OCR on SIMULATED scans (+deskew) | 42.7% | 83.0% | — | — |
 
 Found a real drafting error in a SOLIDWORKS sample (prints 15 for a 150 mm span) — now a blocking finding.

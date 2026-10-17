@@ -173,3 +173,29 @@ def test_an_upright_page_is_left_alone():
     ImageDraw.Draw(img).rectangle([60, 60, 2940, 2040], outline="black", width=5)
     out, applied = deskew(img)
     assert applied == 0.0 and out is img
+
+
+@pytest.mark.parametrize("a,b,want", [
+    ("450", "45*", "45°"), ("880", "88*", "88°"),          # degree sign: '0' vs '*', last position
+    ("27940", "27.940", "27.940"),                          # decimal point dropped by one engine
+    ("Ø3.25", "Φ3.25", "⌀3.25"),                            # Greek phi is an explicit diameter sign
+])
+def test_second_round_of_measured_confusions(a, b, want):
+    assert agree(a, b)[0] == want
+
+
+@pytest.mark.parametrize("a,b", [
+    ("4500", "45*0"),           # '*' not in the last position
+    ("2794", "27.940"),         # dropped dot AND a missing digit
+    ("27.94", "279.4"),         # both have a dot, in different places
+    ("9.20", "D9.20"),          # 'D' is not an explicit diameter sign
+])
+def test_second_round_rules_do_not_overreach(a, b):
+    assert agree(a, b)[0] is None
+
+
+def test_tilted_text_is_levelled_before_the_re_read():
+    """RapidOCR's text angle is kept so a callout on an angled leader is re-read upright by both."""
+    from astracad_inspect.ingest.raster import Region
+    r = Region((0, 0, 10, 10), None, "R13", 0, tilt=-38.0)
+    assert r.tilt == -38.0

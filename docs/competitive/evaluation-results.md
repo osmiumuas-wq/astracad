@@ -114,3 +114,13 @@ blur, JPEG 55-75), deterministic per sheet; parameters are written next to each 
 Deskew measures within 0.021 deg of the true rotation (5 sheets x 4 angles) but did not change recall:
 both engines already tolerate ~1 deg. The OCR bottleneck is two-engine agreement on cluttered text,
 not page geometry. Real scans (stamps, folds, hand marks, low dpi) remain unmeasured.
+
+### OCR route, second confusion round (same day)
+
+From all 109 unresolved OCR readings on the 18 sheets: (1) RapidOCR's text angle is kept and
+angled callouts are levelled before BOTH engines re-read them (Windows OCR missed every callout on an
+angled leader); (2) hatching read as runs of '1' is counted, not sent to review; (3) degree sign read
+'0' by one engine and '*' by the other, last position only; (4) a decimal point dropped by one engine;
+(5) Greek phi accepted as an explicit diameter sign ('D' is not). Clean renders: recall 43.7% ->
+**50.5%** (52/103), precision **81.3%**, 12 min for 18 sheets. Extra rows remain real non-dimension
+text (chamfer and bolt-circle callouts, balloons, a frame value).

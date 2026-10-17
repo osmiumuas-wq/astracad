@@ -45,6 +45,7 @@ class OcrBox:
     text: str
     box: tuple[float, float, float, float]          # x0, y0, x1, y1 in upright image pixels
     conf: float | None = None
+    tilt: float = 0.0          # text baseline angle in the read image (deg, y down), RapidOCR only
 
 
 @dataclass
@@ -57,6 +58,7 @@ class Region:
     agreed: str | None = None
     notes: list[str] = field(default_factory=list)
     skip: str | None = None          # border label / balloon / table cell (from sheet geometry)
+    tilt: float = 0.0                # text angle within the pass (RapidOCR), used to level re-reads
 
 
 # ---- engines --------------------------------------------------------------------------------
@@ -111,9 +113,11 @@ class RapidOcrEngine:
         import numpy as np
         res, _ = self._engine(np.asarray(img))
         out = []
+        import math
         for pts, text, conf in res or []:
             xs, ys = [p[0] for p in pts], [p[1] for p in pts]
-            out.append(OcrBox(text, (min(xs), min(ys), max(xs), max(ys)), float(conf)))
+            tilt = math.degrees(math.atan2(pts[1][1] - pts[0][1], pts[1][0] - pts[0][0]))
+            out.append(OcrBox(text, (min(xs), min(ys), max(xs), max(ys)), float(conf), tilt))
         return out
 
 
@@ -155,7 +159,7 @@ def _overlap(a, b) -> float:
 
 
 # ---- agreement -------------------------------------------------------------------------------
-_DIA = "⌀Øø∅"
+_DIA = "⌀Øø∅Φφ"          # RapidOCR writes the diameter sign as Greek phi too
 
 
 def _key(t: str) -> str:
@@ -189,6 +193,11 @@ def agree(a: str | None, b: str | None) -> tuple[str | None, list[str]]:
                 merged.append("°")
                 other = cb if ca == "°" else ca
                 notes.append(f"one engine read the degree sign as {other!r}; the other read °")
+            elif {ca, cb} == {"0", "*"} and len(merged) == len(ka) - 1 and merged and merged[-1].isdigit():
+                # last character only: Windows writes the degree sign as '0' and RapidOCR as '*'
+                # (measured: '450'/'45*', '880'/'88*'); neither is a digit position in a value
+                merged.append("°")
+                notes.append("degree sign read as '0' by one engine and '*' by the other")
             elif {ca, cb} == {"1", "."} and "." not in (ka if ca == "1" else kb):
                 # Measured on an AutoCAD stroke font: Windows OCR reads every decimal point as '1'
                 # ('11345' for '1.345'). Accepted only where the other engine read '.' at that
@@ -200,6 +209,12 @@ def agree(a: str | None, b: str | None) -> tuple[str | None, list[str]]:
             else:
                 return None, []
         return "".join(merged), notes
+    # one engine dropped the decimal point entirely ('27940' vs '27.940'): accepted only when the
+    # other's reading minus its single '.' is identical and the dropping engine shows no '.' at all
+    for x, y, who in ((ka, kb, "Windows OCR"), (kb, ka, "RapidOCR")):
+        if "." not in x and y.count(".") == 1 and y.replace(".", "") == x and re.search(r"\d\.\d", y):
+            return normalise(b if y == kb else a), [f"{who} dropped the decimal point; the other "
+                                                    "engine read it"]
     return None, []
 
 
@@ -221,6 +236,10 @@ def reread(img, region: Region, win: WindowsOcr, rapid: RapidOcrEngine,
                      min(img.width, int(x1 + pad)), min(img.height, int(y1 + pad))))
     if region.angle:
         crop = crop.rotate(region.angle, expand=True)
+    if 3.0 <= abs(region.tilt) <= 87.0:
+        # text on an angled leader: Windows OCR has no orientation detection and missed every
+        # such callout on the SOLIDWORKS samples (R13, R44, 2XR7 ...). Level the crop for BOTH engines.
+        crop = crop.rotate(region.tilt, expand=True, fillcolor=(255, 255, 255))
     for k in scales:
         big = crop.resize((crop.width * k, crop.height * k), Image.LANCZOS)
         a = _join(win.words(big)) or None
@@ -247,7 +266,7 @@ def regions_for(img, win: WindowsOcr, rapid: RapidOcrEngine, angles=(0, -90), ge
     for angle in angles:
         rot = img if angle == 0 else img.rotate(angle, expand=True)
         ww = [OcrBox(w.text, _unrotate(w.box, angle, W, H)) for w in win.words(rot)]
-        rr = [OcrBox(r.text, _unrotate(r.box, angle, W, H), r.conf) for r in rapid.lines(rot)]
+        rr = [OcrBox(r.text, _unrotate(r.box, angle, W, H), r.conf, r.tilt) for r in rapid.lines(rot)]
         used = set()
         found: list[Region] = []
         for r in rr:
@@ -258,7 +277,7 @@ def regions_for(img, win: WindowsOcr, rapid: RapidOcrEngine, angles=(0, -90), ge
             for i in mine:
                 b = ww[i].box
                 box = (min(box[0], b[0]), min(box[1], b[1]), max(box[2], b[2]), max(box[3], b[3]))
-            found.append(Region(box, a, r.text, angle, r.conf))
+            found.append(Region(box, a, r.text, angle, r.conf, tilt=r.tilt))
         # Windows words no RapidOCR line covered: one-engine readings, grouped by line proximity
         rest = [ww[i] for i in range(len(ww)) if i not in used]
         while rest:
@@ -556,6 +575,11 @@ def read_raster(path: str | Path, declared_unit: str | None = None,
                                                     or normalise(seen)[:1] in "+-±"):
                     if _NUMBER.search(seen):
                         notes.append(normalise(seen))
+                    continue
+                if not (r.a and r.b) and re.fullmatch(r"[1Il|:\s]+", seen):
+                    # section hatching read by one engine as runs of '1' (measured: ~60 on a
+                    # mould base); not text, so it is counted rather than sent to review
+                    skipped["hatching or line noise"] += 1
                     continue
                 if r.a and r.b:
                     n_disagree += 1

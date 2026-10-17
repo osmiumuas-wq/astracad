@@ -9,7 +9,7 @@ what the vendor **documents** (D), what was **observed** (O), or UNKNOWN (U). Ev
 |---|---|---|---|---|---|
 | C-01 | Auto-ballooning of 2D drawings | U | D/O (P6-03, P6-26) | **VERIFIED** (DXF, vector PDF, scans) | 18 real SOLIDWORKS sheets: DXF recall 82.8% / precision 97.5%, PDF 79.6% / 81.2% (evaluation-results) |
 | C-02 | Inspection register PDF + XLSX | U | D (P6-05) | **VERIFIED** | `validate.py` reopen checks |
-| C-03 | Scanned/raster drawing + OCR | U | D/O (P6-04, P6-25) | **TESTED** (two-engine consensus) | 18 sheets at 300 dpi: recall 43.7%, precision 80.4%, no misread value accepted; far below Lens on recall |
+| C-03 | Scanned/raster drawing + OCR | U | D/O (P6-04, P6-25) | **TESTED** (two-engine consensus) | 18 sheets at 300 dpi: recall 50.5%, precision 81.3%, no misread value accepted; far below Lens on recall |
 | C-04 | GD&T frames and datums | U | D/O (P6-03, P6-27) | **TESTED** | DXF TOLERANCE entities; PDF text frames and frames drawn as graphics (14 symbols by strokes); 1/1 real frame; MMC/LMC bonus not computed |
 | C-05 | ISO 286 fit-class limits | U | U | **VERIFIED** (783 cells, 3–400 mm) | double-sourced table + IT check |
 | C-06 | Missing-characteristic / coverage gate | U | D (P6-05, P6-10) | **VERIFIED** | release gate blocks with named reasons |
