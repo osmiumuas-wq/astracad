@@ -19,6 +19,11 @@ G = "{\\Fgdt;%s}"
 
 def main() -> Path:
     doc = ezdxf.new("R2010", setup=True)
+    # ezdxf's setup styles carry DIMLFAC 100 (drawn in m, shown in cm). These fixtures are
+    # drawn 1:1 in mm and print their own values, so the factor must be 1 or the file
+    # contradicts itself (a reader honouring DIMLFAC would see 100x every length).
+    for _st in doc.dimstyles:
+        _st.dxf.dimlfac = 1.0
     doc.header["$INSUNITS"] = 4                     # millimetres
     msp = doc.modelspace()
     msp.add_lwpolyline([(0, 0), (80, 0), (80, 50), (0, 50)], close=True)

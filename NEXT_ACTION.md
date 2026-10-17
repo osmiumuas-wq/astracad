@@ -63,7 +63,9 @@ per-drawing table (recall, precision, field accuracy, invented limits = 0) in
 - Read a third engine only as a tie-breaker, never as a sole source.
 - Score OCR recall/precision on the real-drawing corpus (still needs your DXF/PDF/scan files).
 
-## 7. IN PROGRESS (next session starts here): SOLIDWORKS drawing generation → inspection loop
+## 7. DONE 2026-10-17: SOLIDWORKS drawing generation → inspection loop (see CURRENT_STATE)
+
+Kept for the record; the plan below is what was implemented.
 
 Both trees are now git repos (`astracad` b110afc, `mecagent-alternative` 28e774c; local only, not pushed).
 
@@ -78,3 +80,12 @@ Acceptance: every driving model dimension from `mac inspect` appears in the draw
 `py -m astracad_inspect run <name>.dxf` passes its geometry cross-check on each one (an independent check of
 the CAD drawing). Then add `Op.CREATE_DRAWING` to `astracad_cad/contract.py` and the SOLIDWORKS adapter.
 After that: explainable costing module (`astracad_mfg`) with sourced, dated inputs (charter Part 12).
+
+## 8. Next (highest value, no external dependency)
+
+1. **Explainable costing** (`astracad_mfg`, charter Part 12): machining cost from part volume/size (kernel or
+   STEP re-read) and explicit, sourced, dated inputs (material price, machine/labour rates, setup, cycle,
+   quantity, overhead, scrap). Every figure carries its formula and source; no invented prices.
+2. Drawing route: add a sheet format/title block and tolerances (from a spec or ISO 2768 class chosen by the
+   user) so the inspection plan has limits; investigate the one-off Model Items hang.
+3. Dimension the revolve profile so revolved parts reach drawings with their diameters.

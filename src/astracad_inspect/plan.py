@@ -453,7 +453,9 @@ def build_plan(bundle, balloon_radius: float = 4.0, gap: float = 2.0,
     for c in chars:
         if c.limits is None and c.nominal is None:
             continue
-        dupes.setdefault((c.kind, c.nominal, c.limits), []).append(c.cid)
+        # the tolerance is part of the key: flatness 0.02 and parallelism 0.02 | A share kind,
+        # nominal and limits but are different requirements, not one dimensioned twice
+        dupes.setdefault((c.kind, c.nominal, c.limits, c.tolerance), []).append(c.cid)
     for key, cids in dupes.items():
         if len(cids) < 2:
             continue
@@ -463,6 +465,14 @@ def build_plan(bundle, balloon_radius: float = 4.0, gap: float = 2.0,
                        f"same kind/nominal/limits as {', '.join(x for x in cids if x != c.cid)} "
                        f"({key[0].value}, {key[1]}, {key[2]}); may be a genuine repeated "
                        "dimension, so it is flagged rather than merged", "warning")
+
+    # Rows were built before the checks above added issues (e.g. possible_duplicate_callout); a row
+    # is what the PDF/XLSX print, so it must carry every issue its characteristic now has.
+    by_cid = {c.cid: c for c in chars}
+    for r in rows:
+        c = by_cid[r.cid]
+        r.issues = [f"{i.severity}:{i.code}" for i in c.issues]
+        r.blocking = c.is_blocking
 
     for u in bundle.uninterpreted:
         plan_issues.append(Issue("annotation_needs_review", "blocking",

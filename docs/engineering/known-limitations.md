@@ -213,3 +213,13 @@ covered by a check that now fails if it regresses.
   authorised directory; the source hash is checked before and after by both `mac` and Python. A
   plain-language word ("diameter") is never mapped to a dimension automatically — the full name
   (e.g. `D1@Sketch1`) is required. Configurations, equations and global variables are not handled.
+
+## Added 2026-10-17 (drawing route)
+
+- **Drawings are minimal**: three standard views and model dimensions; no sheet format, title block,
+  tolerances, sections or notes. Parts only (no assemblies).
+- **Educational SOLIDWORKS licence** on this PC: generated sheets are watermarked for instructional use only.
+  Nothing produced here may be presented as commercial output.
+- **One unexplained hang**: a drawing run blocked inside SOLIDWORKS once (Model Items prompt left active);
+  recovery needed Esc and a SOLIDWORKS restart. Not reproduced since. The adapter now turns a timeout into a
+  FAILED task with recovery advice.

@@ -1,0 +1,160 @@
+{
+  "command": "drawing",
+  "part": {
+    "path": "C:\\New folder (4)\\astracad\\_win\\sw3\\block_60x40x20_hole10.SLDPRT",
+    "sha256_before": "3d6de1f1219366fa2d0ce10a8cca8fc73c291690f660bc436cb5832cb1738f7d",
+    "sha256_after": "3d6de1f1219366fa2d0ce10a8cca8fc73c291690f660bc436cb5832cb1738f7d",
+    "unchanged": true
+  },
+  "template": "C:\\ProgramData\\SolidWorks\\SOLIDWORKS 2026\\templates\\Drawing.drwdot",
+  "projection": "first",
+  "model_dimensions": [
+    {
+      "name": "D1@Sketch1@block_60x40x20_hole10.Part",
+      "mm": 60,
+      "kind": "linear"
+    },
+    {
+      "name": "D2@Sketch1@block_60x40x20_hole10.Part",
+      "mm": 40,
+      "kind": "linear"
+    },
+    {
+      "name": "D1@Boss-Extrude1@block_60x40x20_hole10.Part",
+      "mm": 20,
+      "kind": "linear"
+    },
+    {
+      "name": "D1@Sketch2@block_60x40x20_hole10.Part",
+      "mm": 9.999999999999995,
+      "kind": "diameter"
+    }
+  ],
+  "views": [
+    {
+      "name": "Sheet1",
+      "type": 1,
+      "scale": 2,
+      "dimensions": 0
+    },
+    {
+      "name": "Drawing View1",
+      "type": 7,
+      "scale": 2,
+      "dimensions": 3
+    },
+    {
+      "name": "Drawing View2",
+      "type": 4,
+      "scale": 2,
+      "dimensions": 1
+    },
+    {
+      "name": "Drawing View3",
+      "type": 4,
+      "scale": 2,
+      "dimensions": 0
+    }
+  ],
+  "drawing_dimensions": [
+    {
+      "view": "Drawing View1",
+      "full_name": "D1@Sketch1@block_60x40x20_hole10.Part",
+      "key": "D1@Sketch1",
+      "value_mm": 60
+    },
+    {
+      "view": "Drawing View1",
+      "full_name": "D2@Sketch1@block_60x40x20_hole10.Part",
+      "key": "D2@Sketch1",
+      "value_mm": 40
+    },
+    {
+      "view": "Drawing View1",
+      "full_name": "D1@Sketch2@block_60x40x20_hole10.Part",
+      "key": "D1@Sketch2",
+      "value_mm": 9.999999999999995
+    },
+    {
+      "view": "Drawing View2",
+      "full_name": "D1@Boss-Extrude1@block_60x40x20_hole10.Part",
+      "key": "D1@Boss-Extrude1",
+      "value_mm": 20
+    }
+  ],
+  "comparison": [
+    {
+      "model_dimension": "D1@Sketch1",
+      "model_mm": 60,
+      "kind": "linear",
+      "on_drawing": 1,
+      "drawing_mm": 60,
+      "views": [
+        "Drawing View1"
+      ],
+      "ok": true
+    },
+    {
+      "model_dimension": "D2@Sketch1",
+      "model_mm": 40,
+      "kind": "linear",
+      "on_drawing": 1,
+      "drawing_mm": 40,
+      "views": [
+        "Drawing View1"
+      ],
+      "ok": true
+    },
+    {
+      "model_dimension": "D1@Boss-Extrude1",
+      "model_mm": 20,
+      "kind": "linear",
+      "on_drawing": 1,
+      "drawing_mm": 20,
+      "views": [
+        "Drawing View2"
+      ],
+      "ok": true
+    },
+    {
+      "model_dimension": "D1@Sketch2",
+      "model_mm": 9.999999999999995,
+      "kind": "diameter",
+      "on_drawing": 1,
+      "drawing_mm": 9.999999999999995,
+      "views": [
+        "Drawing View1"
+      ],
+      "ok": true
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "C:\\New folder (4)\\astracad\\_win\\drw2\\block_hole_drw.SLDDRW",
+      "bytes": 36263,
+      "sha256": "a4d70259a34111a5a6efe41b8b3d0cd4b1cb5ea47fd9c6f8fbcfc79fc434e876"
+    },
+    {
+      "path": "C:\\New folder (4)\\astracad\\_win\\drw2\\block_hole_drw.dxf",
+      "bytes": 34650,
+      "sha256": "77c3320bde3e95d4f3400e2e062b4ba1cf5837a28580993cc146519e24753327"
+    },
+    {
+      "path": "C:\\New folder (4)\\astracad\\_win\\drw2\\block_hole_drw.pdf",
+      "bytes": 32974,
+      "sha256": "548f7219e19565e5e4d3cbac89a4c62a43fc84bce4e7dfa3442df1395d954c5b"
+    }
+  ],
+  "log": [
+    "part block_60x40x20_hole10: 4 length dimension(s)",
+    "drawing unit system set to MMGS: True",
+    "first-angle standard views: True",
+    "model annotations inserted: 5",
+    "views: 4; length dimensions on the drawing: 4",
+    "save C:\\New folder (4)\\astracad\\_win\\drw2\\block_hole_drw.SLDDRW: True err=0 warn=0",
+    "export block_hole_drw.dxf: True err=0 warn=0",
+    "export block_hole_drw.pdf: True err=0 warn=0"
+  ],
+  "failures": [],
+  "success": true
+}

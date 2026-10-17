@@ -515,6 +515,21 @@ def read_dxf(path: str | Path, declared_unit: str | None = None,
         if e.dxftype() == "ARC_DIMENSION":
             detected_kind = CharKind.RADIUS
         candidates = _geometry_candidates(e, detected_kind)
+        # DIMLFAC (dimension-style "linear scale factor", or an entity override) is how a drawing
+        # says its geometry is drawn at a scale: true length = measured length x DIMLFAC. A view at
+        # 2:1 exports DIMLFAC 0.5. Angles are not scaled. The unscaled readings stay available as
+        # named routes, so a drawing whose printed values ignore its own factor is reported, not hidden.
+        lfac = 1.0
+        if detected_kind is not CharKind.ANGULAR:
+            try:
+                lfac = float(e.override().get("dimlfac", 1.0) or 1.0)
+            except Exception:
+                lfac = 1.0
+            if lfac <= 0:
+                warnings.append(f"handle {e.dxf.handle}: DIMLFAC {lfac} is not a usable scale; ignored")
+                lfac = 1.0
+        if lfac != 1.0:
+            candidates = [(f"{route} x DIMLFAC {lfac:g}", v * lfac) for route, v in candidates] +                          [(f"{route} (DIMLFAC {lfac:g} ignored)", v) for route, v in candidates]
 
         text, text_from = _callout_text(doc, e)
         parsed = parse_callout(text, unit)
@@ -558,7 +573,10 @@ def read_dxf(path: str | Path, declared_unit: str | None = None,
 
         geometry = None
         try:
-            geometry = float(e.get_measurement())
+            geometry = float(e.get_measurement()) * lfac
+            if lfac != 1.0:
+                parsed.notes.append(f"drawn at a scale: DXF measurement x DIMLFAC {lfac:g} = "
+                                    f"{geometry:.6f}")
         except Exception as ex:
             geometry = None
             warnings.append(f"{e.dxftype()} handle {e.dxf.handle}: get_measurement() failed "
@@ -566,6 +584,8 @@ def read_dxf(path: str | Path, declared_unit: str | None = None,
 
         if geometry is None and detected_kind is not CharKind.UNKNOWN:
             geometry = _measure_from_points(e, detected_kind)
+            if geometry is not None:
+                geometry *= lfac
             if geometry is not None:
                 warnings.append(f"handle {e.dxf.handle}: geometric value computed from "
                                 f"definition points instead of the DXF measurement cache")

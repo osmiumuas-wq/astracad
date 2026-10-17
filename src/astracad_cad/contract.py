@@ -49,6 +49,7 @@ class Op(str, enum.Enum):
     REOPEN_EXPORT = "reopen_export"
     SAVE_DOCUMENT = "save_document"
     CLOSE_DOCUMENT = "close_document"
+    CREATE_DRAWING = "create_drawing"      # contract 0.2: drawing views + model dimensions
 
 
 class Risk(str, enum.Enum):
@@ -67,6 +68,7 @@ RISK: dict[Op, Risk] = {
     Op.MODIFY_FEATURE: Risk.MUTATING, Op.MODIFY_ASSEMBLY: Risk.MUTATING,
     Op.REGENERATE_MODEL: Risk.MUTATING, Op.CLOSE_DOCUMENT: Risk.MUTATING,
     Op.EXPORT_DOCUMENT: Risk.PERSISTING, Op.SAVE_DOCUMENT: Risk.PERSISTING,
+    Op.CREATE_DRAWING: Risk.PERSISTING,
 }
 
 

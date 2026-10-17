@@ -89,6 +89,13 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--authorize", metavar="NAME", default=None)
     e.add_argument("--expect-size", nargs=3, type=float, dest="expect_size")
     e.add_argument("--expect-volume", type=float, dest="expect_volume")
+    dr = sub.add_parser("drawing", help="create a drawing of an existing .sldprt (views + model "
+                                        "dimensions), verified by inspecting its DXF")
+    dr.add_argument("part")
+    dr.add_argument("--name", required=True)
+    dr.add_argument("--out", required=True)
+    dr.add_argument("--angle", choices=("first", "third"), default="first")
+    dr.add_argument("--authorize", metavar="NAME", default=None)
     ins = sub.add_parser("inspect", help="read dimensions and mass of an existing .sldprt")
     ins.add_argument("path")
     r = sub.add_parser("reopen", help="independently re-read an exported STEP file")
@@ -140,6 +147,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"TASK {tid}")
         _print(res.to_dict())
         return 0 if res.ok else 3
+    if a.cmd == "drawing":
+        out = str(Path(a.out).resolve())
+        auth = (Authorization(a.authorize, frozenset({Op.CREATE_DRAWING}), (out,),
+                              note="granted on the command line for one drawing")
+                if a.authorize else None)
+        tid, res = _orch(a.db).submit(CadRequest(
+            "solidworks", Op.CREATE_DRAWING,
+            {"part_path": str(Path(a.part).resolve()), "name": a.name, "out_dir": out,
+             "angle": a.angle}, summary=f"drawing of {a.part}"), auth)
+        print(f"TASK {tid}")
+        if res is None:
+            return 1
+        _print(res.to_dict())
+        return _EXIT.get(res.status, 1)
     if a.cmd == "spec":
         try:
             spec = json.loads(Path(a.path).read_text(encoding="utf-8"))

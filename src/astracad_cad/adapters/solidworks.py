@@ -78,6 +78,43 @@ def validate_spec(spec: dict[str, Any]) -> list[str]:
     return errs
 
 
+def _dim_key(full: str) -> str:
+    parts = full.split("@")
+    return "@".join(parts[:2]) if len(parts) >= 2 else full
+
+
+def drawing_dxf_checks(dxf: Path, model_dims: list[dict]) -> list[Check]:
+    """Independent check of a CAD-generated drawing, by the inspection engine rather than the CAD
+    application: every dimension's printed value must agree with its drawn geometry, and the
+    printed values must match the model's dimensions one to one (nothing missing, nothing extra)."""
+    if not dxf.exists():
+        return [Check("inspect:dxf_present", "failed", "exported DXF", "missing")]
+    from astracad_inspect.ingest.dxf import read_dxf
+    from astracad_inspect.plan import build_plan
+    bundle = read_dxf(dxf)
+    plan = build_plan(bundle)
+    out = [Check("inspect:dxf_unit_mm", "passed" if bundle.unit == "mm" else "failed", "mm",
+                 bundle.unit)]
+    geo = [k for c in bundle.characteristics for k in c.checks if k.name == "geometry_cross_check"]
+    bad = [k for k in geo if k.outcome.value != "passed"]
+    out.append(Check("inspect:geometry_cross_check", "passed" if geo and not bad else "failed",
+                     f"{len(geo)} dimension(s) agree with drawn geometry",
+                     f"{len(geo) - len(bad)} agree"))
+    remaining = [r for r in plan.rows if r.nominal is not None]
+    for d in model_dims:
+        mm = float(d["mm"])
+        hit = next((r for r in remaining if abs(r.nominal - mm) <= 0.005 + 1e-9), None)
+        if hit is not None:
+            remaining.remove(hit)
+        out.append(Check(f"inspect:printed_value:{_dim_key(d['name'])}",
+                         "passed" if hit else "failed", f"{mm:g} mm printed",
+                         hit.callout if hit else "not printed"))
+    out.append(Check("inspect:no_extra_dimensions", "passed" if not remaining else "failed",
+                     "every printed dimension is a model dimension",
+                     ", ".join(r.callout for r in remaining) or "none extra"))
+    return out
+
+
 class SolidWorksAdapter(Adapter):
     name = "solidworks"
 
@@ -118,10 +155,11 @@ class SolidWorksAdapter(Adapter):
             Op.LIST_OPEN_DOCUMENTS: OperationSupport(Support.SUPPORTED, mock, "via `mac docs`"),
             Op.CREATE_FEATURE: OperationSupport(
                 Support.PARTIAL, Evidence.END_TO_END_VERIFIED,
-                "new part from a typed spec: rectangle/circle sketch, extrude, cut, hole, fillet, "
-                "chamfer, note; revolve/pattern/mirror/shell are not implemented. Live 2026-10-17: "
-                "request -> spec -> SOLIDWORKS -> kernel checks -> STEP -> independent re-read, "
-                "3/3 parts SUCCEEDED (block, shaft, block with hole)"),
+                "new part from a typed spec: rectangle/circle/profile sketch, extrude, cut, hole, "
+                "revolve, linear pattern, fillet, chamfer, note; mirror/shell/circular pattern are "
+                "not implemented. Live 2026-10-17: request/spec -> SOLIDWORKS -> kernel checks -> "
+                "STEP -> independent re-read: block, shaft, holed block, stepped shaft (revolve), "
+                "plate with 4-hole pattern all SUCCEEDED"),
             Op.MODIFY_FEATURE: OperationSupport(
                 Support.PARTIAL, Evidence.END_TO_END_VERIFIED,
                 "drives named dimensions (e.g. D1@Boss-Extrude1) either of a model built in the "
@@ -135,6 +173,14 @@ class SolidWorksAdapter(Adapter):
             Op.INSPECT_PARAMETERS: OperationSupport(
                 Support.SUPPORTED, Evidence.REAL_APPLICATION_TESTED,
                 "driving dimensions by full name, values in mm (live 2026-10-17)"),
+            Op.CREATE_DRAWING: OperationSupport(
+                Support.PARTIAL, Evidence.END_TO_END_VERIFIED,
+                "new .SLDDRW of an existing part via `mac drawing`: 3 standard views (1st/3rd angle), "
+                "model dimensions inserted (duplicates eliminated), MMGS units, DXF + PDF export; "
+                "part opened read-only, hash proven unchanged. Checked by mac (every model dimension "
+                "on the drawing, equal value) AND independently by astracad_inspect on the DXF "
+                "(geometry cross-check + printed values 1:1 with the model). No title block/sheet "
+                "format, no tolerances added, parts only. Live 2026-10-17: holed block SUCCEEDED"),
             Op.VALIDATE_GEOMETRY: OperationSupport(Support.SUPPORTED, Evidence.UNIT_TESTED,
                                                    "re-evaluates a run report's kernel checks"),
             Op.REOPEN_EXPORT: OperationSupport(Support.SUPPORTED, Evidence.UNIT_TESTED,
@@ -285,6 +331,67 @@ class SolidWorksAdapter(Adapter):
         return self._run_spec(Op.MODIFY_FEATURE, base, Path(params["out_dir"]),
                               params.get("expect") or {}, bool(params.get("keep")),
                               bool(params.get("overwrite")))
+
+    def _op_create_drawing(self, params) -> OperationResult:
+        op = Op.CREATE_DRAWING
+        part = Path(params["part_path"])
+        name, out_dir = str(params.get("name", "")), Path(params["out_dir"])
+        angle = params.get("angle", "first")
+        if part.suffix.lower() != ".sldprt" or not part.exists():
+            return OperationResult(self.name, op, OpStatus.INVALID_REQUEST,
+                                   "part must be an existing .sldprt", errors=[str(part)])
+        if not _NAME.match(name) or angle not in ("first", "third"):
+            return OperationResult(self.name, op, OpStatus.INVALID_REQUEST,
+                                   "name must match [A-Za-z0-9_-]{1,64}; angle first|third")
+        existing = [str(out_dir / f"{name}{e}") for e in (".SLDDRW", ".dxf", ".pdf", ".drawing.json")
+                    if (out_dir / f"{name}{e}").exists()]
+        if existing:
+            return OperationResult(self.name, op, OpStatus.INVALID_REQUEST,
+                                   "output files already exist; nothing was overwritten",
+                                   errors=existing)
+        if (r := self._require_connected(op)) is not None:
+            return r
+        before = _sha256(part)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        argv = self.mac_command() + ["drawing", str(part), "--out", str(out_dir), "--name", name,
+                                     "--angle", angle, "--export", "dxf,pdf"]
+        try:
+            cp = self.probe.run(argv, timeout=self.timeout_s)
+        except Exception as ex:
+            # Observed 2026-10-17: a run hung inside SOLIDWORKS; the timeout must become a FAILED
+            # result (and a recorded task outcome), never an exception that leaves the task open.
+            return OperationResult(self.name, op, OpStatus.FAILED,
+                                   f"mac drawing did not complete: {type(ex).__name__}: {ex}",
+                                   errors=[str(ex), "SOLIDWORKS may be left inside a command or with "
+                                           "an unsaved drawing open: check it, press Esc, and close "
+                                           "documents without saving before retrying"],
+                                   data={"argv": argv})
+        rp = out_dir / f"{name}.drawing.json"
+        if not rp.exists():
+            return OperationResult(self.name, op, OpStatus.FAILED, "mac drawing wrote no report",
+                                   errors=[cp.stdout[-1500:]], data={"argv": argv})
+        report = json.loads(rp.read_text(encoding="utf-8"))
+        after = _sha256(part)
+        checks = [Check("part_unchanged", "passed" if after == before else "failed", before, after)]
+        for row in report.get("comparison") or []:
+            checks.append(Check(f"kernel:model_dimension_on_drawing:{row['model_dimension']}",
+                                "passed" if row.get("ok") else "failed", f"{row['model_mm']} mm",
+                                f"{row.get('drawing_mm')} mm on {row.get('on_drawing')} view(s)"))
+        dxf = out_dir / f"{name}.dxf"
+        checks += drawing_dxf_checks(dxf, report.get("model_dimensions") or [])
+        artifacts = [{"path": str(p), "bytes": p.stat().st_size, "sha256": _sha256(p)}
+                     for p in (out_dir / f"{name}.SLDDRW", dxf, out_dir / f"{name}.pdf")
+                     if p.exists()]
+        failed = [c for c in checks if c.outcome == "failed"]
+        ok = cp.returncode == 0 and bool(report.get("success")) and not failed
+        status = (OpStatus.SUCCEEDED if ok else
+                  OpStatus.EXECUTED_UNVERIFIED if report.get("success") else OpStatus.FAILED)
+        return OperationResult(self.name, op, status,
+                               "drawing created and independently verified" if ok else
+                               f"{len(failed)} check(s) failed",
+                               data={"argv": argv, "report": report}, checks=checks,
+                               artifacts=artifacts, errors=list(report.get("failures") or []),
+                               evidence=self.declaration().operations[op].evidence)
 
     def _op_validate_geometry(self, params) -> OperationResult:
         rp = Path(params["report_path"])

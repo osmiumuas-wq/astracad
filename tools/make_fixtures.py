@@ -35,6 +35,11 @@ def _plate(doc, msp) -> None:
 
 def build_plate() -> tuple[Path, dict]:
     doc = ezdxf.new("R2010", setup=True)
+    # ezdxf's setup styles carry DIMLFAC 100 (drawn in m, shown in cm). These fixtures are
+    # drawn 1:1 in mm and print their own values, so the factor must be 1 or the file
+    # contradicts itself (a reader honouring DIMLFAC would see 100x every length).
+    for _st in doc.dimstyles:
+        _st.dxf.dimlfac = 1.0
     doc.header["$INSUNITS"] = 4            # millimetres, declared rather than assumed
     doc.header["$MEASUREMENT"] = 1
     msp = doc.modelspace()
@@ -146,6 +151,11 @@ def build_broken() -> tuple[Path, dict]:
     the neighbour dimension must still pass: the block has to be specific, not blanket.
     """
     doc = ezdxf.new("R2010", setup=True)
+    # ezdxf's setup styles carry DIMLFAC 100 (drawn in m, shown in cm). These fixtures are
+    # drawn 1:1 in mm and print their own values, so the factor must be 1 or the file
+    # contradicts itself (a reader honouring DIMLFAC would see 100x every length).
+    for _st in doc.dimstyles:
+        _st.dxf.dimlfac = 1.0
     doc.header["$INSUNITS"] = 4
     msp = doc.modelspace()
     msp.add_lwpolyline([(0, 0), (100, 0), (100, 20), (0, 20)], close=True)

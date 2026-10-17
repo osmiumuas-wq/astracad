@@ -17,7 +17,7 @@ Every number below was produced by a command run on 2026-10-17. Detail: `docs/ar
 
 | Where | Command | Result |
 |---|---|---|
-| Windows PC (Python 3.14.7) | `py -m pytest -q` | **309 passed**, 0 failed, 0 skipped (after GD&T frames + scan/OCR route) |
+| Windows PC (Python 3.14.7) | `py -m pytest -q` | **317 passed**, 0 failed, 0 skipped (after SOLIDWORKS drawing route) |
 | Windows | `py tools/regression.py` | 3 labelled synthetic fixtures (incl. GD&T): 20/20 characteristics, 0 wrong fields, 0 invented, 57/57 export checks |
 | Windows | `py -m astracad_inspect run tests\fixtures\bracket_gdt_synthetic.dxf` | 5 frame rows (position ⌀0.05 MMC A\|B\|C, 2-row ⊥/∥, flatness, profile) + 3 dims; malformed frame escalated; frames drawn in the layout; 19/19 exports |
 | Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic_scan300.png --units mm` | 3 of 9 callouts accepted (all correct: 100 ±0.1, ⌀20 H7, 45°), 7 escalated with both engines' readings, **0 wrong values**; ~25 s/page |
@@ -53,6 +53,16 @@ Every number below was produced by a command run on 2026-10-17. Detail: `docs/ar
 | stepped shaft, revolved profile Ø35×40 + Ø25×20 | SUCCEEDED | V 48301.987049 = Pappus 48301.987049 (Δ 0); A Δ 2.7e-12 | 35×35×60 exact; volume not_verifiable (curved) |
 | 100×40×10 plate, Ø6 hole × linear pattern 4 @ 20 mm | SUCCEEDED | V 38869.026645 = seed×4 38869.026645 (Δ 0); A Δ 3.6e-12 | 10×40×100 exact |
 
+**Drawings from parts** (`astracad_cad drawing <part> --name N --out DIR --authorize KM` -> `mac drawing`):
+
+| Part | Task | mac (model dims on drawing) | Independent: astracad_inspect on the exported DXF |
+|---|---|---|---|
+| holed block 60x40x20 Ø10 (1st and 3rd angle) | SUCCEEDED x2 | 4/4 equal | unit mm; 4/4 geometry cross-checks; printed 60.00/40.00/20.00/⌀10.00 1:1 with model; none extra |
+| shaft Ø25x100 | SUCCEEDED | 2/2 equal | 2/2 cross-checks; ⌀25.00 and 100.00 1:1 |
+
+Three runs back to back took 8 s each. Part SHA-256 unchanged every time. SOLIDWORKS here is an
+**Educational** licence: every sheet carries "SOLIDWORKS Educational Product. For Instructional Use Only."
+
 Status probe observed NOT_CONNECTED (SW closed) and CONNECTED (SW open). Creo, Fusion, AutoCAD: NOT_INSTALLED on this PC.
 
 **Word → dimension proposal** (live, 2026-10-17): `build "change the length of \"…shaft_d25_l100.SLDPRT\" to 120 mm"` →
@@ -74,6 +84,17 @@ shaft → D1@Sketch1 25 diameter **match**, D1@Boss-Extrude1 linear mismatch; ho
 4. A failed edit (unknown dimension) still saved and exported an unedited copy that looked like a result. `mac` now discards it; the adapter reports FAILED whenever any requested dimension was not set.
 5. `mac inspect` reported a pattern's instance count as a length (`D1@LPattern1` = "4000 mm"). Only length-type dimensions are reported now; the pattern spacing (20 mm) still is.
 6. `CreateLine` does not open a sketch the way rectangle/circle creation does (0 lines made) — the profile path opens it explicitly.
+7. The default drawing template is in inches: the first generated drawing printed 2.36 for a 60 mm edge and put
+   three dimensions in two views each. `mac drawing` now forces MMGS and removes duplicates; that real inch DXF is
+   kept as a fixture that the independent check must (and does) reject although mac's own report said ok.
+8. **The DXF reader ignored DIMLFAC** (a dimension style's scale factor), so every drawing exported at a scale other
+   than 1:1 failed its geometry cross-check (a 2:1 SOLIDWORKS view has DIMLFAC 0.5). Applied now, with the unscaled
+   reading kept as a named route. The three synthetic fixtures carried ezdxf's default DIMLFAC 100 that contradicted
+   their own printed values; set to 1 in the files and in the generators.
+9. Rows (what the PDF/XLSX print) were built before late checks added warnings, so `possible_duplicate_callout`
+   never reached the exports. Rows are now refreshed; the duplicate key also includes the tolerance (flatness 0.02
+   and parallelism 0.02 | A were wrongly flagged as duplicates).
+10. A `mac` timeout escaped the adapter as an exception. It is now a FAILED result with recovery advice.
 Earlier this session: pipeline crashed when PyMuPDF was absent → pluggable reader. pypdfium2 is now the declared reader; PyMuPDF is an optional extra.
 
 ## Known limitations (top)
@@ -89,6 +110,9 @@ Earlier this session: pipeline crashed when PyMuPDF was absent → pluggable rea
   orders a word's candidates but never selects one; parts `mac` built before this change have undimensioned sketches;
   revolve and linear pattern exist for new parts (revolve profile sketches carry no driving dimensions yet);
   no shell/mirror/circular pattern, assemblies or drawings (.SLDDRW).
+- Drawings: three standard views + model dimensions only; no title block/sheet format, no tolerances added,
+  parts only. One run hung inside SOLIDWORKS (Model Items prompt left open) right after a run in the same session;
+  not reproduced in 4 later runs after a restart; root cause unproven.
 - Creo/Fusion/AutoCAD: not installed here, so no automation exists — discovery only.
 - Local web workspace is read-mostly; CAD creation/editing stays CLI-only. No costing, CAM, simulation.
 - No parity or superiority vs MecAgent/Pre6 is demonstrated (MecAgent not run; Lens run only on its own sample, no shared labelled drawings). Pre6 Lens's own manual
