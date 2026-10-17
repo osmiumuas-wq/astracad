@@ -1,5 +1,46 @@
 # NEXT ACTION
 
+## 2026-10-18 (Claude, scheduled resume): verification of the Antigravity commits + fixes
+
+**What was found:** all six HANDOFF §7 tasks had been committed by the other agent (astracad c98c660..602f3a3,
+mac 0e33dc0..642e484). Both working trees were clean, so there was no work in progress to avoid.
+
+**Verified (commands + numbers):**
+- `py -m pytest -q` on their HEAD: **533 passed** (matches their claim). The first run gave 195 errors, all
+  `PermissionError` deleting `astracad\.pytest_tmp` (environment, not code); re-run with `--basetemp` outside the repo.
+- `dotnet build -c Release` 0 warnings / 0 errors; `mac selftest` **42/42** on their HEAD.
+- **Live SOLIDWORKS 2026 SP04** (never run live by them): 5 authorised builds into `_out/verify_20261018/`, all
+  SUCCEEDED / END_TO_END_VERIFIED: PCD plate (circular pattern, offset axis), PCD flange disc, blind pocket, slot,
+  through pocket. Kernel volume and area = prediction. Hole centres read from the STEP files match the predicted
+  positions exactly (table in CURRENT_STATE). `mac docs`: 0 documents open before and after (the user's assembly was
+  not open). No user document was touched.
+- `py tools/benchmark_sw.py` after my reader change: DXF 98.17 % / 98.17 %, PDF 97.48 % / 96.67 %, 0 errors (unchanged).
+
+**Defects found and fixed (each with a test):**
+1. *Rule 3 violation* - `mac drawing` defaulted revision to "A" and general tolerance to "ISO 2768-m", printed them
+   on every drawing, and the DXF check then passed them. The CLI could not even pass the flags. Now: unstated
+   revision prints `REVISION: NOT STATED`, no tolerance note is added, `drawing.json` lists `missing`, the result
+   carries `not_verifiable` checks, and `astracad_cad drawing` has `--title/--drawing-number/--revision/--material/--tolerance`.
+   mac commit 73741f2; selftest **43/43**.
+2. The title-block check never worked on real output: SOLIDWORKS exports each note as an inserted `SW_NOTE_n` block
+   and `_read_title_block` read only loose text, so real values came back `<absent>`. It now also reads one-line
+   "LABEL: value" text inside inserted named blocks. The check also compares `title`. Regression test on the real SW DXF
+   (`tests/fixtures/sw_drawing/pocket_title_block.dxf`, provenance recorded).
+3. Pre-existing interpreter bug: "shaft 25 mm diameter 100 mm long" was read as **diameter 100** and was executable.
+   Fixed and tested (4 phrasings plus a refusal case).
+
+**Not verified:**
+- Model dimensions on drawings: on 2026-10-18 SOLIDWORKS inserted **0** model annotations for every part, including
+  the block that gave 4/4 yesterday, and also with `mac` rebuilt from pre-handoff 3605c7e. So it is not a code
+  regression. Cause unknown. Drawing runs that day are correctly FAILED on dimensions. Next: look at the SOLIDWORKS
+  option for importing dimensions marked for drawing, or the template.
+- Project dossier, CMM mapping profiles and DXF zones: verified only by their tests and a code read, not clicked live.
+
+**Tests now: 536 passed**, 0 failed (`py -m pytest -q --basetemp <outside repo>`, 442 s). mac selftest 43/43.
+
+**Next:** HANDOFF §7 items 1-6 are done. Left: item 7 (fillets / chamfers on edges named without guessing; digital
+signing of dossiers), the drawing-dimension issue above, and the limitations listed in known-limitations §J.
+
 ## Done 2026-10-18: Title block and general tolerance note in `mac drawing` (C-19)
 
 **What was changed:**

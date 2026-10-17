@@ -19,18 +19,18 @@ Every number below was produced by a command run on 2026-10-17. Detail: `docs/ar
 | `astracad_mfg.machining` | 12 machining calculations with equation, units, assumptions and warnings; no built-in material data; Machining page in the workspace; escalated roughness values link to "max turning feed for this Ra" | Tested (11) + used live |
 | `astracad_mfg` | Explainable machining cost: geometry from CAD evidence (kernel volume + STEP re-read bbox, both hashed), every rate sourced and dated, nothing defaulted, 13 traced lines, JSON+XLSX re-read | Tested against a hand calculation (12 tests); example rate book is placeholders only |
 | `astracad_tol` | Worst-case / RSS / Monte Carlo stacks with explicit distributions, ISO 286 fits, selective assembly (plan + measured matching) | Tested against closed-form references |
-| `mecagent-alternative/` (C#, sibling tree) | `mac` runtime: live SOLIDWORKS COM automation; revolve (`sketch.profile` + `feature.revolve`), linear & circular pattern (`feature.pattern.circular`), rectangular cuts/pockets (`sketch.rectangle` + `feature.cut`), **title block & general tolerance note in `mac drawing`** | Executed on SW 2026 SP04.1; `mac selftest` 42/42 |
+| `mecagent-alternative/` (C#, sibling tree) | `mac` runtime: live SOLIDWORKS COM automation; revolve (`sketch.profile` + `feature.revolve`), linear & circular pattern (`feature.pattern.circular`), rectangular cuts/pockets (`sketch.rectangle` + `feature.cut`), **title block & general tolerance note in `mac drawing`** (unstated revision / tolerance printed as NOT STATED / omitted, never defaulted) | Executed on SW 2026 SP04.1; `mac selftest` 43/43 |
 
 ## Test baseline
 
 | Where | Command | Result |
 |---|---|---|
-| Windows PC (Python 3.14.7) | `py -m pytest -q` | **533 passed**, 0 failed, 0 skipped (after drawing title block and tolerance checks) |
+| Windows PC (Python 3.14.7) | `py -m pytest -q` | **536 passed**, 0 failed, 0 skipped (2026-10-18: after the verification fixes; pass `--basetemp` outside the repo if `.pytest_tmp` cannot be removed) |
 | Windows | `py tools/benchmark_layout.py` | 22 real SOLIDWORKS sheets, 175 balloons: **0 crossing leaders, 0 balloons on drawing ink, 0 unplaced**, mean leader 0.20 balloon diameters (before: 8 / 12 / 5 / 8.39) |
 | Windows | `py tools/regression.py` | 3 labelled synthetic fixtures (incl. GD&T): 20/20 characteristics, 0 wrong fields, 0 invented, 57/57 export checks |
 | Windows | `py -m astracad_inspect run tests\fixtures\bracket_gdt_synthetic.dxf` | 5 frame rows (position ⌀0.05 MMC A\|B\|C, 2-row ⊥/∥, flatness, profile) + 3 dims; malformed frame escalated; frames drawn in the layout; 19/19 exports |
 | Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic_scan300.png --units mm` | 3 of 9 callouts accepted (all correct: 100 ±0.1, ⌀20 H7, 45°), 7 escalated with both engines' readings, **0 wrong values**; ~25 s/page |
-| Windows | `mac selftest` | 42/42 (Pappus revolve vs closed-form cylinder, linear & circular patterns = seed × count, rectangular pocket volume and area derived analytically, drawing title block & general tolerance note formatters, profile refusals, non-finite kernel values written as null) |
+| Windows | `mac selftest` | 43/43 (unstated revision prints NOT STATED; Pappus revolve vs closed-form cylinder, linear & circular patterns = seed × count, rectangular pocket volume and area derived analytically, drawing title block & general tolerance note formatters, profile refusals, non-finite kernel values written as null) |
 | Cloud workspace (Python 3.13) | `python3 -m pytest -q` | 224 passed, 29 skipped (ISO-table rebuild sources only on the PC) |
 | Windows | `py -m astracad_inspect selftest` | 34/34 |
 | Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic.dxf` | 19/19 export reopen checks, exit 3 (delivered, correctly NOT releasable) |
@@ -102,6 +102,17 @@ after a forced rebuild (noted in the report; that retry did not trigger in the r
 |---|---|---|---|
 | stepped shaft, revolved profile Ø35×40 + Ø25×20 | SUCCEEDED | V 48301.987049 = Pappus 48301.987049 (Δ 0); A Δ 2.7e-12 | 35×35×60 exact; volume not_verifiable (curved) |
 | 100×40×10 plate, Ø6 hole × linear pattern 4 @ 20 mm | SUCCEEDED | V 38869.026645 = seed×4 38869.026645 (Δ 0); A Δ 3.6e-12 | 10×40×100 exact |
+
+**Live 2026-10-18** (`astracad_cad build "<request>" --authorize KM`, output `_out/verify_20261018/`), verifying the circular
+pattern and pocket / slot work committed while Claude was unavailable:
+
+| Request | Task | Kernel vs prediction | Independent STEP |
+|---|---|---|---|
+| 80×80×10 plate, 4×Ø8 on PCD 50, centred, from 45° (seed + `CirPattern1` about an axis at (40,40)) | SUCCEEDED | V 61989.380702 = 61989.380702; A 16603.185789 = 16603.185789; CoM (40,40,5) | 10×80×80 exact; hole centres 22.3223 / 57.6777 = 40 ± 25·cos45° |
+| flange disc Ø100×12, 6×Ø10 on PCD 70 from 30° (axis through origin) | SUCCEEDED | V 88592.912831 =; A 20797.343367 = | 6 hole centres = (35 cos(30+60k), 35 sin(30+60k)) to 4 dp |
+| 60×40×20 block, 30×20 pocket 5 deep, centred | SUCCEEDED | V 45000 =; A 9300 =; CoM (30,20,10.5) | size exact |
+| 80×50×15 block, 40×10 slot 6 deep along the width, centred | SUCCEEDED | V 57600 =; A 12500 = | size exact |
+| 60×40×10 block, 20×10 pocket through, centred | SUCCEEDED | V 22000 =; A 7000 = | size exact |
 
 **Drawings from parts** (`astracad_cad drawing <part> --name N --out DIR --authorize KM` -> `mac drawing`):
 

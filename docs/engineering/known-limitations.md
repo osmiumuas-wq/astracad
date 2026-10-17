@@ -297,3 +297,20 @@ covered by a check that now fails if it regresses.
 
 - **Project-level quality dossier**: aggregates all runs in a project folder. If a run has multiple samples, each is checked; an empty project cannot build a dossier. Drawing sources modified outside ASTraCAD are excluded from the sources/ folder with a note in the manifest and PDF rather than halting the dossier generation.
 
+
+
+## J. Found while verifying (2026-10-18)
+
+- `mac drawing`: on 2026-10-18 `InsertModelAnnotations3` returned 0 for every part, including the 60×40×20 Ø10
+  block that gave 4/4 on 2026-10-17, and also with `mac` rebuilt from the pre-handoff commit 3605c7e. Cause not
+  found (SOLIDWORKS state or a setting, not the title-block code); drawings made that day fail their dimension
+  checks, correctly. Title block and tolerance note were verified; model dimensions on drawings were not.
+- Title-block notes are free notes placed at fixed sheet positions, not the template's title-block fields; the
+  date is the UTC date (it read 2026-10-17 at local 2026-10-18).
+- Text → CAD: pockets / slots and holes in one request are each checked against the face, but not against each
+  other; a hole inside a pocket double-counts removed volume (the kernel check then fails the build, nothing
+  passes wrongly).
+- Circular pattern in `mac`: with the axis at the sketch origin, the first existing reference axis in the part is
+  reused whatever its direction. Parts built from a spec have none; editing other parts with it is not verified.
+- Fixed: "25 mm diameter 100 mm long" was read as diameter 100 (executable); a number between the two words
+  now goes to the word that has no other number, and with one number for two words the request is refused.
