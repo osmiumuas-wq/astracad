@@ -71,3 +71,22 @@ PDF recall 69.9% / precision 19.3%; tolerances 0/2 (PDF).
 MecAgent — no product was run on this dataset, so no comparative claim is made. Answer keys are the CAD
 model's dimensions; a printed value that legitimately differs from the model (rounding to fewer decimals)
 is matched by the half-digit rule, a deliberately overridden text is not.
+
+### Same benchmark, later the same day: PDF frames and the OCR route
+
+| Route | Recall | Precision | Tolerances | GD&T frames | Time (18 sheets) |
+|---|---|---|---|---|---|
+| DXF | 82.8% | 97.5% | 2/2 | 1/1 | seconds |
+| Vector PDF (+ frames drawn as graphics) | 79.6% | 81.2% | 2/2 | 1/1 | seconds |
+| OCR, before sheet geometry | 30.1% (31/103) | 28.4% (31/109) | 0/0 | 0/1 | ~75 min |
+| OCR, with sheet geometry from pixels | 26.2% (27/103) | 79.4% (27/34) | 0/0 | 0/1 | 14.5 min |
+
+* OCR precision rose because balloons, zone labels and table cells are now classified from rules and
+  circles recovered from the image. **No OCR row in either run was a misread dimension value**: every
+  unmatched row was real text of another kind (balloon numbers, BOM/hole-table/title-block values,
+  a frame value). The two-engine consensus held on real sheets.
+* OCR recall fell by 4 dimensions with the classifier and the 40-re-read cap; recall on cluttered
+  vector-origin sheets is the OCR route's weakest point and is not competitive with a dedicated AI
+  reader such as Pre6 Lens (observed 73 dims on its own sample, P6-26) — stated, not hidden.
+* Sheets were rendered from the exported PDFs at 300 dpi: clean "scans". Real scans (skew, noise,
+  stamps) are expected to be harder; no real scanned drawing has been measured.

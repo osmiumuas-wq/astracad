@@ -37,7 +37,8 @@ food-processor housing, weldments), scored against dimensions read from the SOLI
 | Route | Recall | Precision | Tolerances | Same-day start |
 |---|---|---|---|---|
 | DXF | 82.8% (97.5% of dims present in the file) | 97.5% | 2/2 | 61.3% / 72.2% |
-| Vector PDF | 79.6% | 80.4% | 2/2 | 69.9% / 19.3% |
+| Vector PDF | 79.6% | 81.2% | 2/2 (+GD&T frames drawn as graphics 1/1) | 69.9% / 19.3% |
+| OCR (scan @300 dpi) | 26.2% | 79.4% | — | 30.1% / 28.4% |
 
 Found a real drafting error in a SOLIDWORKS sample (prints 15 for a 150 mm span) — now a blocking finding.
 
