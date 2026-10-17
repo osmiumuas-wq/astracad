@@ -90,3 +90,12 @@ is matched by the half-digit rule, a deliberately overridden text is not.
   reader such as Pre6 Lens (observed 73 dims on its own sample, P6-26) — stated, not hidden.
 * Sheets were rendered from the exported PDFs at 300 dpi: clean "scans". Real scans (skew, noise,
   stamps) are expected to be harder; no real scanned drawing has been measured.
+
+### OCR route, decimal-point rule (same day)
+
+Windows OCR reads an AutoCAD stroke font's decimal point as '1' ('11345' for '1.345'). Accepting '.'
+where RapidOCR explicitly read it, and only when the '1'-reading has no decimal point at all, raised OCR
+recall from 26.2% to **43.7%** (45/103) at **80.4%** precision (45/56) on the same 18 sheets. Unmatched rows
+are values SOLIDWORKS stores as notes (bolt-circle and chamfer callouts), balloons and a frame value —
+still no misread dimension. Stacked tolerances read as separate regions are joined when both agree; when
+one does not, the row is blocked (`ocr_adjacent_tolerance_unread`) instead of appearing untoleranced.

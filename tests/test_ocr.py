@@ -96,3 +96,52 @@ def test_scan_balloons_and_border_labels_are_not_callouts(tmp_path):
     assert _classify_region(geo, balloon_box, "7", img.height, mm) == "balloon item number"
     assert _classify_region(geo, (px(148), px(3), px(151), px(8)), "4", img.height, mm)         == "border zone label"
     assert _classify_region(geo, (px(84), px(143), px(92), px(149)), "60", img.height, mm) is None
+
+
+@pytest.mark.parametrize("a,b,want", [
+    ("11345", "1.345", "1.345"), ("3125", "3.25", "3.25"), ("R0109", "R0.09", "R0.09"),
+    ("Ø01988", "00.988", "⌀0.988"), ("Ø11350", "@1.350", "⌀1.350"), ("1-7/8", "1-７/8", "1-7/8"),
+])
+def test_decimal_point_and_glyph_confusions_measured_on_a_stroke_font(a, b, want):
+    assert agree(a, b)[0] == want
+
+
+@pytest.mark.parametrize("a,b", [
+    ("11.345", "1.1345"),      # the '1'-reading HAS a decimal point: not the failure signature
+    ("1134", "1.35"),          # different lengths / characters
+    ("11345", "1.346"),        # another digit differs
+])
+def test_decimal_rule_does_not_overreach(a, b):
+    assert agree(a, b)[0] is None
+
+
+def _row(nominal, box):
+    from astracad_inspect.model import CharKind, Characteristic
+    c = Characteristic(cid="CH", kind=CharKind.DIAMETER, raw_callout=f"⌀{nominal}", unit="in",
+                       nominal=nominal)
+    c._box_px = box
+    return c
+
+
+def test_stacked_tolerance_regions_are_joined_when_both_agree():
+    from astracad_inspect.ingest.raster import Region, _attach_stacked
+    from astracad_inspect.model import Deviations
+    nom = (100, 100, 160, 130)
+    regions = [Region(nom, "Ø0.988", "Ø0.988", 0, agreed="⌀0.988"),
+               Region((165, 92, 215, 112), "+0.000", "+0.000", 0, agreed="+0.000"),
+               Region((165, 118, 215, 138), "-0.005", "-0.005", 0, agreed="-0.005")]
+    c = _row(0.988, nom)
+    _attach_stacked([c], regions, "in")
+    assert c.tolerance == Deviations(upper=0.0, lower=-0.005) and c.limits == (0.983, 0.988)
+
+
+def test_unread_stacked_tolerance_blocks_the_row():
+    from astracad_inspect.ingest.raster import Region, _attach_stacked
+    nom = (100, 100, 160, 130)
+    regions = [Region(nom, "Ø0.988", "Ø0.988", 0, agreed="⌀0.988"),
+               Region((165, 92, 215, 112), "+01000", "+0.000", 0, agreed="+0.000"),
+               Region((165, 118, 215, 138), "01005", "3-0.005", 0, agreed=None)]
+    c = _row(0.988, nom)
+    _attach_stacked([c], regions, "in")
+    assert c.limits is None and c.is_blocking
+    assert any(i.code == "ocr_adjacent_tolerance_unread" for i in c.issues)

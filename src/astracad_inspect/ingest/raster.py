@@ -159,7 +159,8 @@ _DIA = "⌀Øø∅"
 
 
 def _key(t: str) -> str:
-    t = normalise(t or "")
+    import unicodedata
+    t = normalise(unicodedata.normalize("NFKC", t or ""))   # full-width digits (RapidOCR '７')
     return re.sub(r"\s+", "", t)
 
 
@@ -176,7 +177,7 @@ def agree(a: str | None, b: str | None) -> tuple[str | None, list[str]]:
         for ca, cb in zip(ka, kb):
             if ca == cb:
                 merged.append(ca)
-            elif ca in _DIA and cb in "0Oo":
+            elif ca in _DIA and cb in "0Oo@":           # RapidOCR also reads ⌀ as '@'
                 merged.append("⌀")
                 notes.append(f"RapidOCR read the diameter sign as {cb!r}; Windows OCR read ⌀")
             elif cb in _DIA and ca in "0Oo":
@@ -188,6 +189,14 @@ def agree(a: str | None, b: str | None) -> tuple[str | None, list[str]]:
                 merged.append("°")
                 other = cb if ca == "°" else ca
                 notes.append(f"one engine read the degree sign as {other!r}; the other read °")
+            elif {ca, cb} == {"1", "."} and "." not in (ka if ca == "1" else kb):
+                # Measured on an AutoCAD stroke font: Windows OCR reads every decimal point as '1'
+                # ('11345' for '1.345'). Accepted only where the other engine read '.' at that
+                # position and the '1'-reading has no decimal point anywhere (the failure's signature).
+                merged.append(".")
+                who = "Windows OCR" if ca == "1" else "RapidOCR"
+                notes.append(f"{who} read the decimal point as '1' (it shows no decimal point at all); "
+                             "the other engine read '.' there")
             else:
                 return None, []
         return "".join(merged), notes
@@ -344,6 +353,48 @@ def _classify_region(geo, box_px, text: str, img_h: int, mm: float) -> str | Non
     return None
 
 
+_DEV = re.compile(r"^[+\-±]\s*\d*\.?\d+$")
+
+
+def _attach_stacked(chars, regions, unit: str) -> None:
+    """A tolerance stacked right of a nominal is a separate OCR region. Both deviations agreed ->
+    joined into the row; anything tolerance-like beside the nominal that is not agreed -> the row is
+    blocked, because a row reading 'no tolerance' where the drawing states one is a silent error."""
+    from ..limits import resolve_limits
+    from ..model import Deviations, NoTolerance
+    for c in chars:
+        box = getattr(c, "_box_px", None)
+        if box is None or not isinstance(c.tolerance, NoTolerance) or c.nominal is None:
+            continue
+        x0, y0, x1, y1 = box
+        h = max(y1 - y0, 1.0)
+        mid = (y0 + y1) / 2
+        beside = [r for r in regions
+                  if x1 - 0.3 * h <= r.box[0] <= x1 + 1.5 * h
+                  and y0 - 1.2 * h <= (r.box[1] + r.box[3]) / 2 <= y1 + 1.2 * h
+                  and r.box is not box]
+        devs = [r for r in beside if _DEV.match(_key(r.agreed or r.a or r.b or ""))]
+        if not devs:
+            continue
+        agreed = [r for r in devs if r.agreed and _DEV.match(_key(r.agreed))]
+        upper = [r for r in agreed if (r.box[1] + r.box[3]) / 2 < mid]    # image y grows down
+        lower = [r for r in agreed if (r.box[1] + r.box[3]) / 2 >= mid]
+        if len(devs) == 2 and len(upper) == 1 and len(lower) == 1:
+            up = float(_key(upper[0].agreed).replace("±", ""))
+            lo = float(_key(lower[0].agreed).replace("±", ""))
+            if up >= lo:
+                c.tolerance = Deviations(upper=up, lower=lo)
+                c.limits = resolve_limits(c.nominal, c.tolerance, unit)
+                c.raw_callout = f"{c.raw_callout} {upper[0].agreed.strip()}/{lower[0].agreed.strip()}"
+                c.issues = [i for i in c.issues if i.code != "no_limits"]
+                c.record("ocr", "joined", f"stacked tolerance {up:+g}/{lo:+g} from two agreed regions")
+                continue
+        readings = "; ".join(f"Windows {r.a!r} / RapidOCR {r.b!r}" for r in devs)
+        c.fail("ocr_adjacent_tolerance_unread",
+               f"tolerance-like text beside this value was not read by both engines ({readings}); "
+               "the row must not be taken as untoleranced", "blocking")
+
+
 # ---- page loading ----------------------------------------------------------------------------
 def load_pages(path: Path) -> list[tuple[object, float, bool]]:
     """(RGB image, dpi, dpi_was_stated) per page."""
@@ -409,7 +460,9 @@ def read_raster(path: str | Path, declared_unit: str | None = None,
         except Exception as ex:                 # geometry is an aid, not a requirement
             geo = None
             warnings.append(f"page {pno}: sheet geometry not recovered ({type(ex).__name__}: {ex})")
-        for i, r in enumerate(regions_for(img, win, rapid, angles, geo, dpi)):
+        page_regions = regions_for(img, win, rapid, angles, geo, dpi)
+        first_char = len(characteristics)
+        for i, r in enumerate(page_regions):
             n_regions += 1
             if r.skip:
                 skipped[r.skip] += 1
@@ -485,7 +538,12 @@ def read_raster(path: str | Path, declared_unit: str | None = None,
             if kind is CharKind.GEOMETRIC and tol.modifier in ("MMC", "LMC"):
                 c.fail("gdt_bonus_tolerance_not_applied",
                        f"{tol.symbol} at {tol.modifier}: bonus tolerance not computed", "warning")
+            c._box_px = r.box
             characteristics.append(c)
+        _attach_stacked(characteristics[first_char:], page_regions, unit)
+        for c in characteristics[first_char:]:
+            if hasattr(c, "_box_px"):
+                delattr(c, "_box_px")
 
     extents = (0.0, 0.0, page_w, page_h)
     census = [EntityCensusRow("OCR_REGION", n_regions, len(characteristics),
