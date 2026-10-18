@@ -35,6 +35,15 @@ way through (plates, brackets cut from plate, flanges, gaskets, spacers with hol
 | Profile & Revolve | Half-profile closed along the axis (or inner bore radius $r_{\text{inner}}$), scaled by view dimensions, and revolved 360° (`sketch.profile` + `feature.revolve`) |
 | Volume verification | Verified in closed form using Pappus's centroid theorem ($V = 2\pi \cdot \bar{y} \cdot A$) against analytic cylinder and step volumes |
 
+3. **Feature recognition on rebuilt parts** (`--features`, or standalone `recognize_features(it)`):
+Circular inner loops from the 2D section are lifted into parametric CAD features instead of bare sketch cutout loops:
+- Circular loops are identified by exact arc-sweep closure and uniform radius.
+- Standalone circular cutouts become `feature.hole` with exact diameter, depth (equal to part thickness), and center coordinates.
+- Rows of collinear, equal-pitch identical holes are decomposed into a seed `feature.hole` and a `feature.pattern.linear`.
+- Concentric pitch-circle hole clusters are decomposed into a seed `feature.hole` and a `feature.pattern.circular` (axis: Z, center, count).
+- Non-circular cutouts (e.g. rectangular cutouts, slots) remain preserved in `sketch.loops` inner loops.
+- Reconstructed part volume and outer bounds are analytically invariant to feature recognition.
+
 Refused, with the reason: steps, bosses, blind holes or pockets, splines and ellipses,
 unaligned views, a view without a scale, contradicting dimensions, more than one thickness or scale stated,
 turned views lacking proof of roundness, or asymmetric profiles across the axis.
@@ -59,5 +68,4 @@ thickness).
 ## Next
 
 Several extrusions from three views (steps, bosses, blind features read from hidden-line depths),
-vector-PDF drawings (the geometry is in the PDF), and feature recognition of the rebuilt part (hole
-features instead of sketch circles).
+and vector-PDF drawings (the geometry is in the PDF).

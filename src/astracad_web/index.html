@@ -1794,9 +1794,26 @@ function loopsPreview(spec) {
     return head + `A ${r} ${r} 0 ${Math.abs(d) > Math.PI ? 1 : 0} ${sg[7] > 0 ? 1 : 0} ${sg[5]} ${sg[6]}`;
   }).join(" ") + " Z";
   const span = Math.max(x1 - x0, y1 - y0), m = span * .16, fs = span * .052;
+  const F = spec?.features || [], by = op => F.filter(f => f.$op === op);
+  let extraHoles = by("feature.hole").map(f => ({ x: f.args.center[0], y: f.args.center[1], d: f.args.diameter }));
+  for (const p of by("feature.pattern.linear")) {
+    const seed = F.find(f => f.id === p.args.feature); if (!seed) continue;
+    for (let k = 1; k < p.args.count; k++) extraHoles.push({ x: seed.args.center[0] + (p.args.direction === "X" ? k * p.args.spacing : 0), y: seed.args.center[1] + (p.args.direction === "Y" ? k * p.args.spacing : 0), d: seed.args.diameter });
+  }
+  for (const p of by("feature.pattern.circular")) {
+    const seed = F.find(f => f.id === p.args.feature); if (!seed) continue;
+    const [cx, cy] = p.args.center || [0, 0], sx = seed.args.center[0] - cx, sy = seed.args.center[1] - cy;
+    for (let k = 1; k < p.args.count; k++) {
+      const a = 2 * Math.PI * k / p.args.count;
+      extraHoles.push({ x: cx + sx * Math.cos(a) - sy * Math.sin(a), y: cy + sx * Math.sin(a) + sy * Math.cos(a), d: seed.args.diameter });
+    }
+  }
   const kids = [s("path", { d: path(loops[0]), class: "pv-solid" }), ...loops.slice(1).map(l => s("path", { d: path(l), class: "pv-hole" }))];
+  for (const c of extraHoles) kids.push(s("circle", { cx: c.x, cy: c.y, r: c.d / 2, class: "pv-hole" }));
   const labels = [{ x: (x0 + x1) / 2, y: y0 - fs * 1.4, t: g6(x1 - x0) }, { x: x1 + fs * .5, y: (y0 + y1) / 2, t: g6(y1 - y0), a: "start" }];
-  if (loops.length > 1) labels.push({ x: x1, y: y1 + fs * .9, t: `${loops.length - 1} opening(s)`, a: "end", tag: true });
+  const totalOpenings = (loops.length - 1) + extraHoles.length;
+  if (totalOpenings > 0) labels.push({ x: x1, y: y1 + fs * .9, t: `${totalOpenings} opening(s)`, a: "end", tag: true });
+  if (extraHoles.length) labels.push({ x: extraHoles[0].x, y: extraHoles[0].y + extraHoles[0].d / 2, t: `${extraHoles.length > 1 ? extraHoles.length + "× " : ""}Ø${g6(extraHoles[0].d)}`, a: "middle", tag: true });
   return h("figure", { class: "pv" }, s("svg", { viewBox: [x0 - m, -(y1 + m), (x1 - x0) + 2 * m, (y1 - y0) + 2 * m].join(" "), role: "img", "aria-label": "section from the drawing" },
       s("g", { transform: "scale(1,-1)" }, ...kids),
       ...labels.map(l => s("text", { x: l.x, y: -l.y, "font-size": fs, class: "pv-dim" + (l.tag ? " pv-tag" : ""), "text-anchor": l.a || "middle", "dominant-baseline": "middle" }, l.t))),
@@ -1808,12 +1825,12 @@ async function drawingCadDialog(pid, src) {
   document.body.append(dlg);
   dlg.addEventListener("close", () => dlg.remove());
   dlg.addEventListener("click", e => { if (e.target === dlg) dlg.close(); });
-  const opt = { through: false, thickness: "", scale: "" };
+  const opt = { through: false, thickness: "", scale: "", features: false };
   let result = null;
   const F = (label, el, cls = "") => h("label", { class: "field " + cls }, h("span", {}, label), el);
   async function draw() {
     let it;
-    try { it = await post("/api/drawing_cad/interpret", { project: pid, source: src.sha256, through: opt.through, thickness: opt.thickness || null, scale: opt.scale || null }); }
+    try { it = await post("/api/drawing_cad/interpret", { project: pid, source: src.sha256, through: opt.through, thickness: opt.thickness || null, scale: opt.scale || null, features: opt.features }); }
     catch (e) { dlg.replaceChildren(h("div", { class: "dsg-bd" }, empty("alert", "Drawing not read", e.message))); return; }
     const amb = it.ambiguities || [], miss = it.missing || [], all = [...miss, ...amb].join(" ");
     const askThrough = opt.through || /no hidden lines/.test(all), askThick = !!opt.thickness || /thickness/.test(all), askScale = !!opt.scale || /scale/.test(all);
@@ -1828,6 +1845,8 @@ async function drawingCadDialog(pid, src) {
       opts.push(F("Thickness, mm (no view shows it)", t)); }
     if (askScale) { const t = h("input", { class: "input sm", type: "number", min: 0, step: "any", value: opt.scale, style: "width:120px", placeholder: "0.5 = 1:2", onchange: () => { opt.scale = t.value; draw(); } });
       opts.push(F("View scale (no dimension gives it)", t)); }
+    const cbFeat = h("input", { type: "checkbox", checked: opt.features, onchange: () => { opt.features = cbFeat.checked; draw(); } });
+    opts.push(h("label", { class: "dsg-opt" }, cbFeat, h("span", {}, "Recognise Hole & Pattern features in the feature tree.")));
     const exp = it.expect || {};
     const facts = (it.facts || []).filter(f => f.name !== "drawing");
     const who = h("input", { class: "input", value: store.get("astracad.reviewer"), autocomplete: "name", maxlength: 80 });
@@ -1836,7 +1855,7 @@ async function drawingCadDialog(pid, src) {
     go.addEventListener("click", async () => {
       if (!who.value.trim()) { toast("Type your name to authorise the build", "warn"); who.focus(); return; }
       go.disabled = true; go.replaceChildren(h("span", { class: "spin" }), " Building in SolidWorks…");
-      try { result = await post("/api/drawing_cad/build", { project: pid, source: src.sha256, through: opt.through, thickness: opt.thickness || null, scale: opt.scale || null, authorize: who.value.trim() });
+      try { result = await post("/api/drawing_cad/build", { project: pid, source: src.sha256, through: opt.through, thickness: opt.thickness || null, scale: opt.scale || null, features: opt.features, authorize: who.value.trim() });
         store.set("astracad.reviewer", who.value.trim()); toast(`${result.status === "SUCCEEDED" ? "Built and verified" : "Built, NOT verified"} · task ${result.task_id}`, result.status === "SUCCEEDED" ? "ok" : "warn"); draw(); }
       catch (e) { toast("Not built: " + e.message.replace(/^\w+Error: /, ""), "bad"); go.disabled = false; go.replaceChildren(ic("play"), "Build in SolidWorks"); }
     });

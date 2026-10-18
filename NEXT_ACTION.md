@@ -1,5 +1,45 @@
 # NEXT ACTION
 
+## 2026-10-18 (Antigravity): Drawing → CAD: Feature recognition (holes, linear patterns, circular patterns)
+
+    py -m astracad_cad from-drawing <drawing.dxf> --out OUT --authorize KM [--features]
+    workspace: Projects -> a DXF drawing -> 3D (checkbox: "Recognize features (holes & patterns)")
+    py -m pytest -q tests/test_drawing_to_cad.py
+
+Drawing → CAD now supports recognizing circular inner loops from DXF drawings into real SolidWorks CAD features:
+- Feature recognition engine (`src/astracad_core/drawing_to_cad.py`):
+  - Identifies circular cutout loops from closed arc segments forming 360° circles (`_is_circular_loop_segs`).
+  - Groups collinear equal-diameter holes with uniform pitch into a seed hole + linear pattern (`_find_linear_patterns`).
+  - Groups concentric equal-diameter holes at uniform angular spacing into a seed hole + circular pattern (`_find_circular_patterns`).
+  - Transforms `sketch.loops` section by removing recognized circles and emitting `feature.hole`, `feature.pattern.linear`, and `feature.pattern.circular`.
+  - Preserves non-circular cutouts (e.g. rectangular openings, keyways, slots) within `sketch.loops` without degradation.
+  - Standalone `recognize_features(it)` helper allows lifting any interpretation after reconstruction.
+  - Analytic net volume and bounding box remain mathematically identical down to machine precision.
+- CLI & API: added `--features` flag to `astracad_cad from-drawing` and `features: bool = False` flag to `reconstruct(...)`.
+- Web UI: added "Recognize features (holes & patterns)" checkbox to `drawingCadDialog`, forwarded in API request, and rendered recognized holes (dashed red circles) and pattern leaders in `loopsPreview`.
+- C# `mac` Runtime Support: verified `Planner`, `ExpectationEngine`, and `SwExecutor` support `sketch.loops` base followed by `feature.hole` and pattern features; added analytic selftest in `Program.cs` (`loops with linear pattern of holes`, $V = 58654.424808\text{ mm}^3$).
+
+### What was changed:
+- `src/astracad_core/drawing_to_cad.py`: added `_is_circular_loop_segs`, `_find_linear_patterns`, `_find_circular_patterns`, `recognize_features`, and `features` parameter in `reconstruct`.
+- `src/astracad_cad/cli.py`: added `--features` CLI option to `from-drawing` subcommand.
+- `src/astracad_web/server.py`: added `features` option parsing in `_drawing_options`.
+- `src/astracad_web/index.html`: added "Recognize features" checkbox in `drawingCadDialog` and updated `loopsPreview` SVG rendering.
+- `tests/test_drawing_to_cad.py`: added 5 unit tests covering linear pattern on plate, single hole, circular pattern flange PCD, non-circular opening preservation, and standalone `recognize_features` helper (24/24 passing).
+- `mecagent-alternative/src/Mac/Program.cs`: added `loops with linear pattern of holes` selftest case (52/52 passing).
+- `docs/engineering/drawing-to-cad.md`: documented feature recognition rules and invariant volume derivation.
+- `docs/competitive/parity-matrix.md`: updated row C-34 with feature recognition details.
+- `CURRENT_STATE.md`: updated baseline to 610 passed tests and 52/52 `mac selftest`.
+
+### What was verified and how:
+- `py -m pytest -q tests/test_drawing_to_cad.py`: 24/24 passed (including 5 new feature recognition tests).
+- `py -m pytest -q tests/test_web.py`: 14/14 passed (verifying JavaScript syntax and endpoints).
+- `py -m pytest -q --basetemp "$env:TEMP\pytest_astracad"`: full suite 610 passed, 0 failed in 226.89s.
+- `dotnet run --project src/Mac -- selftest`: 52/52 checks passed (including loops with patterned holes exact volume).
+- Line ending audit: 100% byte-level consistency preserved across all modified files (0 mixed line endings).
+
+### What could not be verified:
+- Live SOLIDWORKS CAD build was not triggered against the live SolidWorks instance in this step to respect the non-negotiable rule that user's open documents (food-processor assembly) must never be modified or closed, and CAD writes require explicit authorization (`--authorize`).
+
 ## 2026-10-18 (Antigravity): Text → CAD: Blind holes with depth validation & SVG styling
 
     workspace: "Text to CAD" (e.g. "SolidWorks 60 x 40 x 20 mm block with a 10 mm hole, 15 mm deep, centred")

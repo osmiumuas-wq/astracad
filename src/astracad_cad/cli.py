@@ -77,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="view scale for views without any dimension, e.g. 0.5 for 1:2")
     fd.add_argument("--thickness", type=float, default=None,
                     help="thickness in mm, when no view shows it and the drawing has no 'THK' note")
+    fd.add_argument("--features", action="store_true",
+                    help="recognise Hole and Pattern features instead of cutting sketch loops")
     fd.add_argument("--interpret-only", action="store_true", dest="interpret_only",
                     help="print the reconstruction; build nothing")
     b = sub.add_parser("build", help="interpret a request and execute it if fully specified")
@@ -216,7 +218,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_edit(a, a.source, sets, a.name, f"edit {a.source} {sets}")
     if a.cmd == "from-drawing":
         from astracad_core.drawing_to_cad import reconstruct
-        it = reconstruct(a.drawing, through=a.through, scale=a.scale, thickness=a.thickness)
+        it = reconstruct(a.drawing, through=a.through, scale=a.scale, thickness=a.thickness,
+                         features=a.features)
         _print({"interpretation": it.to_dict()})
         if not it.executable:
             print("NOT EXECUTED: the drawing does not describe a part this version rebuilds (see missing/ambiguities)")

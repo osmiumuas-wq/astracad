@@ -169,7 +169,8 @@ class Workspace:
             raise ValueError("thickness must be a number of millimetres") from None
         if thickness is not None and not (0 < thickness < 10000):
             raise ValueError("thickness must be between 0 and 10000 mm")
-        return {"through": body.get("through") is True, "scale": scale, "thickness": thickness}
+        return {"through": body.get("through") is True, "scale": scale, "thickness": thickness,
+                "features": body.get("features") is True}
 
     def drawing_interpret(self, body: dict) -> dict:
         """What the drawing's views prove about the part. Never executes."""

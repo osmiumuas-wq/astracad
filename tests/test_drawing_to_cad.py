@@ -7,7 +7,7 @@ from pathlib import Path
 import ezdxf
 import pytest
 
-from astracad_core.drawing_to_cad import reconstruct
+from astracad_core.drawing_to_cad import recognize_features, reconstruct
 
 FIX = Path(__file__).parent / "fixtures"
 AREA = 100 * 60 - (4 - math.pi) * 25 - 2 * math.pi * 9           # R5 corners, two dia 6 holes
@@ -327,4 +327,95 @@ def test_stepped_shaft_scale_comes_from_dimensions(tmp_path):
     assert it.fact("view_scale_factor") == pytest.approx(2.0)
     assert it.expect["size_mm"] == [30, 30, 60]
     assert it.expect["volume_mm3"] == pytest.approx(math.pi * 10**2 * 25 + math.pi * 15**2 * 35)
+
+
+# ---- Feature recognition on rebuilt parts (holes and patterns) -----------------------------------
+def flange_bolt_circle_dxf(path: Path) -> Path:
+    """A disc of OD 80 with 4 x dia 8 holes on a 50 mm PCD, thickness 10 mm."""
+    doc = ezdxf.new("R2010", setup=True)
+    doc.header["$INSUNITS"] = 4
+    m = doc.modelspace()
+    m.add_circle((40, 40), 40)
+    for k in range(4):
+        a = k * math.pi / 2
+        m.add_circle((40 + 25 * math.cos(a), 40 + 25 * math.sin(a)), 4)
+    m.add_text("THK 10", dxfattribs={"insert": (0, -20), "height": 3})
+    m.add_linear_dim(base=(40, -10), p1=(0, 40), p2=(80, 40), text="Ø80", override={"dimlfac": 1.0}).render()
+    doc.saveas(path)
+    return path
+
+
+def test_feature_recognition_linear_pattern_on_plate(tmp_path):
+    p = shutil.copy(FIX / "sw_drawing" / "plate_r5_hlv.dxf", tmp_path / "plate_r5_hlv.dxf")
+    it = reconstruct(p, features=True)
+    assert it.executable, (it.missing, it.ambiguities)
+    assert any("recognized into 2 feature(s)" in str(f.value) for f in it.facts if f.name == "recognized_features")
+    assert [f["$op"] for f in it.spec["features"]] == [
+        "sketch.loops", "feature.extrude", "feature.hole", "feature.pattern.linear"
+    ]
+    assert len(it.spec["features"][0]["args"]["loops"]) == 1
+    h = it.spec["features"][2]["args"]
+    assert h["diameter"] == 6.0 and h["depth"] == 10.0 and h["center"] == [20.0, 30.0]
+    pat = it.spec["features"][3]["args"]
+    assert pat == {"feature": "hole1", "count": 4, "spacing": 20.0, "direction": "X"}
+    assert it.expect["volume_mm3"] == pytest.approx(58654.424808, abs=1e-6)
+
+
+def test_feature_recognition_single_hole(tmp_path):
+    p = single_view_plate(tmp_path / "single.dxf")
+    it = reconstruct(p, through=True, features=True)
+    assert it.executable, (it.missing, it.ambiguities)
+    assert [f["$op"] for f in it.spec["features"]] == ["sketch.loops", "feature.extrude", "feature.hole"]
+    assert len(it.spec["features"][0]["args"]["loops"]) == 1
+    h = it.spec["features"][2]["args"]
+    assert h == {"diameter": 8.0, "depth": 4.0, "center": [25.0, 15.0]}
+    assert it.expect["volume_mm3"] == pytest.approx(50 * 30 * 4 - math.pi * 16 * 4)
+
+
+def test_feature_recognition_circular_pattern(tmp_path):
+    p = flange_bolt_circle_dxf(tmp_path / "flange_pcd.dxf")
+    it = reconstruct(p, through=True, features=True)
+    assert it.executable, (it.missing, it.ambiguities)
+    assert [f["$op"] for f in it.spec["features"]] == [
+        "sketch.loops", "feature.extrude", "feature.hole", "feature.pattern.circular"
+    ]
+    assert len(it.spec["features"][0]["args"]["loops"]) == 1
+    pat = it.spec["features"][3]["args"]
+    assert pat["count"] == 4 and pat["axis"] == "Z" and pat["center"] == [40.0, 40.0]
+    want_v = math.pi * 40**2 * 10 - 4 * math.pi * 16 * 10
+    assert it.expect["volume_mm3"] == pytest.approx(want_v)
+
+
+def test_feature_recognition_preserves_non_circular_openings(tmp_path):
+    """A plate with a square opening and a circular hole: square stays in sketch.loops, hole recognized."""
+    doc = ezdxf.new("R2010", setup=True)
+    doc.header["$INSUNITS"] = 4
+    m = doc.modelspace()
+    for a, b in (((0, 0), (100, 0)), ((100, 0), (100, 60)), ((100, 60), (0, 60)), ((0, 60), (0, 0))):
+        m.add_line(a, b)
+    for a, b in (((20, 20), (40, 20)), ((40, 20), (40, 40)), ((40, 40), (20, 40)), ((20, 40), (20, 20))):
+        m.add_line(a, b)
+    m.add_circle((70, 30), 5)
+    m.add_text("THK 10", dxfattribs={"insert": (0, -20), "height": 3})
+    m.add_linear_dim(base=(50, -10), p1=(0, 0), p2=(100, 0), override={"dimlfac": 1.0}).render()
+    p = tmp_path / "mixed.dxf"
+    doc.saveas(p)
+
+    it = reconstruct(p, through=True, features=True)
+    assert it.executable, (it.missing, it.ambiguities)
+    assert len(it.spec["features"][0]["args"]["loops"]) == 2
+    assert [f["$op"] for f in it.spec["features"]] == ["sketch.loops", "feature.extrude", "feature.hole"]
+    assert it.spec["features"][2]["args"]["center"] == [70.0, 30.0]
+    want_v = (100 * 60 - 20 * 20 - math.pi * 25) * 10
+    assert it.expect["volume_mm3"] == pytest.approx(want_v)
+
+
+def test_recognize_features_standalone_helper(tmp_path):
+    p = plate_dxf(tmp_path / "plate.dxf")
+    base_it = reconstruct(p)
+    assert len(base_it.spec["features"]) == 2
+    rec_it = recognize_features(base_it)
+    assert any(f["$op"] == "feature.hole" for f in rec_it.spec["features"])
+    assert rec_it.expect["volume_mm3"] == pytest.approx(base_it.expect["volume_mm3"])
+
 

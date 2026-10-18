@@ -727,7 +727,8 @@ def _reconstruct_turned(views: list[View], doc, it: Interpretation, dims: list[d
 
 
 def reconstruct(path: str | Path, *, through: bool = False, scale: float | None = None,
-                thickness: float | None = None, app: str | None = "solidworks") -> Interpretation:
+                thickness: float | None = None, features: bool = False,
+                app: str | None = "solidworks") -> Interpretation:
     import ezdxf
     path = Path(path)
     it = Interpretation(f"drawing {path.name}", "create_part_from_drawing", app or "solidworks", exports=["step"])
@@ -970,6 +971,200 @@ def reconstruct(path: str | Path, *, through: bool = False, scale: float | None 
                             {"$op": "feature.extrude", "id": "body", "args": {"depth": depth}}],
                "exports": [{"format": "step"}],
                "notes": {"source_drawing": str(path), "source_sha256": _sha(path)}}
+    if features:
+        it = recognize_features(it)
+    return it
+
+
+def _is_circular_loop_segs(lp: list) -> tuple[float, float, float] | None:
+    """Return (cx, cy, r) if loop segments form a circle."""
+    if len(lp) == 1 and lp[0][0] == "C":
+        return (lp[0][1], lp[0][2], lp[0][3])
+    if len(lp) == 2 and lp[0][0] == "A" and lp[1][0] == "A":
+        cx1, cy1, r1 = lp[0][1], lp[0][2], lp[0][3]
+        cx2, cy2, r2 = lp[1][1], lp[1][2], lp[1][3]
+        if abs(cx1 - cx2) < 1e-6 and abs(cy1 - cy2) < 1e-6 and abs(r1 - r2) < 1e-6:
+            return (cx1, cy1, r1)
+    return None
+
+
+def _find_linear_patterns(holes: list[dict], depth: float, start_hole_id: int, start_pat_id: int) -> tuple[list[dict], list[dict], int, int]:
+    """Find linear patterns (horizontal or vertical) in a list of holes of equal diameter."""
+    used = set()
+    features = []
+    hole_id = start_hole_id
+    pat_id = start_pat_id
+
+    # Horizontal rows (same Y, sorted by X)
+    by_y: dict[float, list[int]] = {}
+    for i, h in enumerate(holes):
+        matched_y = None
+        for yk in by_y:
+            if abs(h["y"] - yk) < 1e-5:
+                matched_y = yk
+                break
+        if matched_y is None:
+            matched_y = h["y"]
+            by_y[matched_y] = []
+        by_y[matched_y].append(i)
+
+    for yk, idxs in by_y.items():
+        if len(idxs) >= 2:
+            s_idxs = sorted(idxs, key=lambda i: holes[i]["x"])
+            xs = [holes[i]["x"] for i in s_idxs]
+            spacings = [xs[j + 1] - xs[j] for j in range(len(xs) - 1)]
+            if len(spacings) >= 1 and all(s > 1e-5 and abs(s - spacings[0]) < 1e-5 for s in spacings):
+                seed = holes[s_idxs[0]]
+                seed_id = f"hole{hole_id}"
+                hole_id += 1
+                features.append({
+                    "$op": "feature.hole", "id": seed_id, "sketched_on": "front",
+                    "args": {"diameter": seed["d"], "depth": depth, "center": [seed["x"], seed["y"]]}
+                })
+                features.append({
+                    "$op": "feature.pattern.linear", "id": f"pattern{pat_id}",
+                    "args": {"feature": seed_id, "count": len(s_idxs), "spacing": round(spacings[0], 9), "direction": "X"}
+                })
+                pat_id += 1
+                used.update(s_idxs)
+
+    # Vertical columns (same X, sorted by Y)
+    remaining_idxs = [i for i in range(len(holes)) if i not in used]
+    by_x: dict[float, list[int]] = {}
+    for i in remaining_idxs:
+        h = holes[i]
+        matched_x = None
+        for xk in by_x:
+            if abs(h["x"] - xk) < 1e-5:
+                matched_x = xk
+                break
+        if matched_x is None:
+            matched_x = h["x"]
+            by_x[matched_x] = []
+        by_x[matched_x].append(i)
+
+    for xk, idxs in by_x.items():
+        if len(idxs) >= 2:
+            s_idxs = sorted(idxs, key=lambda i: holes[i]["y"])
+            ys = [holes[i]["y"] for i in s_idxs]
+            spacings = [ys[j + 1] - ys[j] for j in range(len(ys) - 1)]
+            if len(spacings) >= 1 and all(s > 1e-5 and abs(s - spacings[0]) < 1e-5 for s in spacings):
+                seed = holes[s_idxs[0]]
+                seed_id = f"hole{hole_id}"
+                hole_id += 1
+                features.append({
+                    "$op": "feature.hole", "id": seed_id, "sketched_on": "front",
+                    "args": {"diameter": seed["d"], "depth": depth, "center": [seed["x"], seed["y"]]}
+                })
+                features.append({
+                    "$op": "feature.pattern.linear", "id": f"pattern{pat_id}",
+                    "args": {"feature": seed_id, "count": len(s_idxs), "spacing": round(spacings[0], 9), "direction": "Y"}
+                })
+                pat_id += 1
+                used.update(s_idxs)
+
+    unused = [holes[i] for i in range(len(holes)) if i not in used]
+    return features, unused, hole_id, pat_id
+
+
+def _find_circular_patterns(holes: list[dict], depth: float, start_hole_id: int, start_pat_id: int) -> tuple[list[dict], list[dict], int, int]:
+    """Find circular bolt patterns in a list of holes of equal diameter."""
+    if len(holes) < 3:
+        return [], holes, start_hole_id, start_pat_id
+    m = len(holes)
+    cx = sum(h["x"] for h in holes) / m
+    cy = sum(h["y"] for h in holes) / m
+    radii = [math.hypot(h["x"] - cx, h["y"] - cy) for h in holes]
+    r0 = radii[0]
+    if r0 > 1e-4 and all(abs(r - r0) < 1e-4 for r in radii):
+        angles = [(math.atan2(h["y"] - cy, h["x"] - cx) % (2 * math.pi), h) for h in holes]
+        angles.sort(key=lambda t: t[0])
+        expected_step = 2 * math.pi / m
+        diffs = [(angles[(i + 1) % m][0] - angles[i][0]) % (2 * math.pi) for i in range(m)]
+        if all(abs(d - expected_step) < 1e-4 for d in diffs):
+            seed = angles[0][1]
+            seed_id = f"hole{start_hole_id}"
+            features = [
+                {
+                    "$op": "feature.hole", "id": seed_id, "sketched_on": "front",
+                    "args": {"diameter": seed["d"], "depth": depth, "center": [seed["x"], seed["y"]]}
+                },
+                {
+                    "$op": "feature.pattern.circular", "id": f"pattern{start_pat_id}",
+                    "args": {"feature": seed_id, "count": m, "axis": "Z", "center": [round(cx, 9), round(cy, 9)]}
+                }
+            ]
+            return features, [], start_hole_id + 1, start_pat_id + 1
+    return [], holes, start_hole_id, start_pat_id
+
+
+def recognize_features(it: Interpretation) -> Interpretation:
+    """Recognise circular cutouts in sketch.loops as Hole and Pattern features.
+
+    When a 2D drawing contains circular holes, this pass separates them from the base
+    sketch.loops, keeping only the outline (and any non-circular cutouts) in the base
+    extrusion, and appends real feature.hole and feature.pattern.linear / circular features.
+    The expected volume and surface area remain analytically identical.
+    """
+    if not it.executable or not it.spec or "features" not in it.spec:
+        return it
+    feats = it.spec["features"]
+    loops_idx = next((i for i, f in enumerate(feats) if f.get("$op") == "sketch.loops"), None)
+    ext_idx = next((i for i, f in enumerate(feats) if f.get("$op") == "feature.extrude"), None)
+    if loops_idx is None or ext_idx is None:
+        return it
+    loops = feats[loops_idx]["args"].get("loops", [])
+    if len(loops) <= 1:
+        return it
+    outer = loops[0]
+    inner = loops[1:]
+    depth = feats[ext_idx]["args"]["depth"]
+
+    circular_holes = []
+    other_inner = []
+    for lp in inner:
+        circ = _is_circular_loop_segs(lp)
+        if circ is not None:
+            cx, cy, r = circ
+            circular_holes.append({"x": round(cx, 9), "y": round(cy, 9), "d": round(2 * r, 9)})
+        else:
+            other_inner.append(lp)
+
+    if not circular_holes:
+        return it
+
+    by_dia: dict[float, list[dict]] = {}
+    for h in circular_holes:
+        by_dia.setdefault(round(h["d"], 6), []).append(h)
+
+    new_feats = []
+    hole_id = 1
+    pat_id = 1
+    total_recognized = 0
+
+    for dia, group in sorted(by_dia.items()):
+        c_feats, rem_c, hole_id, pat_id = _find_circular_patterns(group, depth, hole_id, pat_id)
+        if c_feats:
+            new_feats.extend(c_feats)
+            total_recognized += len(group)
+            continue
+        l_feats, rem_l, hole_id, pat_id = _find_linear_patterns(group, depth, hole_id, pat_id)
+        new_feats.extend(l_feats)
+        total_recognized += len(group) - len(rem_l)
+        for h in rem_l:
+            new_feats.append({
+                "$op": "feature.hole", "id": f"hole{hole_id}", "sketched_on": "front",
+                "args": {"diameter": h["d"], "depth": depth, "center": [h["x"], h["y"]]}
+            })
+            hole_id += 1
+            total_recognized += 1
+
+    feats[loops_idx]["args"]["loops"] = [outer] + other_inner
+    feats[ext_idx + 1:ext_idx + 1] = new_feats
+    it.facts.append(Fact("recognized_features",
+                         f"{total_recognized} hole(s) recognized into {len(new_feats)} feature(s)",
+                         None, "CALCULATED",
+                         "circular inner loops converted to feature.hole and patterns"))
     return it
 
 
