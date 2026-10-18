@@ -1,5 +1,29 @@
 # NEXT ACTION
 
+## 2026-10-18 (Claude): fillets and chamfers on edges named without guessing (HANDOFF §7 item 7, first half)
+
+    py -m astracad_cad build "SolidWorks 100 x 60 x 10 mm plate with R5 corners and 4 x 6 mm holes at 20 mm pitch along the width, centred, export STEP" --out OUT --authorize KM
+    py -m astracad_cad build "SolidWorks shaft dia 20 mm length 50 mm with 1 mm chamfer on both ends, export STEP" --out OUT --authorize KM
+
+Two edge sets can be named without guessing, and only those are offered: the 4 corners of a block's W x H outline
+and the outer edge at both ends of a round part. `mac` finds them by geometry (`select`: `corners` /
+`end_circles`): circular edges must share one axis, the largest circle in each end plane is taken, and the
+selection is checked by centre and radius - so a tube's bore is never chamfered by accident. The volume is
+predicted in closed form (Pappus for the ends; the fillet's centroid offset r(10-3pi)/(12-3pi) also checked
+against a numeric integration in `mac selftest`).
+
+Verified live (SOLIDWORKS 2026 SP04.1): 6 bare `mac` specs (cylinder, stepped shaft with unequal ends, tube) with
+kernel volume and area equal to the closed forms within 1e-11, and 5 natural-language requests through
+`astracad_cad build`, all END_TO_END_VERIFIED (table in CURRENT_STATE). The Text to CAD preview draws the rounds /
+chamfers, and now also bolt circles (only the seed hole was drawn since the circular-pattern change) and pockets.
+
+Also fixed: "export STEP" sent every plain shaft request to the stepped-shaft parser (the word "step"), which
+then refused it; the preview's labels used the page's `.tag` chip style, whose 12px font became 12 mm in the
+drawing.
+
+Tests: **562 passed**; `mac selftest` 46/46. Next: the rest of item 7 - digital signing of dossiers; then other edges only where they can be named from
+geometry (e.g. "the edges of the pocket"), and other chamfer angles.
+
 ## 2026-10-18 (Claude, second pass): the features nobody had used live, used live - 5 defects fixed
 
 The scheduled pass verified the Antigravity work by tests, code read and CAD builds, but the project dossier,

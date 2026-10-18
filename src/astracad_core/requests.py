@@ -10,6 +10,9 @@ Supported request shapes (anything else is UNRECOGNISED, with the reason):
   [holes, below]
 - stepped shaft  dia <D1> x <L1>, dia <D2> x <L2>, ...  (steps in order from one end; revolved)
 - tube / pipe / sleeve / bush / spacer / washer / ring  OD <d>  ID <d> (or wall <t>)  length <l>
+- fillets / chamfers (one per request, 45 deg chamfers only): "R5 corners", "3 mm chamfer on the corners"
+  (the 4 corners of a block's W x H outline); "1 mm chamfer on both ends", "both ends filleted R1" (the outer
+  edge at both ends of a round part). A bare "R5" takes the request's unit only when it has exactly one.
 - holes: "a 10 mm hole at the centre"; "4 x 6 mm holes at 20 mm pitch along the width, centred"
   (one hole + linear pattern); "6 x 8 mm holes on a 70 mm PCD [starting at 30 deg]"
 - pockets and slots: "a 40 x 30 mm pocket, 5 mm deep, centred"; "a 40 x 10 mm slot 5 mm deep along the width, centred"
@@ -163,7 +166,8 @@ def interpret(request: str, default_app: str | None = None) -> Interpretation:
 
     # ---- create a stepped shaft (revolved profile) ------------------------------------------------
     segs = _segments(low)
-    if re.search(r"\b(shaft|rod|pin|spindle|axle)\b", low) and (len(segs) >= 2 or "step" in low):
+    # "stepped", not "step": "export STEP" sent every plain shaft here (and refused it) until 2026-10-18
+    if re.search(r"\b(shaft|rod|pin|spindle|axle)\b", low) and (len(segs) >= 2 or re.search(r"\bstepped\b", low)):
         return _stepped(text, low, app, exports, segs)
 
     # ---- create a block -----------------------------------------------------------------------
@@ -183,11 +187,16 @@ def interpret(request: str, default_app: str | None = None) -> Interpretation:
                                    (5, units[2], "depth")))
         if None in (w, h, d):
             return it
+        treat = _treatment(it, low, "corners")
+        if treat is None:
+            return it
         feats = [{"$op": "sketch.rectangle", "id": "outline", "sketched_on": "front",
                   "args": {"width": w, "height": h}},
                  {"$op": "feature.extrude", "id": "body", "args": {"depth": d}}]
         vol = w * h * d
         rest = low[:dims.start()] + " " * len(dims.group(0)) + low[dims.end():]
+        if treat:
+            rest = _blank(rest, treat["span"])
         cut_text = rest
         hole_text = rest
         if re.search(r"\b(pocket|recess|slot|groove|channel)\b", rest) and re.search(r"\b(holes?|bores?)\b", rest):
@@ -204,16 +213,32 @@ def interpret(request: str, default_app: str | None = None) -> Interpretation:
         holes = _holes(it, hole_text, face="block", w=w, h=h, depth=d)
         if holes is None:
             return it
+        treat_tag = treat_calc = ""
+        if treat:
+            s, kind = treat["size"], treat["kind"]
+            if s >= min(w, h) / 2:
+                it.ambiguities.append(f"a {s:g} mm {kind} on the corners must be less than half the shorter "
+                                      f"side ({min(w, h) / 2:g} mm)")
+                return it
+            corners = [(0, 0), (w, 0), (0, h), (w, h)]
+            if not _clear_of(it, holes, cuts, lambda x0, y0, x1, y1: any(
+                    x0 < cx + s and x1 > cx - s and y0 < cy + s and y1 > cy - s for cx, cy in corners)):
+                return it
+            # right after the body: before any cut, the outline's 4 corners are the only edges along the depth
+            feats.append(_edge_feature(kind, s, "corners"))
+            vol -= 4 * s * s * (_SPANDREL if kind == "fillet" else 0.5) * d
+            treat_tag = f"_{'r' if kind == 'fillet' else 'ch'}{s:g}"
+            treat_calc = f" - 4*{'r^2*(1-pi/4)' if kind == 'fillet' else 'c^2/2'}*d"
         feats += cuts["features"] + holes["features"]
         vol -= cuts["removed_mm3"] + holes["removed_mm3"]
         it.expect = {"size_mm": [w, h, d], "volume_mm3": vol}
-        vol_calc = "w*h*d"
+        vol_calc = "w*h*d" + treat_calc
         if cuts["removed_mm3"]:
             vol_calc += f" - {cuts['removed_mm3']:g}"
         if holes["count"]:
             vol_calc += f" - {holes['count']}*pi*(dh/2)^2*d"
         it.facts.append(Fact("volume_mm3", vol, "mm^3", "CALCULATED", vol_calc))
-        tag = f"block_{w:g}x{h:g}x{d:g}" + cuts["tag"] + holes["tag"]
+        tag = f"block_{w:g}x{h:g}x{d:g}" + treat_tag + cuts["tag"] + holes["tag"]
         it.spec = {"name": _safe_name(tag), "units": "mm",
                    "features": feats, "exports": [{"format": e} for e in exports],
                    "notes": {"request": text}}
@@ -225,6 +250,11 @@ def interpret(request: str, default_app: str | None = None) -> Interpretation:
         it = Interpretation(text, "create_part", app, exports=exports)
         if app is None:
             it.missing.append("target CAD application")
+        treat = _treatment(it, low, "ends")
+        if treat is None:
+            return it
+        if treat:                                   # its numbers are not sizes of the part
+            low = _blank(low, treat["span"])
         da = re.search(r"\b(?:diameter|dia|od)\b\s*(?:of\s*)?" + _NUM + _UNIT, low)
         db = re.search(_NUM + _UNIT + r"\s*(?:diameter|dia|od)\b", low)
         rm = re.search(r"\bradius\b\s*(?:of\s*)?" + _NUM + _UNIT, low)
@@ -274,21 +304,39 @@ def interpret(request: str, default_app: str | None = None) -> Interpretation:
         holes = _holes(it, hole_text, face="disc", w=dia, h=dia, depth=length)
         if holes is None:
             return it
-        vol = math.pi * (dia / 2) ** 2 * length - cuts["removed_mm3"] - holes["removed_mm3"]
+        R = dia / 2
+        ends: list[dict[str, Any]] = []
+        removed = 0.0
+        treat_tag = treat_calc = ""
+        if treat:
+            s, kind = treat["size"], treat["kind"]
+            if s >= R or 2 * s >= length:
+                it.ambiguities.append(f"a {s:g} mm {kind} on both ends must be less than the radius ({R:g} mm) "
+                                      f"and less than half the length ({length / 2:g} mm)")
+                return it
+            if not _clear_of(it, holes, cuts, lambda x0, y0, x1, y1: max(
+                    math.hypot(x, y) for x in (x0, x1) for y in (y0, y1)) > R - s):
+                return it
+            ends = [_edge_feature(kind, s, "end_circles")]
+            removed = _end_removed(kind, s, (R, R))
+            treat_tag = f"_ends_{'r' if kind == 'fillet' else 'ch'}{s:g}"
+            treat_calc = (" - 2*pi*c^2*(R-c/3)" if kind == "chamfer"
+                          else " - 2*2pi*(R-xbar)*r^2*(1-pi/4), xbar = r(10-3pi)/(12-3pi)")
+        vol = math.pi * (dia / 2) ** 2 * length - cuts["removed_mm3"] - holes["removed_mm3"] - removed
         it.expect = {"size_mm": [dia, dia, length], "volume_mm3": vol}
-        vol_calc = "pi*(d/2)^2*L"
+        vol_calc = "pi*(d/2)^2*L" + treat_calc
         if cuts["removed_mm3"]:
             vol_calc += f" - {cuts['removed_mm3']:g}"
         if holes["count"]:
             vol_calc += f" - {holes['count']}*pi*(dh/2)^2*L"
         it.facts.append(Fact("volume_mm3", vol, "mm^3", "CALCULATED", vol_calc))
-        tag = f"{m.group(1)}_d{dia:g}_l{length:g}" + cuts["tag"] + holes["tag"]
+        tag = f"{m.group(1)}_d{dia:g}_l{length:g}" + treat_tag + cuts["tag"] + holes["tag"]
         it.spec = {"name": _safe_name(tag),
                    "units": "mm",
                    "features": [{"$op": "sketch.circle", "id": "disc", "sketched_on": "front",
                                  "args": {"radius": dia / 2, "x": 0, "y": 0}},
                                 {"$op": "feature.extrude", "id": "body",
-                                 "args": {"depth": length}}] + cuts["features"] + holes["features"],
+                                 "args": {"depth": length}}] + ends + cuts["features"] + holes["features"],
                    "exports": [{"format": e} for e in exports], "notes": {"request": text}}
         return it
 
@@ -339,6 +387,9 @@ def _stepped(text: str, low: str, app: str | None, exports: list[str],
     it = Interpretation(text, "create_part", app, exports=exports)
     if app is None:
         it.missing.append("target CAD application")
+    treat = _treatment(it, low, "ends")
+    if treat is None:
+        return it
     if len(segs) < 2:
         it.missing.append("each step as 'dia <D> x <L>' with a unit, in order from one end "
                           "(at least two steps)")
@@ -374,12 +425,28 @@ def _stepped(text: str, low: str, app: str | None, exports: list[str],
     it.facts.append(Fact("volume_mm3", vol, "mm^3", "CALCULATED", "sum of pi*(d/2)^2*L per step"))
     it.facts.append(Fact("axis", "sketch X axis of the Front plane", None, "CALCULATED",
                          "a revolved profile needs one axis; it does not change the solid"))
+    ends: list[dict[str, Any]] = []
+    if treat:
+        s, kind = treat["size"], treat["kind"]
+        radii = (merged[0][0] / 2, merged[-1][0] / 2)
+        # the treatment must stay on the end step (one step: the two ends must not meet)
+        reach = total / 2 if len(merged) == 1 else min(merged[0][1], merged[-1][1])
+        if s >= min(radii) or s >= reach:
+            it.ambiguities.append(f"a {s:g} mm {kind} on both ends must be less than the end radius "
+                                  f"({min(radii):g} mm) and stay on the end step ({reach:g} mm)")
+            return it
+        removed = _end_removed(kind, s, radii)
+        vol -= removed
+        ends = [_edge_feature(kind, s, "end_circles")]
+        it.facts.append(Fact(f"{kind}_removed_mm3", removed, "mm^3", "CALCULATED",
+                             "Pappus at each end's outer radius " + ", ".join(f"{r:g}" for r in radii)))
     it.expect = {"size_mm": [dmax, dmax, total], "volume_mm3": vol}
-    tag = "stepped_shaft_" + "_".join(f"d{d:g}l{ln:g}" for d, ln in merged)
+    tag = "stepped_shaft_" + "_".join(f"d{d:g}l{ln:g}" for d, ln in merged) + (
+        f"_ends_{'r' if treat['kind'] == 'fillet' else 'ch'}{treat['size']:g}" if treat else "")
     it.spec = {"name": _safe_name(tag), "units": "mm",
                "features": [{"$op": "sketch.profile", "id": "profile", "sketched_on": "front",
                              "args": {"points": pts}},
-                            {"$op": "feature.revolve", "id": "body", "args": {}}],
+                            {"$op": "feature.revolve", "id": "body", "args": {}}] + ends,
                "exports": [{"format": e} for e in exports], "notes": {"request": text}}
     return it
 
@@ -389,6 +456,9 @@ def _tube(text: str, low: str, app: str | None, exports: list[str]) -> Interpret
     if app is None:
         it.missing.append("target CAD application")
     kind = re.search(r"\b(tube|pipe|sleeve|bush(?:ing)?|spacer|washer|ring)\b", low).group(1)
+    if _TREAT_WORD.search(low):
+        it.missing.append(f"fillets / chamfers on a {kind} are not supported yet (outer edge, bore or both "
+                          "would be a guess)")
     od = re.search(r"\b(?:od|outer\s+diameter|outside\s+diameter|outer\s+dia)\b\s*(?:of\s*)?"
                    + _NUM + _UNIT, low) or re.search(_NUM + _UNIT + r"\s*od\b", low)
     idm = re.search(r"\b(?:id|inner\s+diameter|inside\s+diameter|inner\s+dia|bore)\b\s*(?:of\s*)?"
@@ -760,3 +830,115 @@ def _cuts(it: Interpretation, low: str, face: str, w: float, h: float,
     return {"features": feats, "removed_mm3": removed_mm3, "count": 1,
             "tag": f"_{kind}{pw:g}x{ph:g}x{d_cut:g}"}
 
+
+# ---- fillets and chamfers, on edges named by what they are -----------------------------------------
+# Only edge sets that can be named without guessing are offered: the 4 corners of a block's W x H
+# outline (the edges along its depth) and the outer edge at both ends of a round part. The CAD runtime
+# finds them by geometry (mac: select = corners / end_circles), and the kernel volume is checked
+# against the closed forms below (Pappus for the ends; measured equal on SOLIDWORKS 2026-10-18).
+_ANG = r"(?:\s*x\s*(\d+(?:\.\d+)?)\s*(?:°|deg(?:rees?)?))?"
+_CORNERS = r"(?:on\s+)?(?:the\s+|all\s+)?(?:four\s+|4\s+)?(?:outside\s+|outer\s+)?corners\b"
+_ENDS = r"(?:on\s+|at\s+)?(?:both|each|the\s+two)\s+ends?\b"
+_TREATMENTS = [
+    ("corners", "fillet", re.compile(r"\br\s?" + _NUM + _UNIT + r"\s*(?:radius\s*)?" + _CORNERS)),
+    ("corners", "fillet", re.compile(_NUM + _UNIT + r"\s*(?:radius|radii|fillets?|rounds?)\s*" + _CORNERS)),
+    ("corners", "fillet", re.compile(r"\b(?:rounded\s+corners|corners?\s+(?:rounded|radius|radiused|filleted))"
+                                     r"\s*(?:to\s+|at\s+|of\s+)?(?:r\s?)?" + _NUM + _UNIT)),
+    ("corners", "chamfer", re.compile(_NUM + _UNIT + _ANG + r"\s*chamfers?\s*" + _CORNERS)),
+    ("corners", "chamfer", re.compile(r"\b(?:chamfered\s+corners|corners?\s+chamfered)\s*(?:to\s+|at\s+|by\s+|of\s+)?"
+                                      + _NUM + _UNIT + _ANG)),
+    ("ends", "fillet", re.compile(r"\br\s?" + _NUM + _UNIT + r"\s*(?:radius\s*)?" + _ENDS)),
+    ("ends", "fillet", re.compile(_NUM + _UNIT + r"\s*(?:radius|radii|fillets?|rounds?)\s*" + _ENDS)),
+    ("ends", "chamfer", re.compile(_NUM + _UNIT + _ANG + r"\s*chamfers?\s*" + _ENDS)),
+    ("ends", "fillet", re.compile(r"\b(?:fillet(?:ed|s)?|rounded|radius(?:ed)?)\s+" + _ENDS
+                                  + r"\s*(?:by\s+|at\s+|to\s+|of\s+|with\s+)?(?:r\s?)?" + _NUM + _UNIT)),
+    ("ends", "chamfer", re.compile(r"\bchamfer(?:ed|s)?\s+" + _ENDS + r"\s*(?:by\s+|at\s+|to\s+|of\s+|with\s+)?"
+                                   + _NUM + _UNIT + _ANG)),
+    ("ends", "fillet", re.compile(r"\b(?:both|each)\s+ends?\s+(?:filleted|rounded|radiused)\s*(?:by\s+|at\s+|to\s+)?"
+                                  r"(?:r\s?)?" + _NUM + _UNIT)),
+    ("ends", "chamfer", re.compile(r"\b(?:both|each)\s+ends?\s+chamfered\s*(?:by\s+|at\s+|to\s+)?" + _NUM + _UNIT + _ANG)),
+]
+_TREAT_WORD = re.compile(r"\b(?:fillets?|filleted|chamfers?|chamfered|rounded|radiused)\b|\br\s?\d")
+_SPANDREL = 1 - math.pi / 4                      # x r^2: the cross-section a fillet removes from an edge
+_XBAR = (10 - 3 * math.pi) / (12 - 3 * math.pi)  # x r: how far inside the edge that section's centroid is
+
+
+def _treatment(it: Interpretation, low: str, where: str) -> dict[str, Any] | None:
+    """The one fillet / chamfer the request names. {} when there is none, None when it cannot be used
+    (recorded on `it`), else {"kind", "size", "span"}. `where`: "corners" (block) or "ends" (round)."""
+    found = sorted(((m.start(), m.end(), edges, kind, m) for edges, kind, rx in _TREATMENTS
+                    for m in rx.finditer(low)), key=lambda f: (f[0], -(f[1] - f[0])))
+    kept: list = []
+    for f in found:                                   # one phrase can match two patterns: keep the longest
+        if not kept or f[0] >= kept[-1][1]:
+            kept.append(f)
+    if not kept:
+        if _TREAT_WORD.search(low):
+            it.missing.append("the fillet / chamfer's size and edges, e.g. 'R5 corners' or '3 mm chamfer on the "
+                              "corners' (block), '1 mm chamfer on both ends' (round part)")
+            return None
+        return {}
+    if len(kept) > 1:
+        it.ambiguities.append("more than one fillet / chamfer named: one per request is supported")
+        return None
+    start, end, edges, kind, m = kept[0]
+    if edges != where:
+        it.ambiguities.append("a round part has no corners: say '... on both ends'" if where == "ends"
+                              else "a block's ends are not one edge each: say '... on the corners'")
+        return None
+    ang = m.group(3) if m.re.groups >= 3 else None
+    if ang is not None and abs(float(ang) - 45) > 1e-9:
+        it.ambiguities.append(f"a {float(ang):g} deg chamfer: only 45 deg (equal legs) is supported")
+        return None
+    unit = _norm_unit(m.group(2))
+    if unit is None:
+        given = {_norm_unit(u.group(2)) for u in re.finditer(_NUM + _UNIT, low) if u.group(2)}
+        if len(given) == 1:
+            unit = next(iter(given))
+            it.facts.append(Fact(f"{kind}_unit", unit, None, "USER_SPECIFIED",
+                                 "the only unit written in the request applies to the bare number"))
+    size = _to_mm(m.group(1), unit, f"{kind}_{'radius' if kind == 'fillet' else 'leg'}", it, m.group(0))
+    if size is None:
+        return None
+    if size <= 0:
+        it.ambiguities.append(f"a {kind} of {size:g} mm makes no edge")
+        return None
+    it.facts.append(Fact(f"{kind}_edges", "the 4 corners of the W x H outline (the edges along the depth)"
+                         if edges == "corners" else "the outer edge at both ends", None, "USER_SPECIFIED",
+                         m.group(0)))
+    return {"kind": kind, "size": size, "span": (start, end)}
+
+
+def _blank(text: str, span: tuple[int, int]) -> str:
+    a, b = span
+    return text[:a] + " " * (b - a) + text[b:]
+
+
+def _edge_feature(kind: str, size: float, select: str) -> dict[str, Any]:
+    return {"$op": f"feature.{kind}", "id": select,
+            "args": {("radius" if kind == "fillet" else "distance"): size, "select": select}}
+
+
+def _end_removed(kind: str, s: float, radii: tuple[float, float]) -> float:
+    """Material a 45 deg chamfer (leg s) or a fillet (radius s) takes off the outer end edges (Pappus)."""
+    if kind == "chamfer":
+        return sum(math.pi * s * s * (R - s / 3) for R in radii)
+    return sum(2 * math.pi * (R - _XBAR * s) * _SPANDREL * s * s for R in radii)
+
+
+def _clear_of(it: Interpretation, holes: dict, cuts: dict, inside) -> bool:
+    """Every hole and pocket must stay out of the treated zone: `inside(x0, y0, x1, y1)` says whether
+    a box reaches into it. Overlap would make the removed volumes count twice; it is refused."""
+    if holes.get("count"):
+        dh = holes["features"][0]["args"]["diameter"]
+        for x, y in it.fact("hole_centres_mm") or []:
+            if inside(x - dh / 2, y - dh / 2, x + dh / 2, y + dh / 2):
+                it.ambiguities.append(f"the {dh:g} mm hole at ({x:g}, {y:g}) reaches into the fillet / chamfer")
+                return False
+    for f in cuts.get("features") or []:
+        if f["$op"] == "sketch.rectangle":
+            a = f["args"]
+            if inside(a["x"], a["y"], a["x"] + a["width"], a["y"] + a["height"]):
+                it.ambiguities.append("the pocket / slot reaches into the fillet / chamfer")
+                return False
+    return True

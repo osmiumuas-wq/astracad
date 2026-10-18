@@ -412,7 +412,9 @@ pre.code { margin: 0; white-space: pre-wrap; word-break: break-word; font-family
 .pv-solid { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .pv-hole { fill: var(--surface); stroke: var(--accent); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
 .pv-axis { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 10 3 2 3; vector-effect: non-scaling-stroke; }
-.pv-dim { fill: var(--ink-2); font-family: var(--mono); } .pv-dim.tag { fill: var(--accent); font-weight: 600; }
+.pv-edge { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.pv-pocket { fill: var(--surface-2); stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
+.pv-dim { fill: var(--ink-2); font-family: var(--mono); } .pv-dim.pv-tag { fill: var(--accent); font-weight: 600; }
 .mk-spec { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .mk-spec summary { padding: 10px 14px; cursor: pointer; font-size: 13px; color: var(--ink-2); }
 .mk-spec pre { margin: 0; padding: 12px 14px; border-top: 1px solid var(--line); max-height: 320px; overflow: auto; font-size: 12px; background: var(--surface-2); }
@@ -1546,37 +1548,81 @@ const g6 = v => typeof v === "number" ? String(+v.toPrecision(10)) : Array.isArr
 // the spec itself (the same JSON that is sent to the CAD runtime), never from the request text.
 function partPreview(spec) {
   const F = spec?.features || [], by = op => F.filter(f => f.$op === op);
-  const rect = by("sketch.rectangle")[0], circ = by("sketch.circle")[0], prof = by("sketch.profile")[0];
-  const ext = by("feature.extrude")[0];
+  const rects = by("sketch.rectangle"), circ = by("sketch.circle")[0], prof = by("sketch.profile")[0];
+  const rect = circ ? null : rects[0], ext = by("feature.extrude")[0];
+  // fillet / chamfer on named edges: the outline corners of a block, the outer edge at both ends of a round part
+  const treat = F.find(f => (f.$op === "feature.fillet" || f.$op === "feature.chamfer") && f.args.select);
+  const ts = treat ? (treat.args.radius ?? treat.args.distance) : 0, round = treat?.$op === "feature.fillet";
+  const tLabel = treat ? (round ? `R${g6(ts)}` : `${g6(ts)} × 45°`) : "";
   let holes = by("feature.hole").map(f => ({ x: f.args.center[0], y: f.args.center[1], d: f.args.diameter }));
   for (const p of by("feature.pattern.linear")) {
     const seed = F.find(f => f.id === p.args.feature); if (!seed) continue;
     for (let k = 1; k < p.args.count; k++) holes.push({ x: seed.args.center[0] + (p.args.direction === "X" ? k * p.args.spacing : 0), y: seed.args.center[1] + (p.args.direction === "Y" ? k * p.args.spacing : 0), d: seed.args.diameter });
   }
+  for (const p of by("feature.pattern.circular")) {
+    // count instances spread equally over the full turn about the pattern centre
+    const seed = F.find(f => f.id === p.args.feature); if (!seed) continue;
+    const [cx, cy] = p.args.center || [0, 0], sx = seed.args.center[0] - cx, sy = seed.args.center[1] - cy;
+    for (let k = 1; k < p.args.count; k++) {
+      const a = 2 * Math.PI * k / p.args.count;
+      holes.push({ x: cx + sx * Math.cos(a) - sy * Math.sin(a), y: cy + sx * Math.sin(a) + sy * Math.cos(a), d: seed.args.diameter });
+    }
+  }
+  const pockets = rects.filter(r => r !== rect).map(r => {
+    const cut = F[F.indexOf(r) + 1];
+    return cut?.$op === "feature.cut" ? { ...r.args, through: !!cut.args.through_all || (ext && cut.args.depth >= ext.args.depth) } : null;
+  }).filter(Boolean);
   let x0, y0, x1, y1; const kids = [], labels = [];
   if (prof) {
     const pts = prof.args.points, xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
     x0 = Math.min(...xs); x1 = Math.max(...xs); y1 = Math.max(...ys); y0 = -y1;
-    const ring = pts.map(p => p.join(",")).join(" "), mirror = pts.map(p => p[0] + "," + (-p[1])).join(" ");
+    let drawn = pts;
+    if (treat) {
+      // replace the outer corner at each end by the chamfer's two points or the fillet's arc
+      const outer = x => pts.reduce((b, p, i) => Math.abs(p[0] - x) < 1e-9 && (b < 0 || p[1] > pts[b][1]) ? i : b, -1);
+      const ends = new Set([outer(x0), outer(x1)]);
+      drawn = pts.flatMap((P, i) => {
+        if (!ends.has(i)) return [P];
+        const A = pts[(i - 1 + pts.length) % pts.length], B = pts[(i + 1) % pts.length];
+        const u = Q => { const dx = Q[0] - P[0], dy = Q[1] - P[1], l = Math.hypot(dx, dy); return [dx / l, dy / l]; };
+        const ua = u(A), ub = u(B);
+        if (!round) return [[P[0] + ts * ua[0], P[1] + ts * ua[1]], [P[0] + ts * ub[0], P[1] + ts * ub[1]]];
+        const c = [P[0] + ts * (ua[0] + ub[0]), P[1] + ts * (ua[1] + ub[1])];
+        return Array.from({ length: 13 }, (_, k) => { const t = Math.PI / 2 * k / 12;
+          return [c[0] - ts * (ub[0] * Math.cos(t) + ua[0] * Math.sin(t)), c[1] - ts * (ub[1] * Math.cos(t) + ua[1] * Math.sin(t))]; });
+      });
+      labels.push({ x: x1, y: y0, t: `${tLabel} both ends`, below: true, tag: true, anchor: "end" });
+    }
+    const ring = drawn.map(p => p.join(",")).join(" "), mirror = drawn.map(p => p[0] + "," + (-p[1])).join(" ");
     kids.push(s("polygon", { points: ring, class: "pv-solid" }), s("polygon", { points: mirror, class: "pv-solid" }));
     kids.push(s("line", { x1: x0 - (x1 - x0) * .06, y1: 0, x2: x1 + (x1 - x0) * .06, y2: 0, class: "pv-axis" }));
-    // one Ø label per step (the outer edge segments parallel to the axis)
+    // one Ø label per step, from the profile as stated (the treated corners do not shorten a step)
     for (let i = 0; i < pts.length; i++) {
       const a = pts[i], b = pts[(i + 1) % pts.length];
       if (a[1] > 0 && Math.abs(a[1] - b[1]) < 1e-9 && Math.abs(a[0] - b[0]) > 1e-9) labels.push({ x: (a[0] + b[0]) / 2, y: a[1], t: `Ø${g6(2 * a[1])} × ${g6(Math.abs(a[0] - b[0]))}`, above: true });
     }
   } else if (rect || circ) {
-    if (rect) { x0 = 0; y0 = 0; x1 = rect.args.width; y1 = rect.args.height; kids.push(s("rect", { x: 0, y: 0, width: x1, height: y1, class: "pv-solid" })); }
-    else { const r = circ.args.radius; x0 = -r; y0 = -r; x1 = r; y1 = r; kids.push(s("circle", { cx: 0, cy: 0, r, class: "pv-solid" }), s("line", { x1: -r * 1.08, y1: 0, x2: r * 1.08, y2: 0, class: "pv-axis" }), s("line", { x1: 0, y1: -r * 1.08, x2: 0, y2: r * 1.08, class: "pv-axis" })); }
+    if (rect) {
+      x0 = 0; y0 = 0; x1 = rect.args.width; y1 = rect.args.height;
+      if (treat && !round) kids.push(s("polygon", { points: [[ts, 0], [x1 - ts, 0], [x1, ts], [x1, y1 - ts], [x1 - ts, y1], [ts, y1], [0, y1 - ts], [0, ts]].map(p => p.join(",")).join(" "), class: "pv-solid" }));
+      else kids.push(s("rect", { x: 0, y: 0, width: x1, height: y1, rx: round ? ts : 0, class: "pv-solid" }));
+      if (treat) labels.push({ x: x1, y: y1, t: `4× ${tLabel}`, above: true, tag: true, anchor: "end" });
+    } else {
+      const r = circ.args.radius; x0 = -r; y0 = -r; x1 = r; y1 = r;
+      kids.push(s("circle", { cx: 0, cy: 0, r, class: "pv-solid" }), s("line", { x1: -r * 1.08, y1: 0, x2: r * 1.08, y2: 0, class: "pv-axis" }), s("line", { x1: 0, y1: -r * 1.08, x2: 0, y2: r * 1.08, class: "pv-axis" }));
+      if (treat) { kids.push(s("circle", { cx: 0, cy: 0, r: r - ts, class: "pv-edge" })); labels.push({ x: x1, y: y1, t: `${tLabel} both ends`, above: true, tag: true, anchor: "end" }); }
+    }
+    for (const p of pockets) kids.push(s("rect", { x: p.x, y: p.y, width: p.width, height: p.height, class: p.through ? "pv-hole" : "pv-pocket" }));
     for (const c of holes) kids.push(s("circle", { cx: c.x, cy: c.y, r: c.d / 2, class: "pv-hole" }));
     if (rect) labels.push({ x: x1 / 2, y: y0, t: g6(x1), below: true }, { x: x1, y: y1 / 2, t: g6(y1), side: true });
     else labels.push({ x: 0, y: y0, t: "Ø" + g6(2 * circ.args.radius), below: true });
     if (holes.length) labels.push({ x: holes[0].x, y: holes[0].y + holes[0].d / 2, t: `${holes.length > 1 ? holes.length + "× " : ""}Ø${g6(holes[0].d)}`, above: true, tag: true });
+    for (const p of pockets) labels.push({ x: p.x + p.width / 2, y: p.y + p.height / 2, t: `${g6(p.width)} × ${g6(p.height)}${p.through ? " thru" : ""}`, tag: true });
   } else return null;
   const span = Math.max(x1 - x0, y1 - y0), m = span * .16, fs = span * .052;
   const vb = [x0 - m, -(y1 + m), (x1 - x0) + 2 * m, (y1 - y0) + 2 * m];
   const g = s("g", { transform: "scale(1,-1)" }, ...kids);
-  const txt = labels.map(l => s("text", { x: l.side ? l.x + fs * .5 : l.x, y: -(l.below ? l.y - fs * 1.4 : l.above ? l.y + fs * .55 : l.y), "font-size": fs, class: "pv-dim" + (l.tag ? " tag" : ""), "text-anchor": l.side ? "start" : "middle", "dominant-baseline": "middle" }, l.t));
+  const txt = labels.map(l => s("text", { x: l.side ? l.x + fs * .5 : l.x, y: -(l.below ? l.y - fs * 1.4 : l.above ? l.y + fs * .55 : l.y), "font-size": fs, class: "pv-dim" + (l.tag ? " pv-tag" : ""), "text-anchor": l.side ? "start" : l.anchor || "middle", "dominant-baseline": "middle" }, l.t));
   const depth = ext ? `extruded ${g6(ext.args.depth)} mm` : prof ? "revolved 360° about the axis" : "";
   return h("figure", { class: "pv" }, s("svg", { viewBox: vb.join(" "), role: "img", "aria-label": "part preview" }, g, ...txt),
     h("figcaption", {}, prof ? "Section through the axis" : "Front view", depth ? " · " + depth : "", " · mm"));

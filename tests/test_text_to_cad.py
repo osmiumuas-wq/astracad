@@ -206,3 +206,83 @@ def test_number_between_diameter_and_length_words_goes_to_the_right_one():
     assert dl("SolidWorks disc thick 12 mm diameter 100 mm") == (True, 100.0, 12.0)
     it = interpret("SolidWorks shaft diameter 100 mm long")          # one number, two words
     assert not it.executable and "length with a unit" in it.missing
+
+
+# ---- fillets and chamfers on edges named by what they are ----------------------------------------
+# Volumes below were measured by SOLIDWORKS 2026 SP04.1 on 2026-10-18 (mac run, select = corners /
+# end_circles); the interpreter must predict them, since the kernel is checked against the prediction.
+@pytest.mark.parametrize("request_text, kernel_mm3, select", [
+    ("SolidWorks shaft dia 20 mm length 50 mm with 1 mm chamfer on both ends", 15647.225810, "end_circles"),
+    ("SolidWorks shaft dia 20 mm length 50 mm with both ends filleted R1 mm", 15681.597977, "end_circles"),
+    ("SolidWorks stepped shaft dia 25 x 40, dia 35 x 20 mm, 1.5 mm chamfer on both ends", 38672.220168, "end_circles"),
+    ("SolidWorks stepped shaft dia 25 x 40, dia 35 x 20 mm, both ends rounded R2", 38720.222084, "end_circles"),
+    ("SolidWorks 60 x 40 x 20 mm block with R5 corners", 47570.796327, "corners"),
+    ("SolidWorks 60 x 40 x 20 mm block with 5 mm chamfer on the corners", 47000.0, "corners"),
+])
+def test_edge_treatment_predicts_the_kernel_volume(request_text, kernel_mm3, select):
+    it = interpret(request_text)
+    assert it.executable, (it.missing, it.ambiguities)
+    assert it.expect["volume_mm3"] == pytest.approx(kernel_mm3, abs=1e-5)
+    treat = it.spec["features"][2]                    # straight after the body, before any cut
+    assert treat["$op"] in ("feature.fillet", "feature.chamfer") and treat["args"]["select"] == select
+
+
+def test_corner_round_comes_before_the_holes_and_keeps_out_of_their_way():
+    it = interpret("SolidWorks 100 x 60 x 10 mm plate with R5 corners and 4 x 6 mm holes at 20 mm pitch "
+                   "along the width, centred")
+    assert it.executable
+    assert [f["$op"] for f in it.spec["features"]][:3] == ["sketch.rectangle", "feature.extrude", "feature.fillet"]
+    assert it.expect["volume_mm3"] == pytest.approx(
+        60000 - 4 * 25 * (1 - math.pi / 4) * 10 - 4 * math.pi * 9 * 10)
+    near = interpret("SolidWorks 100 x 20 x 10 mm plate with R9 corners and 4 x 4 mm holes at 30 mm pitch "
+                     "along the width, centred")
+    assert not near.executable and "reaches into the fillet" in near.ambiguities[0]
+
+
+def test_bolt_holes_must_clear_the_end_chamfer():
+    ok = interpret("SolidWorks flange disc diameter 120 mm thick 12 mm with 6 x 10 mm holes on a 90 mm PCD "
+                   "and 1 mm chamfer on both ends")
+    assert ok.executable
+    assert [f["$op"] for f in ok.spec["features"]][2] == "feature.chamfer"
+    assert ok.expect["volume_mm3"] == pytest.approx(
+        math.pi * 3600 * 12 - 6 * math.pi * 25 * 12 - 2 * math.pi * 1 * (60 - 1 / 3))
+    bad = interpret("SolidWorks flange disc diameter 120 mm thick 12 mm with 6 x 10 mm holes on a 108 mm PCD "
+                    "and 2 mm chamfer on both ends")
+    assert not bad.executable and "reaches into the fillet / chamfer" in bad.ambiguities[0]
+
+
+@pytest.mark.parametrize("request_text, why", [
+    ("SolidWorks 100 x 60 x 10 mm plate with R30 corners", "less than half the shorter side"),
+    ("SolidWorks 100 x 60 x 10 mm plate with 3 mm x 30° chamfer on the corners", "only 45 deg"),
+    ("SolidWorks shaft dia 20 mm length 50 mm with R1 corners", "a round part has no corners"),
+    ("SolidWorks 100 x 60 x 10 mm plate with 1 mm chamfer on both ends", "say '... on the corners'"),
+    ("SolidWorks 100 x 60 x 10 mm plate with R5 corners and 3 mm chamfer on the corners", "one per request"),
+    ("SolidWorks shaft dia 20 mm length 50 mm with 12 mm chamfer on both ends", "less than the radius"),
+    ("SolidWorks stepped shaft dia 25 x 4, dia 35 x 20 mm, 5 mm chamfer on both ends", "stay on the end step"),
+])
+def test_edge_treatments_that_would_be_guesses_are_refused(request_text, why):
+    it = interpret(request_text)
+    assert not it.executable and why in " ".join(it.ambiguities)
+
+
+def test_edge_treatment_words_without_a_usable_phrase_are_missing_information():
+    it = interpret("SolidWorks 100 x 60 x 10 mm plate with chamfered corners")
+    assert not it.executable and "size and edges" in it.missing[0]
+    tube = interpret("SolidWorks tube OD 40 mm wall thickness 3 mm length 120 mm with 1 mm chamfer on both ends")
+    assert not tube.executable and any("not supported yet" in m for m in tube.missing)
+
+
+def test_a_bare_corner_radius_takes_the_only_unit_written():
+    it = interpret("SolidWorks 4 x 2 x 0.5 in plate with R0.25 corners")
+    assert it.executable and it.fact("fillet_unit") == "in"
+    assert it.spec["features"][2]["args"]["radius"] == pytest.approx(6.35)
+    mixed = interpret("SolidWorks 100 x 60 x 10 mm plate with a 0.25 in hole at the centre and R5 corners")
+    assert not mixed.executable and any("unit for fillet_radius" in m for m in mixed.missing)
+
+
+def test_export_step_does_not_make_a_shaft_stepped():
+    it = interpret("SolidWorks shaft dia 20 mm length 50 mm with 1 mm chamfer on both ends, export STEP")
+    assert it.executable and [f["$op"] for f in it.spec["features"]][:2] == ["sketch.circle", "feature.extrude"]
+    assert it.exports == ["step"]
+    stepped = interpret("SolidWorks stepped shaft dia 20 mm x 50 mm, export STEP")      # one step only
+    assert not stepped.executable and "at least two steps" in stepped.missing[0]

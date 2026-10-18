@@ -19,18 +19,18 @@ Every number below was produced by a command run on 2026-10-17. Detail: `docs/ar
 | `astracad_mfg.machining` | 12 machining calculations with equation, units, assumptions and warnings; no built-in material data; Machining page in the workspace; escalated roughness values link to "max turning feed for this Ra" | Tested (11) + used live |
 | `astracad_mfg` | Explainable machining cost: geometry from CAD evidence (kernel volume + STEP re-read bbox, both hashed), every rate sourced and dated, nothing defaulted, 13 traced lines, JSON+XLSX re-read | Tested against a hand calculation (12 tests); example rate book is placeholders only |
 | `astracad_tol` | Worst-case / RSS / Monte Carlo stacks with explicit distributions, ISO 286 fits, selective assembly (plan + measured matching) | Tested against closed-form references |
-| `mecagent-alternative/` (C#, sibling tree) | `mac` runtime: live SOLIDWORKS COM automation; revolve (`sketch.profile` + `feature.revolve`), linear & circular pattern (`feature.pattern.circular`), rectangular cuts/pockets (`sketch.rectangle` + `feature.cut`), **title block & general tolerance note in `mac drawing`** (unstated revision / tolerance printed as NOT STATED / omitted, never defaulted) | Executed on SW 2026 SP04.1; `mac selftest` 43/43 |
+| `mecagent-alternative/` (C#, sibling tree) | `mac` runtime: live SOLIDWORKS COM automation; revolve (`sketch.profile` + `feature.revolve`), linear & circular pattern (`feature.pattern.circular`), rectangular cuts/pockets (`sketch.rectangle` + `feature.cut`), **title block & general tolerance note in `mac drawing`** (unstated revision / tolerance printed as NOT STATED / omitted, never defaulted), **fillets / chamfers on edges found by geometry** (`select`: corners / end_circles), a minimized SOLIDWORKS window restored for drawings | Executed on SW 2026 SP04.1; `mac selftest` 46/46 |
 
 ## Test baseline
 
 | Where | Command | Result |
 |---|---|---|
-| Windows PC (Python 3.14.7) | `py -m pytest -q` | **544 passed**, 0 failed, 0 skipped (2026-10-18: after the second verification pass; pass `--basetemp` outside the repo if `.pytest_tmp` cannot be removed) |
+| Windows PC (Python 3.14.7) | `py -m pytest -q` | **562 passed**, 0 failed, 0 skipped (2026-10-18: after fillets / chamfers on named edges; pass `--basetemp` outside the repo if `.pytest_tmp` cannot be removed) |
 | Windows | `py tools/benchmark_layout.py` | 22 real SOLIDWORKS sheets, 175 balloons: **0 crossing leaders, 0 balloons on drawing ink, 0 unplaced**, mean leader 0.20 balloon diameters (before: 8 / 12 / 5 / 8.39) |
 | Windows | `py tools/regression.py` | 3 labelled synthetic fixtures (incl. GD&T): 20/20 characteristics, 0 wrong fields, 0 invented, 57/57 export checks |
 | Windows | `py -m astracad_inspect run tests\fixtures\bracket_gdt_synthetic.dxf` | 5 frame rows (position ⌀0.05 MMC A\|B\|C, 2-row ⊥/∥, flatness, profile) + 3 dims; malformed frame escalated; frames drawn in the layout; 19/19 exports |
 | Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic_scan300.png --units mm` | 3 of 9 callouts accepted (all correct: 100 ±0.1, ⌀20 H7, 45°), 7 escalated with both engines' readings, **0 wrong values**; ~25 s/page |
-| Windows | `mac selftest` | 43/43 (unstated revision prints NOT STATED; Pappus revolve vs closed-form cylinder, linear & circular patterns = seed × count, rectangular pocket volume and area derived analytically, drawing title block & general tolerance note formatters, profile refusals, non-finite kernel values written as null) |
+| Windows | `mac selftest` | 46/46 (end-edge fillet closed form = numeric integration, end chamfer Pappus, edge selector names checked; unstated revision prints NOT STATED; Pappus revolve vs closed-form cylinder, linear & circular patterns = seed × count, rectangular pocket volume and area derived analytically, drawing title block & general tolerance note formatters, profile refusals, non-finite kernel values written as null) |
 | Cloud workspace (Python 3.13) | `python3 -m pytest -q` | 224 passed, 29 skipped (ISO-table rebuild sources only on the PC) |
 | Windows | `py -m astracad_inspect selftest` | 34/34 |
 | Windows | `py -m astracad_inspect run tests\fixtures\plate_synthetic.dxf` | 19/19 export reopen checks, exit 3 (delivered, correctly NOT releasable) |
@@ -66,6 +66,21 @@ unstated place counts are refused with the reason. Blank template lines ("TWO PL
 | 60 x 40 x 20 mm block | SUCCEEDED | V = 48000.000000 mm³ | size 60×40×20, V = 48000.000000 (polyhedral) |
 | shaft Ø25 x 100 mm | SUCCEEDED | V = 49087.385212 mm³ | size 25×25×100 exact; volume not_verifiable (curved) |
 | block + Ø10 centred hole | SUCCEEDED | V = 46429.288889 (mac's own ~2 ppm through-all allowance) | size ok; volume not_verifiable |
+
+**Fillets and chamfers on named edges** (2026-10-18, `build ... --authorize KM` into `_out\text2cad_edges`; `mac` runs of
+the bare specs in `_out\fillet_probe_20261018`):
+
+| Request (abridged) | Task | Kernel volume = prediction | Independent STEP re-read |
+|---|---|---|---|
+| plate 100x60x10, R5 corners, 4 x Ø6 at 20 pitch centred | SUCCEEDED | 58654.424808 | 10×60×100 exact |
+| shaft Ø20 x 50, 1 mm chamfer on both ends | SUCCEEDED | 15647.225810 (Pappus) | 20×20×50 exact |
+| stepped shaft Ø25 x 40 + Ø35 x 20, both ends R2 | SUCCEEDED | 38720.222084 (Pappus, ends R 12.5 / 17.5) | 35×35×60 exact |
+| flange Ø120 x 12, 6 x Ø10 on 90 PCD, 1 mm chamfer both ends | SUCCEEDED | 129687.039135 | 12×120×120 exact |
+| block 60x40x20, 5 mm chamfered corners, 20 x 10 x 5 pocket centred | SUCCEEDED | 46000.000000 | 20×40×60; V 46000 (polyhedral) |
+
+`mac` alone: cylinder chamfer / fillet, stepped shaft chamfer / fillet (unequal ends), tube outer-edge chamfer (bore
+left alone) - volume and area equal to the closed forms within 1e-11; the fillet's closed form is also checked against
+a numeric integration in `mac selftest` (46/46).
 
 **Text → CAD** (2026-10-17, `astracad_cad build "<request>" --out _out\text2cad --authorize KM`, and once from the
 workspace "Text to CAD" page, task T-6cbfcf81a9ec):

@@ -263,16 +263,20 @@ covered by a check that now fails if it regresses.
 
 - Shapes: block / plate, cylinder / disc / flange, stepped shaft, tube / washer / spacer, through holes
   (one, a straight row, a bolt circle), and rectangular pockets and slots (pocket, recess, slot, groove, channel)
-  in the front face. No fillets, chamfers, threads, blind holes, counterbores or features on other faces;
-  such words are not read and the request still builds without them only if nothing in it is missing -
-  check the facts table, which lists what was read.
+  in the front face, and one fillet or 45 deg chamfer per request on the 4 outline corners of a block or the
+  outer edge at both ends of a round part (cylinder / disc / stepped shaft). No threads, blind holes,
+  counterbores, features on other faces, other edges (e.g. "all edges", "one end", a tube's bore) or other
+  chamfer angles: a fillet / chamfer word that is not a supported phrase is reported missing, never dropped.
+- Fillets / chamfers: holes and pockets must stay clear of the treated corner squares (s x s) or end rims
+  (radius R - s); the check is conservative (a hole's bounding box), so a hole that would just clear the
+  curved edge can still be refused. A bare "R5" takes the request's unit only when it has exactly one.
 - Rectangular pockets and slots: dimensions (W x H or length/width) and depth (or through) are required.
   Position must be explicit or 'centred' (unstated position is recorded as AI_PROPOSED and reported as an ambiguity).
   For slots with unequal length and width, orientation must be stated ('along the width' or 'along the height').
   Edge breakout and depth exceeding part thickness are strictly refused.
 - Patterns are interpreted from fixed phrasings ("4 x 6 mm holes at 20 mm pitch along the width,
   centred", "6 x 10 mm holes on a 90 mm PCD starting at 30 deg"). Anything else is reported missing.
-- Bolt circles are built using circular patterns in mac (eature.pattern.circular) from a seed
+- Bolt circles are built using circular patterns in mac (`feature.pattern.circular`) from a seed
   hole around the rotation axis, so driving dimensions control the pattern count and seed hole.
 - On a round part the start angle of a bolt circle is AI_PROPOSED (0°) without blocking the build, because
   it does not change size or volume; it does change where the holes are. Say "starting at A deg" if it matters.
