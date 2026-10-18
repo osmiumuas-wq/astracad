@@ -38,15 +38,16 @@ way through (plates, brackets cut from plate, flanges, gaskets, spacers with hol
 3. **Feature recognition on rebuilt parts** (`--features`, or standalone `recognize_features(it)`):
 Circular inner loops from the 2D section are lifted into parametric CAD features instead of bare sketch cutout loops:
 - Circular loops are identified by exact arc-sweep closure and uniform radius.
-- Standalone circular cutouts become `feature.hole` with exact diameter, depth (equal to part thickness), and center coordinates.
+- Standalone through cutouts become `feature.hole` with exact diameter, depth (equal to part thickness), and center coordinates.
+- Blind holes: when aligned views show partial-depth hidden lines touching a boundary face at coordinates matching an inner circular loop, the loop is kept out of `sketch.loops` and emitted as `feature.hole` with explicit depth $d < T$ (and patterned with matching-depth holes). Without `--features`, blind features continue to be refused to prevent through-extrusion errors.
 - Rows of collinear, equal-pitch identical holes are decomposed into a seed `feature.hole` and a `feature.pattern.linear`.
 - Concentric pitch-circle hole clusters are decomposed into a seed `feature.hole` and a `feature.pattern.circular` (axis: Z, center, count).
 - Non-circular cutouts (e.g. rectangular cutouts, slots) remain preserved in `sketch.loops` inner loops.
 - Reconstructed part volume and outer bounds are analytically invariant to feature recognition.
 
-Refused, with the reason: steps, bosses, blind holes or pockets, splines and ellipses,
+Refused, with the reason: steps, bosses, splines and ellipses,
 unaligned views, a view without a scale, contradicting dimensions, more than one thickness or scale stated,
-turned views lacking proof of roundness, or asymmetric profiles across the axis.
+turned views lacking proof of roundness, asymmetric profiles across the axis, or blind holes without `--features`.
 
 ## Evidence
 

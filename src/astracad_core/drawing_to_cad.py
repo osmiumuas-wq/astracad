@@ -833,6 +833,7 @@ def reconstruct(path: str | Path, *, through: bool = False, scale: float | None 
             reasons.append("two openings overlap")
             continue
         depths, through_seen, used_views, why = [], {id(lp): 0 for lp in inner}, [], None
+        blind_seen: dict[int, list[float]] = {id(lp): [] for lp in inner}
         xs = sorted({round(c, 9) for e, _ in outer for c in (e.bbox()[0], e.bbox()[2])} |
                     {round(c, 9) for lp in inner for c in (_loop_bbox(lp)[0], _loop_bbox(lp)[2])})
         ys = sorted({round(c, 9) for e, _ in outer for c in (e.bbox()[1], e.bbox()[3])} |
@@ -863,13 +864,35 @@ def reconstruct(path: str | Path, *, through: bool = False, scale: float | None 
                 x1, y1, x2, y2 = e.v
                 at, a, b = (x1, min(y1, y2), max(y1, y2)) if vert else (y1, min(x1, x2), max(x1, x2))
                 along = abs(x1 - x2) <= tol if vert else abs(y1 - y2) <= tol
-                if not along or abs(a - lo) > tol * 10 or abs(b - hi) > tol * 10:
-                    why = ("a line in an aligned view does not run the full depth (a step or a blind feature) - "
-                           "not one constant extrusion")
+                if not along:
+                    why = "a line across an aligned view is not along the depth direction: not one constant extrusion"
                     break
-                if not any(abs(at - c) <= tol * 10 for c in explained):
-                    why = "a line across an aligned view matches nothing in the outline view"
-                    break
+                is_full = abs(a - lo) <= tol * 10 and abs(b - hi) <= tol * 10
+                if not is_full:
+                    if not features or e.style != "hidden":
+                        why = ("a line in an aligned view does not run the full depth (a step or a blind feature) - "
+                               "not one constant extrusion")
+                        break
+                    touches_face = abs(b - hi) <= tol * 10 or abs(a - lo) <= tol * 10
+                    if not touches_face:
+                        why = "a hidden line in an aligned view does not touch an outer face: void not supported"
+                        break
+                    matching = []
+                    for lp in inner:
+                        bx = _loop_bbox(lp)
+                        c0, c1 = (bx[0], bx[2]) if vert else (bx[1], bx[3])
+                        if abs(at - c0) <= tol * 10 or abs(at - c1) <= tol * 10:
+                            matching.append(lp)
+                    if not matching:
+                        why = "a line across an aligned view matches nothing in the outline view"
+                        break
+                    h_depth = (b - a) * V.k
+                    for mlp in matching:
+                        blind_seen[id(mlp)].append(h_depth)
+                else:
+                    if not any(abs(at - c) <= tol * 10 for c in explained):
+                        why = "a line across an aligned view matches nothing in the outline view"
+                        break
             if why:
                 break
             depths.append((V.h if vert else V.w) * V.k)
@@ -877,7 +900,15 @@ def reconstruct(path: str | Path, *, through: bool = False, scale: float | None 
             for lp in inner:                                   # hidden lines through the whole depth at its edges
                 bx = _loop_bbox(lp)
                 c0, c1 = (bx[0], bx[2]) if vert else (bx[1], bx[3])
-                if _span(V, axis, c0, tol * 10) and _span(V, axis, c1, tol * 10):
+                sp0 = _span(V, axis, c0, tol * 10)
+                sp1 = _span(V, axis, c1, tol * 10)
+                def _full_span(sp):
+                    for se in sp:
+                        sa, sb = (min(se.v[1], se.v[3]), max(se.v[1], se.v[3])) if vert else (min(se.v[0], se.v[2]), max(se.v[0], se.v[2]))
+                        if abs(sa - lo) <= tol * 10 and abs(sb - hi) <= tol * 10:
+                            return True
+                    return False
+                if _full_span(sp0) and _full_span(sp1):
                     through_seen[id(lp)] += 1
         if why:
             reasons.append(why)
@@ -903,7 +934,7 @@ def reconstruct(path: str | Path, *, through: bool = False, scale: float | None 
         if max(depths) - min(depths) > 1e-6 * max(depths):
             reasons.append(f"the aligned views disagree on the thickness ({', '.join(f'{d:g}' for d in depths)})")
             continue
-        solutions.append((P, outer, inner, depths[0], through_seen, used_views))
+        solutions.append((P, outer, inner, depths[0], through_seen, blind_seen, used_views))
 
     if not solutions:
         res = _reconstruct_turned(views, doc, it, dims, to_mm, scale, through, given_depth, path, reasons)
@@ -912,9 +943,24 @@ def reconstruct(path: str | Path, *, through: bool = False, scale: float | None 
         it.ambiguities.append("not rebuilt: " + ("; ".join(dict.fromkeys(reasons)) if reasons else
                                                 "no view closes into an outline"))
         return it
-    P, outer, inner, depth_sheet_true, through_seen, used_views = max(solutions, key=lambda s: len(s[2]))
+    P, outer, inner, depth_sheet_true, through_seen, blind_seen, used_views = max(solutions, key=lambda s: len(s[2]))
     any_hidden = any(e.style == "hidden" for v in views for e in v.edges)
-    unproven = [lp for lp in inner if through_seen[id(lp)] == 0]
+    through_inner = []
+    blind_inner = []
+    unproven = []
+    for lp in inner:
+        if through_seen[id(lp)] > 0:
+            through_inner.append(lp)
+        elif id(lp) in blind_seen and blind_seen[id(lp)]:
+            d_list = blind_seen[id(lp)]
+            d_val = sum(d_list) / len(d_list)
+            if any(abs(d - d_val) > tol * 10 for d in d_list):
+                it.ambiguities.append("aligned views disagree on the depth of a blind opening")
+                return it
+            blind_inner.append((lp, d_val))
+        else:
+            unproven.append(lp)
+
     if unproven:
         if any_hidden:
             it.ambiguities.append(f"{len(unproven)} opening(s) are not shown through the whole thickness in the "
@@ -924,11 +970,15 @@ def reconstruct(path: str | Path, *, through: bool = False, scale: float | None 
             it.ambiguities.append(f"the drawing shows no hidden lines, so whether its {len(unproven)} opening(s) go "
                                   "through is not shown - confirm 'through' to rebuild them as through openings")
             return it
+        through_inner.extend(unproven)
         it.facts.append(Fact("openings_through", True, None, "USER_SPECIFIED",
                              "stated by the user; the drawing has no hidden lines to show it"))
-    elif inner:
+    elif through_inner and not blind_inner:
         it.facts.append(Fact("openings_through", True, None, "CALCULATED",
-                             f"each of {len(inner)} opening(s) has hidden lines through the whole depth in the aligned views"))
+                             f"each of {len(through_inner)} opening(s) has hidden lines through the whole depth in the aligned views"))
+    if blind_inner:
+        it.facts.append(Fact("openings_through", False, None, "CALCULATED",
+                             f"{len(blind_inner)} opening(s) have blind depth shown by hidden lines in the aligned views"))
 
     k = P.k * to_mm
     ox, oy = P.bbox[0], P.bbox[1]
@@ -947,10 +997,12 @@ def reconstruct(path: str | Path, *, through: bool = False, scale: float | None 
                 (s, en), d = ((en, s), -1) if rev else ((s, en), 1)
                 segs.append(["A", *T(e.v[0], e.v[1]), *T(*s), *T(*en), d])
         return segs
-    loops = [emit(outer)] + [emit(lp) for lp in inner]
+    loops = [emit(outer)] + [emit(lp) for lp in through_inner]
     from_views = any(u in ("above/below", "beside") for u in used_views)
     depth = round(depth_sheet_true * to_mm if from_views else depth_sheet_true, 9)
-    net = (abs(_area(outer)) - sum(abs(_area(lp)) for lp in inner)) * k * k
+    base_net = (abs(_area(outer)) - sum(abs(_area(lp)) for lp in through_inner)) * k * k
+    blind_vol = sum(abs(_area(lp)) * k * k * (bd * to_mm if from_views else bd) for lp, bd in blind_inner)
+    net_vol = round(base_net * depth - blind_vol, 6)
     W, H = round(P.w * k, 9), round(P.h * k, 9)
     n_arcs = sum(1 for lp in [outer] + inner for e, _ in lp if e.kind == "A")
     it.facts += [
@@ -962,15 +1014,24 @@ def reconstruct(path: str | Path, *, through: bool = False, scale: float | None 
         Fact("thickness_mm", depth, "mm", "CALCULATED" if from_views else "USER_SPECIFIED",
              f"from {len(used_views)} aligned view(s) ({', '.join(used_views)}), all equal" if from_views
              else f"from {used_views[0]} (no view shows it)"),
-        Fact("volume_mm3", net * depth, "mm^3", "CALCULATED", "net section area (arcs exact) x thickness"),
+        Fact("volume_mm3", net_vol, "mm^3", "CALCULATED", "net section area x thickness less blind hole volumes"),
     ]
-    it.expect = {"size_mm": [W, H, depth], "volume_mm3": net * depth}
+    it.expect = {"size_mm": [W, H, depth], "volume_mm3": net_vol}
     stem = "".join(c if c.isalnum() else "_" for c in path.stem)[:40]
+    notes_dict = {"source_drawing": str(path), "source_sha256": _sha(path)}
+    if blind_inner:
+        b_holes = []
+        for lp, bd in blind_inner:
+            circ = _is_circular_loop_segs(emit(lp))
+            if circ is not None:
+                cx, cy, r = circ
+                b_holes.append({"x": cx, "y": cy, "d": round(2 * r, 9), "depth": round(bd * to_mm if from_views else bd, 9)})
+        notes_dict["blind_holes"] = b_holes
     it.spec = {"name": f"from_{stem}", "units": "mm",
                "features": [{"$op": "sketch.loops", "id": "section", "sketched_on": "front", "args": {"loops": loops}},
                             {"$op": "feature.extrude", "id": "body", "args": {"depth": depth}}],
                "exports": [{"format": "step"}],
-               "notes": {"source_drawing": str(path), "source_sha256": _sha(path)}}
+               "notes": notes_dict}
     if features:
         it = recognize_features(it)
     return it
@@ -1099,7 +1160,7 @@ def _find_circular_patterns(holes: list[dict], depth: float, start_hole_id: int,
 
 
 def recognize_features(it: Interpretation) -> Interpretation:
-    """Recognise circular cutouts in sketch.loops as Hole and Pattern features.
+    """Recognise circular cutouts in sketch.loops (and any blind holes) as Hole and Pattern features.
 
     When a 2D drawing contains circular holes, this pass separates them from the base
     sketch.loops, keeping only the outline (and any non-circular cutouts) in the base
@@ -1114,10 +1175,11 @@ def recognize_features(it: Interpretation) -> Interpretation:
     if loops_idx is None or ext_idx is None:
         return it
     loops = feats[loops_idx]["args"].get("loops", [])
-    if len(loops) <= 1:
+    blind_holes = it.spec.get("notes", {}).get("blind_holes", [])
+    if len(loops) <= 1 and not blind_holes:
         return it
     outer = loops[0]
-    inner = loops[1:]
+    inner = loops[1:] if len(loops) > 1 else []
     depth = feats[ext_idx]["args"]["depth"]
 
     circular_holes = []
@@ -1126,35 +1188,38 @@ def recognize_features(it: Interpretation) -> Interpretation:
         circ = _is_circular_loop_segs(lp)
         if circ is not None:
             cx, cy, r = circ
-            circular_holes.append({"x": round(cx, 9), "y": round(cy, 9), "d": round(2 * r, 9)})
+            circular_holes.append({"x": round(cx, 9), "y": round(cy, 9), "d": round(2 * r, 9), "depth": depth})
         else:
             other_inner.append(lp)
+
+    for bh in blind_holes:
+        circular_holes.append({"x": round(bh["x"], 9), "y": round(bh["y"], 9), "d": round(bh["d"], 9), "depth": round(bh["depth"], 9)})
 
     if not circular_holes:
         return it
 
-    by_dia: dict[float, list[dict]] = {}
+    by_dia_depth: dict[tuple[float, float], list[dict]] = {}
     for h in circular_holes:
-        by_dia.setdefault(round(h["d"], 6), []).append(h)
+        by_dia_depth.setdefault((round(h["d"], 6), round(h["depth"], 6)), []).append(h)
 
     new_feats = []
     hole_id = 1
     pat_id = 1
     total_recognized = 0
 
-    for dia, group in sorted(by_dia.items()):
-        c_feats, rem_c, hole_id, pat_id = _find_circular_patterns(group, depth, hole_id, pat_id)
+    for (dia, h_depth), group in sorted(by_dia_depth.items()):
+        c_feats, rem_c, hole_id, pat_id = _find_circular_patterns(group, h_depth, hole_id, pat_id)
         if c_feats:
             new_feats.extend(c_feats)
             total_recognized += len(group)
             continue
-        l_feats, rem_l, hole_id, pat_id = _find_linear_patterns(group, depth, hole_id, pat_id)
+        l_feats, rem_l, hole_id, pat_id = _find_linear_patterns(group, h_depth, hole_id, pat_id)
         new_feats.extend(l_feats)
         total_recognized += len(group) - len(rem_l)
         for h in rem_l:
             new_feats.append({
                 "$op": "feature.hole", "id": f"hole{hole_id}", "sketched_on": "front",
-                "args": {"diameter": h["d"], "depth": depth, "center": [h["x"], h["y"]]}
+                "args": {"diameter": h["d"], "depth": h_depth, "center": [h["x"], h["y"]]}
             })
             hole_id += 1
             total_recognized += 1

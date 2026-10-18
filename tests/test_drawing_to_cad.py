@@ -419,3 +419,20 @@ def test_recognize_features_standalone_helper(tmp_path):
     assert rec_it.expect["volume_mm3"] == pytest.approx(base_it.expect["volume_mm3"])
 
 
+def test_blind_holes_rebuilt_with_feature_recognition(tmp_path):
+    p = plate_dxf(tmp_path / "blind.dxf", blind=True)
+    it = reconstruct(p, features=True)
+    assert it.executable, (it.missing, it.ambiguities)
+    assert [f["$op"] for f in it.spec["features"]] == [
+        "sketch.loops", "feature.extrude", "feature.hole", "feature.pattern.linear"
+    ]
+    # base plate outline only in sketch.loops
+    assert len(it.spec["features"][0]["args"]["loops"]) == 1
+    h = it.spec["features"][2]["args"]
+    assert h["diameter"] == 6.0 and h["depth"] == 5.0 and h["center"] == [30.0, 30.0]
+    pat = it.spec["features"][3]["args"]
+    assert pat == {"feature": "hole1", "count": 2, "spacing": 40.0, "direction": "X"}
+    want_v = (100 * 60 - (4 - math.pi) * 25) * 10 - 2 * (math.pi * 9 * 5)
+    assert it.expect["volume_mm3"] == pytest.approx(want_v)
+
+

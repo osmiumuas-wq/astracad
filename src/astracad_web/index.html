@@ -1795,25 +1795,32 @@ function loopsPreview(spec) {
   }).join(" ") + " Z";
   const span = Math.max(x1 - x0, y1 - y0), m = span * .16, fs = span * .052;
   const F = spec?.features || [], by = op => F.filter(f => f.$op === op);
-  let extraHoles = by("feature.hole").map(f => ({ x: f.args.center[0], y: f.args.center[1], d: f.args.diameter }));
+  let extraHoles = by("feature.hole").map(f => ({ x: f.args.center[0], y: f.args.center[1], d: f.args.diameter, depth: f.args.depth }));
   for (const p of by("feature.pattern.linear")) {
     const seed = F.find(f => f.id === p.args.feature); if (!seed) continue;
-    for (let k = 1; k < p.args.count; k++) extraHoles.push({ x: seed.args.center[0] + (p.args.direction === "X" ? k * p.args.spacing : 0), y: seed.args.center[1] + (p.args.direction === "Y" ? k * p.args.spacing : 0), d: seed.args.diameter });
+    for (let k = 1; k < p.args.count; k++) extraHoles.push({ x: seed.args.center[0] + (p.args.direction === "X" ? k * p.args.spacing : 0), y: seed.args.center[1] + (p.args.direction === "Y" ? k * p.args.spacing : 0), d: seed.args.diameter, depth: seed.args.depth });
   }
   for (const p of by("feature.pattern.circular")) {
     const seed = F.find(f => f.id === p.args.feature); if (!seed) continue;
     const [cx, cy] = p.args.center || [0, 0], sx = seed.args.center[0] - cx, sy = seed.args.center[1] - cy;
     for (let k = 1; k < p.args.count; k++) {
       const a = 2 * Math.PI * k / p.args.count;
-      extraHoles.push({ x: cx + sx * Math.cos(a) - sy * Math.sin(a), y: cy + sx * Math.sin(a) + sy * Math.cos(a), d: seed.args.diameter });
+      extraHoles.push({ x: cx + sx * Math.cos(a) - sy * Math.sin(a), y: cy + sx * Math.sin(a) + sy * Math.cos(a), d: seed.args.diameter, depth: seed.args.depth });
     }
   }
   const kids = [s("path", { d: path(loops[0]), class: "pv-solid" }), ...loops.slice(1).map(l => s("path", { d: path(l), class: "pv-hole" }))];
-  for (const c of extraHoles) kids.push(s("circle", { cx: c.x, cy: c.y, r: c.d / 2, class: "pv-hole" }));
+  for (const c of extraHoles) {
+    const isBlind = ext && c.depth != null && c.depth < ext.args.depth;
+    kids.push(s("circle", { cx: c.x, cy: c.y, r: c.d / 2, class: isBlind ? "pv-pocket" : "pv-hole" }));
+  }
   const labels = [{ x: (x0 + x1) / 2, y: y0 - fs * 1.4, t: g6(x1 - x0) }, { x: x1 + fs * .5, y: (y0 + y1) / 2, t: g6(y1 - y0), a: "start" }];
   const totalOpenings = (loops.length - 1) + extraHoles.length;
   if (totalOpenings > 0) labels.push({ x: x1, y: y1 + fs * .9, t: `${totalOpenings} opening(s)`, a: "end", tag: true });
-  if (extraHoles.length) labels.push({ x: extraHoles[0].x, y: extraHoles[0].y + extraHoles[0].d / 2, t: `${extraHoles.length > 1 ? extraHoles.length + "× " : ""}Ø${g6(extraHoles[0].d)}`, a: "middle", tag: true });
+  if (extraHoles.length) {
+    const h0 = extraHoles[0];
+    const isBlind = ext && h0.depth != null && h0.depth < ext.args.depth;
+    labels.push({ x: h0.x, y: h0.y + h0.d / 2, t: `${extraHoles.length > 1 ? extraHoles.length + "× " : ""}Ø${g6(h0.d)}${isBlind ? " ↧" + g6(h0.depth) : ""}`, a: "middle", tag: true });
+  }
   return h("figure", { class: "pv" }, s("svg", { viewBox: [x0 - m, -(y1 + m), (x1 - x0) + 2 * m, (y1 - y0) + 2 * m].join(" "), role: "img", "aria-label": "section from the drawing" },
       s("g", { transform: "scale(1,-1)" }, ...kids),
       ...labels.map(l => s("text", { x: l.x, y: -l.y, "font-size": fs, class: "pv-dim" + (l.tag ? " pv-tag" : ""), "text-anchor": l.a || "middle", "dominant-baseline": "middle" }, l.t))),

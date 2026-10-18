@@ -1,5 +1,39 @@
 # NEXT ACTION
 
+## 2026-10-18 (Antigravity): Drawing → CAD: Blind holes recognized from aligned view hidden lines
+
+    py -m astracad_cad from-drawing <drawing.dxf> --out OUT --authorize KM --features
+    workspace: Projects -> a DXF drawing -> 3D (checkbox: "Recognize features (holes & patterns)")
+    py -m pytest -q tests/test_drawing_to_cad.py
+
+Drawing → CAD now supports recognizing blind holes from partial-depth hidden lines in aligned views:
+- Hidden line depth correlation (`src/astracad_core/drawing_to_cad.py`):
+  - In aligned orthographic views, partial-depth hidden lines that touch an outer face and align with circular inner loops establish explicit blind hole depth ($d < T$).
+  - Refusal rule preserved: without `--features`, blind openings continue to be refused (`"a line in an aligned view does not run the full depth (a step or a blind feature) - not one constant extrusion"`), ensuring no through-extrusion errors occur.
+  - Base extrusion invariance: recognized blind holes are kept out of `sketch.loops` (which only extrudes through the full body thickness) and emitted as parametric `feature.hole` with the measured depth.
+  - Depth-consistent pattern decomposition: holes are grouped by `(diameter, depth)` so linear and circular patterns only cluster holes sharing both identical diameter and depth.
+  - Analytic volume derivation: net part volume accounts for blind hole volume removal ($\sum \pi r_i^2 d_i$), verified in closed form against CAD expectations.
+- Web UI Part Preview: in `src/astracad_web/index.html` `loopsPreview`, blind holes render with dashed stroke (`pv-pocket`) and depth callout annotation (`↧depth`, e.g. `Ø6 ↧5`).
+- CAD runtime verification: in `mac` (C# / .NET 10), added selftest case validating `loops_blind_pat` analytically derived volume ($59502.654825\text{ mm}^3$); `mac selftest` passes **53/53 checks**.
+
+### What was changed:
+- `src/astracad_core/drawing_to_cad.py`: added `blind_seen` tracking in aligned view analysis, blind hole depth extraction, excluded blind holes from `sketch.loops`, updated net volume formula, and updated `recognize_features` to support per-hole depth grouping.
+- `src/astracad_web/index.html`: updated `loopsPreview` to style blind holes as `pv-pocket` and annotate with depth symbol `↧`.
+- `tests/test_drawing_to_cad.py`: added `test_blind_holes_rebuilt_with_feature_recognition` verifying plate with blind holes (25/25 passing).
+- `mecagent-alternative/src/Mac/Program.cs`: added `loops with patterned blind holes volume derived analytically` check to selftest (53/53 passing).
+- `docs/engineering/drawing-to-cad.md` & `docs/competitive/parity-matrix.md`: documented blind hole recognition and updated row C-34.
+- `CURRENT_STATE.md`: updated test baseline to 611 passed Python tests and 53/53 `mac selftest`.
+
+### What was verified and how:
+- `py -m pytest -q tests/test_drawing_to_cad.py`: 25/25 passed (including new blind holes test).
+- `py -m pytest -q tests/test_web.py`: 14/14 passed (verifying JavaScript syntax).
+- `py -m pytest -q --basetemp "$env:TEMP\pytest_astracad"`: full suite 611 passed, 0 failed in 226.22s.
+- `dotnet run --project src/Mac -- selftest`: 53/53 checks passed.
+- Line ending audit: 100% byte-level consistency preserved across all modified files.
+
+### What could not be verified:
+- Live SOLIDWORKS CAD build was not executed against the active session in this step to prevent touching user's open documents (food-processor assembly) and because CAD writes require explicit `--authorize`.
+
 ## 2026-10-18 (Antigravity): Drawing → CAD: Feature recognition (holes, linear patterns, circular patterns)
 
     py -m astracad_cad from-drawing <drawing.dxf> --out OUT --authorize KM [--features]
