@@ -311,6 +311,16 @@ covered by a check that now fails if it regresses.
 
 
 
+## M. Two-kernel verification (2026-10-18)
+
+- The second kernel (OpenCascade) builds the v1 operations; a spec with v2 operations is "not verifiable" by it until
+  M1 brings them - never passed (docs/engineering/two-kernel-verification.md).
+- Through-all features are compared at 1e-5 relative: SOLIDWORKS's own through-all result deviates from the exact
+  solid (measured up to 5.6e-6).
+- Two kernels reading the same spec could share a misreading of the language; the closed forms and the STEP re-read
+  stay as independent legs.
+- Needs the `geometry` extra (cadquery-ocp with vtk, ~131 MB); without it nothing is claimed.
+
 ## L. Local model planner (2026-10-18)
 
 - Optional: the language model on this PC (Qwen3.8-Flash-Next Coder IQ1_M, served by Strata) -

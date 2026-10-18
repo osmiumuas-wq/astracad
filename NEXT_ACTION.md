@@ -1,5 +1,22 @@
 # NEXT ACTION
 
+## 2026-10-18 (Claude): "build anything" - plan approved, M0 done: OpenCascade is the second kernel
+
+User request: "make the cad automation able to create anything ... from bicycle to v6 engine". Approved plan (four
+layers: Part Language v2, two kernels, assemblies, generators + product templates; the V6 engine first; OpenCascade
+installed with the user's OK). The contract: docs/engineering/part-language-v2.md (commit 3ba6638).
+
+M0 done: cadquery-ocp 8.0.1.1 + vtk 9.6.2 installed (Python 3.14, `geometry` extra); `astracad_geom` builds every v1
+operation (closed forms to <= 3e-16, 22 tests); every SOLIDWORKS build now carries `occ:*` checks (volume, area, centre
+of mass, bodies, STEP box) and is accepted only when the kernels agree - 32/32 recorded real builds agree; live
+`_out/m0_20261018/` (Qwen's L-bracket, a plate with a hole row) SUCCEEDED with every check; shaded 3D previews on the
+Text to CAD page. docs/engineering/two-kernel-verification.md.
+
+Next (M1): the v2 operations in OpenCascade (planes, any-sketch cut, revolve about a line, mirror, patterns, holes,
+shell, query fillets, booleans, sweep, loft). The SOLIDWORKS side is proposed as its own session ("mac: Part Language
+v2 operations + assemblies", worktree C:\New folder (4)\mac-v2, branch part-language-v2). Then assemblies (M2) and the
+V6 template (M3).
+
 ## 2026-10-18 (Claude): the local model (Qwen via Strata) as the planner, Gemini removed + live check of the other agent's work
 
 **Local model (user request: "integrate my local qwen3.8 flash next model which i have installed through strata in

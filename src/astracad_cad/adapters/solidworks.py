@@ -565,6 +565,18 @@ class SolidWorksAdapter(Adapter):
         return out
 
     @staticmethod
+    def _occ_checks(spec: dict, measured: dict, step_data: dict) -> tuple[list[Check], dict]:
+        """The second kernel: OpenCascade builds the same spec; its numbers must agree with SOLIDWORKS's."""
+        try:
+            from astracad_geom.compare import compare
+            step = next(iter(step_data.values()), {}) if step_data else {}
+            found, data = compare(spec, measured, step.get("bbox_mm"), bool(step.get("bbox_approximate", True)))
+        except Exception as ex:          # the second kernel must never break a SOLIDWORKS build's report
+            return [Check("occ:build", "not_verifiable", "an OpenCascade build of the spec", "error",
+                          f"{type(ex).__name__}: {ex}")], {}
+        return [Check(c["name"], c["outcome"], c["expected"], c["actual"], c["why"]) for c in found], data
+
+    @staticmethod
     def _step_checks(path: Path, expect: dict, kernel_volume: float | None = None
                      ) -> tuple[list[Check], dict]:
         if not path.exists():
@@ -656,6 +668,8 @@ class SolidWorksAdapter(Adapter):
         if not any(c.name.startswith("step:") for c in checks):
             checks.append(Check("independent_reread", "not_verifiable", "a STEP export to re-read",
                                 "none exported", "add {'format':'step'} to spec.exports"))
+        occ_checks, occ_data = self._occ_checks(spec, measured, step_data)
+        checks.extend(occ_checks)
         failed = [c for c in checks if c.outcome == "failed"]
         success = bool(execution.get("success", execution.get("Success")))
         independent_ok = any(c.name.startswith("step:") and c.outcome == "passed" for c in checks)
@@ -670,7 +684,7 @@ class SolidWorksAdapter(Adapter):
                                data={"argv": argv, "exit_code": cp.returncode,
                                      "report_path": str(report_path), "measured": measured,
                                      "log": execution.get("log") or execution.get("Log"),
-                                     "step": step_data, "session": report.get("session")},
+                                     "step": step_data, "occ": occ_data, "session": report.get("session")},
                                checks=checks, artifacts=artifacts,
                                errors=list(execution.get("failures") or []),
                                evidence=self.declaration().operations[op].evidence)

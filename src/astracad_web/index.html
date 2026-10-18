@@ -415,6 +415,10 @@ pre.code { margin: 0; white-space: pre-wrap; word-break: break-word; font-family
 .pv svg { display: block; width: 100%; height: auto; max-height: 360px; overflow: visible; }
 .pv figcaption { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: center; }
 .pv-empty { display: grid; place-items: center; min-height: 220px; }
+.mk-views { display: grid; gap: 12px; min-width: 0; align-content: start; }
+.pv3-body { display: grid; place-items: center; min-height: 140px; }
+.pv3-body .muted { font-size: 12.5px; text-align: center; overflow-wrap: anywhere; }
+.pv3-body svg g[fill="none"] { stroke: var(--ink-2); }
 .pv-solid { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .pv-hole { fill: var(--surface); stroke: var(--accent); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
 .pv-axis { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 10 3 2 3; vector-effect: non-scaling-stroke; }
@@ -1668,6 +1672,25 @@ function partPreview(spec) {
     h("figcaption", {}, prof ? "Section through the axis" : "Front view", depth ? " · " + depth : "", " · mm"));
 }
 
+// OpenCascade's own build of a spec, drawn on this PC - the second kernel SOLIDWORKS's result is checked against
+const PV3 = new Map();
+function preview3d(spec) {
+  const key = JSON.stringify(spec);
+  if (!PV3.has(key)) {
+    if (PV3.size > 40) PV3.clear();
+    PV3.set(key, post("/api/cad/preview", { spec }).catch(e => ({ ok: false, reason: e.message.replace(/^\w+Error: /, "") })));
+  }
+  const body = h("div", { class: "pv3-body" }, h("span", { class: "spin" }));
+  const cap = h("figcaption", {}, "3D \u00b7 OpenCascade (second kernel), drawing\u2026");
+  PV3.get(key).then(d => {
+    if (!d.ok) { body.replaceChildren(h("div", { class: "muted" }, "No 3D preview: " + d.reason)); cap.textContent = "3D \u00b7 OpenCascade (second kernel)"; return; }
+    body.innerHTML = d.svg;          // numbers only, drawn by this workspace's own server from the spec
+    const m = d.measured;
+    cap.textContent = `3D \u00b7 OpenCascade (second kernel) \u00b7 ${(+m.volume_mm3).toLocaleString(undefined, { maximumFractionDigits: 3 })} mm\u00b3 \u00b7 ${m.size_mm.map(g6).join(" \u00d7 ")} mm`;
+  });
+  return h("figure", { class: "pv pv3" }, body, cap);
+}
+
 async function viewMake() {
   crumbs("Text to CAD");
   const req = h("textarea", { class: "input mk-in", rows: 3, maxlength: 2000, spellcheck: false, placeholder: "e.g. SolidWorks 100 x 40 x 10 mm plate with 4 x 6 mm holes at 20 mm pitch along the width, centred, export STEP" });
@@ -1736,6 +1759,7 @@ async function viewMake() {
       : it.ambiguities.length ? ["warn", "alert", "Needs a decision", "Something could be read more than one way. Nothing is guessed."]
       : ["warn", "info", "Needs information", "Add what is listed below; nothing is defaulted."];
     const pv = it.spec ? partPreview(it.spec) || loopsPlan(it.spec) : null;
+    const pv3 = it.spec ? preview3d(it.spec) : null;
     const exp = it.expect || {};
     let lmBanner = null;
     if (it.plan_id) {
@@ -1754,7 +1778,7 @@ async function viewMake() {
         it.missing.map(m => h("li", { class: "t-warn" }, ic("info"), h("span", {}, h("b", {}, "Missing: "), m))),
         it.ambiguities.map(m => h("li", { class: "t-warn" }, ic("alert"), h("span", {}, h("b", {}, "Decide: "), m)))) : null,
       h("div", { class: "mk-grid" },
-        pv || h("div", { class: "pv pv-empty" }, empty("cube", "No geometry yet", "A preview appears once the shape and its sizes are known.")),
+        h("div", { class: "mk-views" }, pv || h("div", { class: "pv pv-empty" }, empty("cube", "No geometry yet", "A preview appears once the shape and its sizes are known.")), pv3),
         h("div", { class: "mk-facts" },
           exp.size_mm ? h("div", { class: "mk-kpis" },
             h("div", {}, h("span", {}, "Envelope"), h("b", { class: "mono" }, exp.size_mm.map(g6).join(" × "), h("small", {}, " mm"))),

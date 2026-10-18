@@ -146,6 +146,28 @@ class Workspace:
                 "files": files, "folder": self.key_for(out), "authorized_by": who,
                 "expect": it.expect, "spec": it.spec}
 
+    # ---- second kernel: OpenCascade builds the spec itself, for a picture before anything is built --------
+    def cad_preview(self, body: dict) -> dict:
+        """OpenCascade's own build of a part spec, drawn as a shaded isometric SVG, with its measurements.
+        Built from the spec alone; nothing is sent anywhere and SOLIDWORKS is not involved."""
+        spec = body.get("spec")
+        if not isinstance(spec, dict) or not isinstance(spec.get("features"), list):
+            raise ValueError("a part spec is needed")
+        if len(spec["features"]) > 300 or len(json.dumps(spec)) > 400_000:
+            raise ValueError("spec too large for a preview")
+        from astracad_geom import available
+        if not available():
+            return {"ok": False, "reason": "OpenCascade is not installed on this PC: no 3D preview"}
+        from astracad_geom.occ_build import BuildError, NotSupported, SpecError, build
+        from astracad_geom.preview import render
+        from astracad_geom.props import measure
+        try:
+            built = build(spec)
+        except (NotSupported, SpecError, BuildError) as ex:
+            return {"ok": False, "reason": str(ex)}
+        pic = render(built.shape)
+        return {"ok": True, "svg": pic["svg"], "measured": measure(built.shape), "class": built.tolerance_class}
+
     # ---- model gateway (opt-in: the local model plans, ASTraCAD checks, the user accepts) -----------
     def model_status(self) -> dict:
         from astracad_core.model_gateway import status
@@ -1297,6 +1319,8 @@ def make_handler(ws: Workspace):
                     return self._json(ws.cad_build(body.get("request", ""), body.get("authorize", "")))
                 if u.path == "/api/drawing_cad/interpret":
                     return self._json(ws.drawing_interpret(body))
+                if u.path == "/api/cad/preview":
+                    return self._json(ws.cad_preview(body))
                 if u.path == "/api/cad/model_plan":
                     return self._json(ws.model_plan(body))
                 if u.path == "/api/cad/model_build":

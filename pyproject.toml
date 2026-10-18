@@ -30,6 +30,10 @@ ocr = ["rapidocr_onnxruntime==1.2.3", "winrt-runtime==3.2.1", "winrt-Windows.Med
        "winrt-Windows.Graphics.Imaging==3.2.1", "winrt-Windows.Storage.Streams==3.2.1",
        "winrt-Windows.Globalization==3.2.1", "winrt-Windows.Foundation==3.2.1",
        "winrt-Windows.Foundation.Collections==3.2.1"]
+# The second CAD kernel (OpenCascade via cadquery-ocp, Apache-2.0 over OCCT LGPL-2.1; pulls vtk 9.6.2, BSD-3):
+# every SOLIDWORKS build is also built here from the same spec and must agree; 3D previews; STEP without SOLIDWORKS.
+# Without it, the second-kernel checks are reported as not verifiable (docs/engineering/two-kernel-verification.md).
+geometry = ["cadquery-ocp==8.0.1.1.0"]
 
 [project.scripts]
 inspect = "astracad_inspect.cli:main"
