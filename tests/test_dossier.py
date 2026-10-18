@@ -112,12 +112,60 @@ def test_project_dossier_contents_hashes_and_open_items(project_run):
     with zipfile.ZipFile(w.resolve_key(out["file"])) as z:
         names = z.namelist()
         man = json.loads(z.read("manifest.json"))
-    assert "dossier.pdf" in names and f"ncr/{n['number']}.json" in names and "sources/plate_synthetic.dxf" in names
+    sha = w.projects.get(pid).sources[0].sha256
+    assert "dossier.pdf" in names and f"ncr/{n['number']}.json" in names and f"sources/{sha}/plate_synthetic.dxf" in names
     assert any(x.startswith("runs/") and x.endswith(".plan.json") for x in names)
     assert any(x.startswith("runs/") and x.endswith("_FAI_SN-1.xlsx") for x in names)
     assert any(x.startswith("runs/") and "checklist_drawing_review" in x for x in names)
     assert man["type"] == "project" and man["project"] == "Test Bracket Project"
     assert len(man["files"]) == len(names) - 1
+
+
+def test_project_dossier_keeps_reinspections_and_same_named_sources_apart(project_run):
+    """Re-inspecting a drawing is the normal case. Each run of plate_synthetic has the same stem,
+    and a second revision uploaded under the same file name differs only by hash."""
+    import io
+    from collections import Counter
+    w, pid, key, plan = project_run
+    first = w.projects.get(pid).sources[0]
+    w.inspect_source({"project": pid, "source": first.sha256})          # same drawing, inspected again
+    other = (FIX / "bracket_gdt_synthetic.dxf").read_bytes()
+    second = w.projects.add_source(pid, "plate_synthetic.dxf", io.BytesIO(other), len(other), "KM")
+    assert second.sha256 != first.sha256
+    out = w.project_dossier(pid)
+    assert out["runs"] == 2 and all(c["ok"] for c in out["checks"]), out["checks"]
+    with zipfile.ZipFile(w.resolve_key(out["file"])) as z:
+        names = z.namelist()
+        man = json.loads(z.read("manifest.json"))
+    assert not [n for n, k in Counter(names).items() if k > 1]
+    assert len({n.split("/")[1] for n in names if n.startswith("runs/")}) == 2
+    assert {f"sources/{first.sha256}/plate_synthetic.dxf", f"sources/{second.sha256}/plate_synthetic.dxf"} <= set(names)
+    assert len(set(man["runs"])) == 2
+    labels = {it.split(":")[0].split(" / ")[0] for it in out["status"]["open_items"]}
+    assert labels == set(man["runs"])                                 # each open item names its own run
+
+
+def test_project_dossier_refuses_two_records_under_one_name(project_run, tmp_path):
+    from astracad_inspect.dossier import build_project
+    from astracad_inspect.measure import evaluate, read_log
+    w, pid, key, plan = project_run
+    pp = w.resolve_key(key)
+    r = {"plan_path": pp, "plan": plan, "meas": evaluate(plan, read_log(pp)), "ncrs": [], "checklists": [],
+         "samples": [], "stem": pp.name[:-len(".plan.json")]}
+    out = tmp_path / "clash.zip"
+    with pytest.raises(ValueError, match="share the archive name"):
+        build_project("P", out, runs=[r, dict(r)], ncrs=[], sources=[])
+    assert not out.exists()
+
+
+def test_project_status_lists_records_that_could_not_be_made():
+    from astracad_inspect.dossier import project_status
+    r = {"stem": "plate", "run_id": "plate_dxf_1", "plan": {"approvable": True, "gate": "releasable", "rows": []},
+         "meas": {"sample_state": {}}, "ncrs": [], "checklists": [], "samples": [],
+         "problems": ["results / FAI for SN-1 not exported: disk full"]}
+    st = project_status([r])
+    assert st["conforming"] is False
+    assert st["open_items"] == ["plate_dxf_1: results / FAI for SN-1 not exported: disk full"]
 
 
 def test_project_dossier_empty_project_refused(tmp_path):

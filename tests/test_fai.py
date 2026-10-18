@@ -1,6 +1,8 @@
 """AS9102-structured FAI workbook and drawing zones."""
 import json
 
+import pytest
+
 from astracad_inspect.export.fai import TO_COMPLETE, verify_fai, write_fai
 from astracad_inspect.model import CharKind, Characteristic, SourceLocation
 from astracad_inspect.zones import assign_zones
@@ -89,13 +91,38 @@ def test_dxf_zone_assignment_end_to_end(tmp_path):
     assert b_sheet.cell(row=2, column=b_zone_idx + 1).value == "B2"
 
 
+def test_dxf_zone_strays_in_the_margins_are_not_zone_labels(tmp_path):
+    """A title-block letter and a BOM item number sit inside the margin bands but not on the border
+    lines. Taken as labels they were the nearest ones to this dimension and gave it B3; it is A1."""
+    import ezdxf
+    from pathlib import Path
+    from astracad_inspect.pipeline import inspect_drawing
+
+    doc = ezdxf.new("R2010")
+    msp = doc.modelspace()
+    msp.add_lwpolyline([(0, 0), (400, 0), (400, 300), (0, 300), (0, 0)])
+    for t, y in (("A", 50), ("B", 150), ("C", 250)):
+        msp.add_text(t, dxfattribs={"insert": (5, y), "height": 3.5})
+    for t, x in (("1", 100), ("2", 200), ("3", 300)):
+        msp.add_text(t, dxfattribs={"insert": (x, 5), "height": 3.5})
+    msp.add_text("B", dxfattribs={"insert": (370, 12), "height": 3.5})     # revision letter, title block
+    msp.add_text("3", dxfattribs={"insert": (60, 280), "height": 3.5})     # BOM item number, top left
+    msp.add_linear_dim(base=(70, 25), p1=(50, 20), p2=(90, 20), text="40").render()
+    dxf_path = tmp_path / "grid_strays.dxf"
+    doc.saveas(dxf_path)
+
+    res = inspect_drawing(dxf_path, tmp_path / "run")
+    plan = json.loads(Path(res.artifacts["plan_json"]).read_text(encoding="utf-8"))
+    assert [r["zone"] for r in plan["rows"]] == ["A1"]
+
+
 def test_dxf_zone_assignment_cabinet_bath_corpus(tmp_path):
     from pathlib import Path
     corpus_dxf = Path(__file__).parent.parent / "_sources" / "corpus_sw_v2" / "cabinet_bath_s1.dxf"
     if not corpus_dxf.exists():
         corpus_dxf = Path(__file__).parent.parent / "_sources" / "corpus_sw" / "cabinet_bath_s1.dxf"
     if not corpus_dxf.exists():
-        return
+        pytest.skip("SOLIDWORKS corpus drawing not present (licensed sample, local only)")
     from astracad_inspect.pipeline import inspect_drawing
     res = inspect_drawing(corpus_dxf, tmp_path / "corpus_run")
     plan = json.loads(Path(res.artifacts["plan_json"]).read_text(encoding="utf-8"))

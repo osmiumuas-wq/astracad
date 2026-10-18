@@ -25,7 +25,7 @@ Every number below was produced by a command run on 2026-10-17. Detail: `docs/ar
 
 | Where | Command | Result |
 |---|---|---|
-| Windows PC (Python 3.14.7) | `py -m pytest -q` | **536 passed**, 0 failed, 0 skipped (2026-10-18: after the verification fixes; pass `--basetemp` outside the repo if `.pytest_tmp` cannot be removed) |
+| Windows PC (Python 3.14.7) | `py -m pytest -q` | **544 passed**, 0 failed, 0 skipped (2026-10-18: after the second verification pass; pass `--basetemp` outside the repo if `.pytest_tmp` cannot be removed) |
 | Windows | `py tools/benchmark_layout.py` | 22 real SOLIDWORKS sheets, 175 balloons: **0 crossing leaders, 0 balloons on drawing ink, 0 unplaced**, mean leader 0.20 balloon diameters (before: 8 / 12 / 5 / 8.39) |
 | Windows | `py tools/regression.py` | 3 labelled synthetic fixtures (incl. GD&T): 20/20 characteristics, 0 wrong fields, 0 invented, 57/57 export checks |
 | Windows | `py -m astracad_inspect run tests\fixtures\bracket_gdt_synthetic.dxf` | 5 frame rows (position ⌀0.05 MMC A\|B\|C, 2-row ⊥/∥, flatness, profile) + 3 dims; malformed frame escalated; frames drawn in the layout; 19/19 exports |

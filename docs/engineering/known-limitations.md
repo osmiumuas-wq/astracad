@@ -301,10 +301,11 @@ covered by a check that now fails if it regresses.
 
 ## J. Found while verifying (2026-10-18)
 
-- `mac drawing`: on 2026-10-18 `InsertModelAnnotations3` returned 0 for every part, including the 60×40×20 Ø10
-  block that gave 4/4 on 2026-10-17, and also with `mac` rebuilt from the pre-handoff commit 3605c7e. Cause not
-  found (SOLIDWORKS state or a setting, not the title-block code); drawings made that day fail their dimension
-  checks, correctly. Title block and tolerance note were verified; model dimensions on drawings were not.
+- `mac drawing` (resolved 2026-10-18): the 0-dimension drawings of the 01:30 unattended run were reproduced by
+  minimizing the SOLIDWORKS window - `InsertModelAnnotations3` then inserts nothing while views are still made.
+  `mac drawing` now restores a minimized window for the drawing and minimizes it again (both logged). Not tested:
+  a locked Windows session or a switched-off display, which may stop it the same way; such a run fails its
+  dimension checks and its report says no annotation was inserted - it never passes.
 - Title-block notes are free notes placed at fixed sheet positions, not the template's title-block fields; the
   date is the UTC date (it read 2026-10-17 at local 2026-10-18).
 - Text → CAD: pockets / slots and holes in one request are each checked against the face, but not against each
@@ -314,3 +315,10 @@ covered by a check that now fails if it regresses.
   reused whatever its direction. Parts built from a spec have none; editing other parts with it is not verified.
 - Fixed: "25 mm diameter 100 mm long" was read as diameter 100 (executable); a number between the two words
   now goes to the word that has no other number, and with one number for two words the request is refused.
+- Fixed (second verification pass, 2026-10-18): the CMM-profile endpoints joined the caller's "project" value onto a
+  path (`..\..` or an absolute folder wrote outside the store); an unreadable `cmm_mappings.json` read as "no
+  profiles" and the next save overwrote it; feature names differing only in case resolved to whichever came last;
+  the project dossier keyed runs by stem (re-inspections collided); DXF zone labels included title-block and table
+  text in the margins. Each has a regression test.
+- DXF zones: a sheet whose border labels are not on straight lines along the edges (rotated or non-orthogonal
+  formats) gets no zones rather than guessed ones.

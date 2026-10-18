@@ -27,6 +27,7 @@ import io
 import json
 import time
 import zipfile
+from collections import Counter
 from pathlib import Path
 
 
@@ -241,7 +242,10 @@ def project_status(runs: list[dict]) -> dict:
         ncrs  - list of NCR dicts relevant to this run
         checklists - list of checklist state dicts relevant to this run
         samples - list of sample IDs measured in this run (may be empty)
-        stem   - run stem name (for reporting)
+        stem   - run stem name
+        run_id - (optional) the run's folder, unique in the project; re-inspections of one drawing
+                 share a stem, so this is what names the run in reports and in the archive
+        problems - (optional) records that could not be produced; each is an open item
 
     Returns {"conforming": bool, "open_items": [...], "run_statuses": [...]}.
     """
@@ -249,15 +253,22 @@ def project_status(runs: list[dict]) -> dict:
     run_statuses: list[dict] = []
     for r in runs:
         plan, meas = r["plan"], r["meas"]
+        label = _run_label(r)
         samples = r["samples"] or [None]
         for sample in samples:
             st = status(plan, meas, sample, r["ncrs"], r["checklists"])
             run_statuses.append({
-                "stem": r["stem"], "sample": sample, **st,
+                "stem": r["stem"], "run": label, "sample": sample, **st,
             })
             for it in st["open_items"]:
-                open_items.append(f"{r['stem']}" + (f" / {sample}" if sample else "") + f": {it}")
+                open_items.append(f"{label}" + (f" / {sample}" if sample else "") + f": {it}")
+        for p in r.get("problems") or []:
+            open_items.append(f"{label}: {p}")
     return {"conforming": not open_items, "open_items": open_items, "run_statuses": run_statuses}
+
+
+def _run_label(r: dict) -> str:
+    return str(r.get("run_id") or r["stem"])
 
 
 def _project_pdf(path: Path, project_name: str, runs: list[dict], ncrs: list[dict],
@@ -294,7 +305,7 @@ def _project_pdf(path: Path, project_name: str, runs: list[dict], ncrs: list[dic
         plan = r["plan"]
         tb = plan.get("title_block") or {}
         drawing = tb.get("drawing_number") or tb.get("part_name") or Path(plan.get("source_document") or "").stem
-        data.append([r["stem"], Paragraph(_esc(drawing), S["cell"]), plan.get("revision", ""),
+        data.append([Paragraph(_esc(_run_label(r)), S["cell"]), Paragraph(_esc(drawing), S["cell"]), plan.get("revision", ""),
                      len(plan.get("rows") or []),
                      "yes" if plan.get("approvable") else "NO",
                      ", ".join(r["samples"]) or "-"])
@@ -305,7 +316,7 @@ def _project_pdf(path: Path, project_name: str, runs: list[dict], ncrs: list[dic
         plan, meas = r["plan"], r["meas"]
         tb = plan.get("title_block") or {}
         part = tb.get("drawing_number") or tb.get("part_name") or Path(plan.get("source_document") or "").stem
-        story += [Spacer(1, 4 * mm), Paragraph(f"Run: {_esc(r['stem'])} — {_esc(part)} rev {plan.get('revision')}", S["h2"])]
+        story += [Spacer(1, 4 * mm), Paragraph(f"Run: {_esc(_run_label(r))} — {_esc(part)} rev {plan.get('revision')}", S["h2"])]
 
         for sample in (r["samples"] or [None]):
             if sample:
@@ -374,17 +385,19 @@ def build_project(project_name: str, out_zip: Path, *,
     """
     files: list[tuple[str, bytes]] = []
 
-    # per-run files, nested under runs/<stem>/
+    # per-run files, nested under runs/<run folder>/ (a re-inspection of the same drawing has the
+    # same stem in another folder: keyed by stem, three runs wrote one name three times)
     for r in runs:
         plan_path = r["plan_path"]
         stem = r["stem"]
+        rid = _run_label(r)
         folder = plan_path.parent
         for p in sorted(folder.iterdir()):
             if p.is_file() and p.name.startswith(stem) and "_dossier" not in p.name and not p.name.endswith(".tmp"):
-                files.append((f"runs/{stem}/{p.name}", p.read_bytes()))
+                files.append((f"runs/{rid}/{p.name}", p.read_bytes()))
         if (folder / "imports").is_dir():
             for p in sorted((folder / "imports").iterdir()):
-                files.append((f"runs/{stem}/imports/{p.name}", p.read_bytes()))
+                files.append((f"runs/{rid}/imports/{p.name}", p.read_bytes()))
 
     # NCRs
     seen_ncrs: set[str] = set()
@@ -400,13 +413,18 @@ def build_project(project_name: str, out_zip: Path, *,
         if src_path and Path(src_path).is_file():
             b = Path(src_path).read_bytes()
             if _sha(b) == s["sha256"]:
-                files.append((f"sources/{s['filename']}", b))
+                # by hash, as the project store keeps them: two revisions may share a file name
+                files.append((f"sources/{s['sha256']}/{Path(s['filename']).name}", b))
                 source_notes.append(f"{s['filename']}: included (SHA-256 verified)")
             else:
                 source_notes.append(f"{s['filename']}: NOT included (SHA-256 mismatch)")
         else:
             source_notes.append(f"{s['filename']}: NOT included (file not found)")
 
+    names = Counter(a for a, _ in files)
+    clash = sorted(a for a, k in names.items() if k > 1)
+    if clash:
+        raise ValueError(f"two records would share the archive name {clash[0]!r}; nothing was written")
     manifest = [{"path": a, "bytes": len(b), "sha256": _sha(b)} for a, b in files]
     st = project_status(runs)
 
@@ -420,7 +438,7 @@ def build_project(project_name: str, out_zip: Path, *,
         "type": "project",
         "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "project": project_name,
-        "runs": [r["stem"] for r in runs],
+        "runs": [_run_label(r) for r in runs],
         "status": st,
         "sources": source_notes,
         "files": manifest + [{"path": "dossier.pdf", "bytes": len(pdf_bytes), "sha256": _sha(pdf_bytes)}],

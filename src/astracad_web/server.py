@@ -534,12 +534,13 @@ class Workspace:
             key = self.key_for(plan_path)
             log = read_log(plan_path)
             meas = evaluate(plan, log)
+            problems: list[str] = []          # a record that could not be made is an open item
             if log:
                 for sample in meas["samples"]:
                     try:
                         self.export_results(key, sample)
-                    except (OSError, ValueError):
-                        pass
+                    except (OSError, ValueError) as ex:
+                        problems.append(f"results / FAI for {sample} not exported: {ex}")
             # checklists for this run
             states = []
             for t in self.checklist_templates():
@@ -550,8 +551,9 @@ class Workspace:
                         try:
                             states.append(self.checklist(key, t["id"], s))
                             self.export_checklist(key, t["id"], s)
-                        except (OSError, ValueError):
-                            pass
+                        except (OSError, ValueError) as ex:
+                            problems.append(f"checklist {t['id']}" + (f" / {s}" if s else "")
+                                            + f" not exported: {ex}")
             # NCRs for this run
             run_ncrs = self.ncr.for_run(key)
             for n in run_ncrs:
@@ -563,6 +565,8 @@ class Workspace:
                 "ncrs": run_ncrs, "checklists": states,
                 "samples": list(meas["samples"]),
                 "stem": stem,
+                "run_id": plan_path.parent.relative_to(runs_dir).as_posix(),
+                "problems": problems,
             })
         if not run_data:
             raise ValueError("this project has no inspection runs")
@@ -616,13 +620,15 @@ class Workspace:
 
     # ---- results import -------------------------------------------------------------------------
     def _cmm_mappings_dir(self, key: str | None = None, pid: str | None = None) -> Path:
-        if pid and self.projects is not None:
-            return self.projects.root / pid
+        # Every folder comes from a validated project id or run key. The caller's "project" value
+        # is never joined onto a path itself: "..\\.." or an absolute folder would escape the store.
+        if pid:
+            return self._need_projects().runs_dir(str(pid)).parent
         if key:
             plan_path = self._plan_path(key)
             proj = self._project_of(plan_path)
             if proj and self.projects is not None:
-                return self.projects.root / proj
+                return self.projects.runs_dir(proj).parent
             return plan_path.parent
         if self.projects is not None:
             return self.projects.root

@@ -87,16 +87,23 @@ def _balloon_index(plan: dict) -> tuple[dict, dict]:
             {r["cid"].upper(): r for r in rows})
 
 
+def _map_ref(name: str, mapping: dict | None) -> str | None:
+    """The balloon a CMM feature name is mapped to: the exact name first, then a case-insensitive
+    match only when it is unambiguous (names that differ only in case are not guessed between)."""
+    if not mapping:
+        return None
+    if name in mapping:
+        return str(mapping[name])
+    hits = {str(v) for k, v in mapping.items() if str(k).lower() == name.lower()}
+    return hits.pop() if len(hits) == 1 else None
+
+
 def resolve_balloon(ref: str, plan: dict, mapping: dict | None = None) -> dict | None:
     by_no, by_cid = _balloon_index(plan)
     t = str(ref or "").strip()
-    if mapping:
-        if t in mapping:
-            t = str(mapping[t])
-        else:
-            lower_map = {str(k).lower(): v for k, v in mapping.items()}
-            if t.lower() in lower_map:
-                t = str(lower_map[t.lower()])
+    mapped = _map_ref(t, mapping)
+    if mapped is not None:
+        t = mapped
     if t.upper() in by_cid:
         return by_cid[t.upper()]
     m = re.fullmatch(r"(?:b|#|balloon|bal|char|item)?\s*[-.:#]?\s*(\d{1,4})(?:\.0+)?", t, re.I)
@@ -131,7 +138,8 @@ def parse(name: str, data: bytes, plan: dict, *, default_sample: str | None = No
             ref, sample = cell("balloon"), cell("sample") or (default_sample or "")
             row = resolve_balloon(ref, plan, mapping)
             if row is None:
-                refused.append({"row": i, "ref": ref, "reason": f"no balloon or characteristic {ref!r} in this plan"})
+                refused.append({"row": i, "ref": ref, "code": "unknown_ref",
+                                "reason": f"no balloon or characteristic {ref!r} in this plan"})
                 continue
             cands.append({"row": i, "ref": ref, "cid": row["cid"], "sample": sample, "value": cell("value"),
                           "instrument": cell("instrument"), "unit": cell("unit"), "note": cell("note"),
@@ -146,7 +154,8 @@ def parse(name: str, data: bytes, plan: dict, *, default_sample: str | None = No
             ref = str(r[0]).strip() if r else ""
             row = resolve_balloon(ref, plan, mapping)
             if row is None:
-                refused.append({"row": i, "ref": ref, "reason": f"no balloon or characteristic {ref!r} in this plan"})
+                refused.append({"row": i, "ref": ref, "code": "unknown_ref",
+                                "reason": f"no balloon or characteristic {ref!r} in this plan"})
                 continue
             for j, s in enumerate(samples, start=1):
                 v = str(r[j]).strip() if j < len(r) else ""
@@ -212,7 +221,7 @@ def preview(name: str, data: bytes, plan: dict, *, inspector: str, register: dic
                             "reason": str(ex)})
             continue
         v, why = verdict(rows[c["cid"]], e["value"])
-        is_mapped = bool(mapping and (c["ref"] in mapping or c["ref"].lower() in {str(k).lower(): v for k, v in mapping.items()}))
+        is_mapped = _map_ref(c["ref"], mapping) is not None
         accepted.append({"entry": e, "verdict": v, "why": why, "where": where, "sha256": sha,
                          "ref": c["ref"], "cid": c["cid"],
                          "balloon_no": rows[c["cid"]].get("balloon_no"),
@@ -272,11 +281,15 @@ def load_mapping_profiles(project_dir: Path) -> dict[str, dict]:
     p = mapping_profiles_path(project_dir)
     if not p.is_file():
         return {}
+    # Unreadable is an error, not "no profiles": read as empty, the next save would overwrite the
+    # file and silently drop every other program's mapping.
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
-        return {}
+    except (OSError, ValueError) as ex:
+        raise ValueError(f"{p.name} could not be read ({type(ex).__name__}); it was left unchanged") from ex
+    if not isinstance(data, dict):
+        raise ValueError(f"{p.name} does not hold a set of profiles; it was left unchanged")
+    return data
 
 
 def save_mapping_profile(project_dir: Path, program: str, mappings: dict[str, Any], by: str = "") -> dict:
@@ -301,6 +314,12 @@ def save_mapping_profile(project_dir: Path, program: str, mappings: dict[str, An
                 cleaned_mappings[k_str] = int(v_str)
             else:
                 cleaned_mappings[k_str] = v_str
+    seen: dict[str, str] = {}
+    for k_str in cleaned_mappings:
+        if k_str.lower() in seen:
+            raise ValueError(f"feature names {seen[k_str.lower()]!r} and {k_str!r} differ only in case: "
+                             "which balloon is meant is not guessed")
+        seen[k_str.lower()] = k_str
 
     project_dir = Path(project_dir)
     project_dir.mkdir(parents=True, exist_ok=True)

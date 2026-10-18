@@ -946,9 +946,27 @@ def _extract_dxf_zone_labels(doc, msp, extents: tuple[float, float, float, float
             ay = float(att.dxf.insert.y) if att.dxf.hasattr("insert") else by
             check_entity(raw, ax, ay)
 
-    rows = [c for c in candidates if c[4] == "row"]
-    cols = [c for c in candidates if c[4] == "col"]
+    # A border grid's labels stand on one line along each edge. Anything else in the margin bands
+    # (a title-block revision letter, a sheet number, BOM item numbers) is not a zone label, and as
+    # the nearest label it would hand a wrong zone to every characteristic near it. Measured
+    # 2026-10-18: such strays on 6 of 11 gridded SOLIDWORKS corpus sheets, e.g. revision "B" at the
+    # bottom of cabinet_bath. Only the best-populated line per edge is kept.
+    def on_line(items, axis, tol):
+        best: list = []
+        for c in items:
+            line = [d for d in items if abs(d[axis] - c[axis]) <= tol]
+            if len({d[1] for d in line}) > len({d[1] for d in best}):
+                best = line
+        return best if len({d[1] for d in best}) >= 2 else []
+
+    midx, midy = minx + w / 2, miny + h / 2
+    letters = [c for c in candidates if c[4] == "row"]
+    digits = [c for c in candidates if c[4] == "col"]
+    rows = on_line([c for c in letters if c[2] < midx], 2, 0.01 * w) + \
+        on_line([c for c in letters if c[2] >= midx], 2, 0.01 * w)
+    cols = on_line([c for c in digits if c[3] < midy], 3, 0.01 * h) + \
+        on_line([c for c in digits if c[3] >= midy], 3, 0.01 * h)
     if len({c[1] for c in rows}) >= 2 and len({c[1] for c in cols}) >= 2:
-        return [(c[0], c[1], c[2], c[3]) for c in candidates]
+        return [(c[0], c[1], c[2], c[3]) for c in rows + cols]
     return []
 

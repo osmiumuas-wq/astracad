@@ -1,5 +1,38 @@
 # NEXT ACTION
 
+## 2026-10-18 (Claude, second pass): the features nobody had used live, used live - 5 defects fixed
+
+The scheduled pass verified the Antigravity work by tests, code read and CAD builds, but the project dossier,
+CMM mapping profiles and DXF zones had not been exercised on real data. Doing that found:
+
+1. **Project dossier broken on real data** - the 7550-021 project has 3 runs of one drawing (same stem). The ZIP
+   held 9 names three times each and failed its own `manifest_hashes` check. Runs are now archived under their
+   own folder, sources under their SHA-256, a clash refuses to write, failed exports become open items. Live from
+   the project page: "built and re-verified: 30 files across 3 run(s)", 0 duplicate names.
+2. **Path escape** - `POST /api/cmm_mappings` with `project: "../outside"` (or an absolute path) wrote
+   `cmm_mappings.json` outside the project store. Now only validated project ids / run keys pick the folder
+   (403 otherwise). The regression test fails on the old code.
+3. **Silent profile loss** - a corrupt `cmm_mappings.json` read as empty and the next save overwrote it. Now an
+   error that leaves the file untouched.
+4. **Guessing between names** - `Circle_1` vs `CIRCLE_1` resolved to whichever came last. Now refused at save,
+   and a case-insensitive match is used only when unambiguous.
+5. **DXF zone strays** - title-block letters and table numbers inside the margin bands were taken as zone labels
+   (6 of 11 gridded SOLIDWORKS sheets). Only labels on the border lines count now; corpus: 37 of 111
+   characteristics zoned, all equal to the clean-grid zone; the synthetic regression gave B3 before (true A1).
+
+Also: the CMM profile UI was two `prompt()` boxes asking for raw JSON. It is now a card in the import preview -
+each unresolved feature name with a balloon picker, "Save mapping and check again" - plus "Delete profile".
+Used live: 2 names mapped, profile saved, file re-checked automatically, profile deleted again.
+
+**Drawing dimensions (the scheduled pass's open item): cause found and fixed.** A minimized SOLIDWORKS window
+makes `InsertModelAnnotations3` insert nothing (probe: minimized 0, restored 4). `mac drawing` now restores a
+minimized window for the drawing and minimizes it again. Live: window normal and minimized, both
+END_TO_END_VERIFIED, 4/4 model dimensions, DXF cross-check 4 agree (`_out/drw_recheck_20261018/`).
+
+**Tests: 544 passed**; `mac selftest` 43/43. Not done: a locked Windows session was not tested (see
+known-limitations §J). Next: HANDOFF §7 item 7 - fillets / chamfers on edges named without guessing; digital
+signing of dossiers.
+
 ## 2026-10-18 (Claude, scheduled resume): verification of the Antigravity commits + fixes
 
 **What was found:** all six HANDOFF §7 tasks had been committed by the other agent (astracad c98c660..602f3a3,

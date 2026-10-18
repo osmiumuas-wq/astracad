@@ -196,6 +196,76 @@ def test_cmm_mapping_profile_in_project_and_repeat_import(tmp_path):
     assert log2[2]["sample"] == "SN-2" and log2[2]["source"]["feature_name"] == "LENGTH_100"
 
 
+def test_unknown_feature_names_are_marked_for_mapping(run):
+    w, key, plan_path, plan, b = run
+    csv = "balloon,sample,value\nCIRCLE_7,SN-1,20.01\nCIRCLE_7,SN-2,20.02\n1,SN-1,100.0\n".encode()
+    d = w.import_results(key, "cmm.csv", csv, {"inspector": "Q", "instrument": "CMM-01"})
+    assert [(x["ref"], x.get("code")) for x in d["refused"]] == [("CIRCLE_7", "unknown_ref")] * 2
+    w.save_cmm_mapping({"key": key, "program": "Zeiss Op10", "mappings": {"CIRCLE_7": 2}, "by": "Q"})
+    d = w.import_results(key, "cmm.csv", csv, {"inspector": "Q", "instrument": "CMM-01", "profile": "Zeiss Op10"})
+    assert not d["refused"] and d["mapping_profile"] == "Zeiss Op10"
+    assert sorted((a["ref"], a["balloon_no"], a["mapped"]) for a in d["accepted"]) == \
+        [("1", 1, False), ("CIRCLE_7", 2, True), ("CIRCLE_7", 2, True)]
+
+
+def test_unreadable_profile_file_is_never_overwritten(tmp_path):
+    from astracad_inspect.import_results import load_mapping_profiles, save_mapping_profile
+    p = tmp_path / "cmm_mappings.json"
+    p.write_text('{"CMM-A": {"program": "CMM-A", "mappings": {"C1": 1}}', encoding="utf-8")   # truncated
+    before = p.read_bytes()
+    with pytest.raises(ValueError, match="could not be read"):
+        load_mapping_profiles(tmp_path)
+    with pytest.raises(ValueError, match="left unchanged"):
+        save_mapping_profile(tmp_path, "CMM-B", {"C2": 2})
+    assert p.read_bytes() == before
+
+
+def test_feature_names_differing_only_in_case_are_not_guessed(tmp_path):
+    from astracad_inspect.import_results import save_mapping_profile
+    plan = {"rows": [{"cid": "CH-001", "balloon_no": 1}, {"cid": "CH-002", "balloon_no": 2}]}
+    both = {"Circle_1": 1, "CIRCLE_1": 2}
+    assert resolve_balloon("CIRCLE_1", plan, both)["cid"] == "CH-002"        # exact name wins
+    assert resolve_balloon("circle_1", plan, both) is None                   # two candidates: refused
+    assert resolve_balloon("circle_1", plan, {"Circle_1": 1})["cid"] == "CH-001"
+    with pytest.raises(ValueError, match="differ only in case"):
+        save_mapping_profile(tmp_path, "CMM-A", both)
+
+
+def test_cmm_mapping_folder_never_comes_from_the_callers_path(tmp_path):
+    w = Workspace(tmp_path / "t.db", [tmp_path / "runs"], projects=tmp_path / "projects")
+    pid = w.create_project({"name": "Pump housing"})["id"]
+    body = {"program": "CMM-A", "mappings": {"CIRCLE_1": 1}, "by": "Q"}
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    for bad in ("../outside", "..\\outside", str(outside), "..", "a/../../outside"):
+        with pytest.raises(PermissionError):
+            w.save_cmm_mapping({**body, "project": bad})
+        with pytest.raises(PermissionError):
+            w.cmm_mappings(pid=bad)
+    with pytest.raises(FileNotFoundError):
+        w.save_cmm_mapping({**body, "project": "no-such-project"})
+    assert not list(tmp_path.rglob("cmm_mappings.json"))
+    w.save_cmm_mapping({**body, "project": pid})
+    assert [p.parent.name for p in tmp_path.rglob("cmm_mappings.json")] == [pid]
+
+    httpd = serve(w, "127.0.0.1", 0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        c = http.client.HTTPConnection("127.0.0.1", httpd.server_address[1], timeout=60)
+        c.request("POST", "/api/cmm_mappings", json.dumps({**body, "project": "../outside"}).encode(),
+                  {"Host": "127.0.0.1", "X-AstraCAD": "1", "Content-Type": "application/json"})
+        r = c.getresponse()
+        assert r.status == 403
+        r.read()
+        c.request("GET", "/api/cmm_mappings?project=..%2Foutside", headers={"Host": "127.0.0.1"})
+        r = c.getresponse()
+        assert r.status == 403
+        r.read()
+    finally:
+        httpd.shutdown()
+    assert not (outside / "cmm_mappings.json").exists()
+
+
 def test_cmm_mappings_http_api(run):
     w, key, plan_path, plan, b = run
     httpd = serve(w, "127.0.0.1", 0)
