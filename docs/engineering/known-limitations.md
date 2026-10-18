@@ -311,6 +311,14 @@ covered by a check that now fails if it regresses.
 
 
 
+## L. Gemini planner (2026-10-18)
+
+- Optional and off until set up (docs/engineering/model-gateway.md); only the request text is sent.
+- ASTraCAD checks the plan's form, operations, quotes and numbers - not whether a well-formed plan is the part the
+  user meant; the preview and the Proposed values are there for that review, and Gemini's choices need acceptance.
+- Gemini can only use the operations the CAD runtime has; it cannot make threads, lofts, sweeps or assemblies.
+- Not yet run live with a signed-in Gemini CLI on this PC (not installed at the time of writing).
+
 ## K. Drawing → CAD (2026-10-18)
 
 - One extrusion only: a constant section through a constant thickness with through openings. Steps, bosses, blind

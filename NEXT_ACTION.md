@@ -1,5 +1,29 @@
 # NEXT ACTION
 
+## 2026-10-18 (Claude): Gemini as an optional, checked planner + live check of the other agent's work
+
+**Gemini (user request: "integrate astracad with my Google Gemini Pro plan").** Built and tested with a stand-in model;
+NOT yet run live - the Gemini CLI is not installed on this PC and signing in to Google is the user's step:
+
+    npm install -g @google/gemini-cli     (then run `gemini` once and choose Login with Google - uses the AI Pro plan)
+    workspace: Text to CAD -> Ask Gemini        CLI: astracad_cad build "<request>" --planner gemini --authorize KM
+
+Only the request text is sent. Gemini returns a typed spec (only `mac`'s operations, never code); ASTraCAD checks the
+form, re-checks every number Gemini says is from the request against the request, requires every number to be
+accounted for, marks Gemini's own choices Proposed (the build waits for the user's acceptance), and builds exactly the
+stored plan (hash-checked, never asked twice). docs/engineering/model-gateway.md. 18 tests (incl. a hostile request
+that must stay on stdin, the API key only in a header).
+
+**Live check of the other agent's commits (0eb73d6..2f161ec), SOLIDWORKS 2026, `_out/verify_ag_20261018/`:**
+- Text -> CAD blind hole (dia 10 x 15 deep in 60x40x20): SUCCEEDED, kernel 46821.902755 = prediction.
+- Feature recognition on the R5-plate drawing: SUCCEEDED, 58654.424808 = original; feature tree Cut-Extrude1 + LPattern1.
+- Turned parts from a real SOLIDWORKS drawing (stepped shaft; chamfered shaft): REFUSED - the drawings carry no
+  dimensions (mac does not dimension revolve profiles) and no centre lines; blind-hole row and blind pocket drawings:
+  REFUSED (the outline view shows hidden edges). The reader was only tested on synthetic drawings. Next: dimension
+  `sketch.profile` in `mac`, insert centre lines in `mac drawing`, then re-run these round trips.
+- The other agent's blind-pocket work (drawing_to_cad.py, index.html, tests, docs, mac selftest) is uncommitted in the
+  working trees; left as it is.
+
 ## 2026-10-18 (Antigravity): Drawing → CAD: Blind holes recognized from aligned view hidden lines
 
     py -m astracad_cad from-drawing <drawing.dxf> --out OUT --authorize KM --features

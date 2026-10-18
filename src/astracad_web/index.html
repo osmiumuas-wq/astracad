@@ -387,6 +387,11 @@ pre.code { margin: 0; white-space: pre-wrap; word-break: break-word; font-family
 .mk-note { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; line-height: 1.45; }
 .mk-note .i { flex: none; margin-top: 2px; }
 .mk-out { display: grid; gap: 14px; margin-top: 14px; }
+.mk-gm-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.mk-gm { display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; }
+.mk-gm-plan { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--accent-line); background: var(--accent-soft); font-size: 13px; }
+.mk-gm-plan > .i { flex: none; margin-top: 2px; color: var(--accent); }
+.mk-gm-plan > div { min-width: 0; overflow-wrap: anywhere; }
 .mk-state { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); }
 .mk-state > .i { width: 22px; height: 22px; flex: none; }
 .mk-state b { font-size: 14px; } .mk-state div div { color: var(--ink-2); font-size: 13px; }
@@ -1669,15 +1674,43 @@ async function viewMake() {
   const go = h("button", { class: "btn primary", disabled: true }, ic("play"), "Build in SolidWorks");
   const out = h("div", { class: "mk-out" }), result = h("div", {});
   let seq = 0, last = null, timer = null;
+  // Gemini (opt-in): a plan for requests the fixed phrasings do not cover, checked by ASTraCAD before it can run
+  let gm = null, accepted = false, ms = null;
+  const askBtn = h("button", { class: "btn", disabled: true, title: "sends this request text to Google Gemini" }, ic("layers"), "Ask Gemini");
+  const gmChip = h("span", { class: "mk-gm muted" }, "Gemini: checking…");
+  const otherDecisions = it => (it.ambiguities || []).filter(a => !a.startsWith("Gemini proposed "));
+  const proposals = it => (it.ambiguities || []).some(a => a.startsWith("Gemini proposed "));
+  const gateAsk = () => { askBtn.disabled = !(ms && ms.available && req.value.trim()); };
   const chips = h("div", { class: "mk-chips" }, MAKE_EXAMPLES.map(([t, r]) => h("button", { class: "chip", onclick: () => { req.value = r; req.focus(); run(); } }, t)));
   try { req.value = sessionStorage.getItem("mk.req") || ""; who.value = localStorage.getItem("mk.who") || ""; } catch (e) {}
 
   const gate = () => {
+    if (gm) {
+      const ready = !gm.missing.length && !otherDecisions(gm).length && (!proposals(gm) || accepted);
+      go.disabled = !(ready && gm.cad_enabled && who.value.trim());
+      go.title = !ready ? (proposals(gm) && !accepted ? "accept or reject the values Gemini proposed" : "Gemini's plan needs more information")
+        : !gm.cad_enabled ? "CAD is switched off in this workspace" : !who.value.trim() ? "type your name to authorise the build" : "builds exactly the plan shown, then re-measures it";
+      return;
+    }
     const ok = last && last.executable && last.intent === "create_part" && last.cad_enabled && who.value.trim();
     go.disabled = !ok;
     go.title = !last ? "describe a part first" : !last.executable ? "the request is incomplete or ambiguous" : last.intent !== "create_part" ? "edits of existing parts run from the command line" : !last.cad_enabled ? "CAD is switched off in this workspace" : !who.value.trim() ? "type your name to authorise the build" : "runs once, in a new folder, then re-measures the result";
   };
+  async function askGemini() {
+    const text = req.value.trim();
+    if (!text) return;
+    const my = ++seq;
+    askBtn.disabled = true; askBtn.replaceChildren(h("span", { class: "spin" }), " Asking Gemini…");
+    out.replaceChildren(h("div", { class: "mk-state" }, h("span", { class: "spin" }), h("div", {}, h("b", {}, "Asking Gemini"), h("div", {}, "Sending only this request text; the answer is checked before anything can run."))));
+    try {
+      const it = await post("/api/cad/model_plan", { request: text });
+      if (my !== seq) return;
+      gm = it; accepted = false; render(it);
+    } catch (e) { if (my === seq) out.replaceChildren(empty("alert", "Gemini did not plan it", e.message.replace(/^\w+Error: /, ""))); }
+    finally { askBtn.replaceChildren(ic("layers"), "Ask Gemini"); gateAsk(); gate(); }
+  }
   async function run() {
+    gm = null; accepted = false;
     const text = req.value.trim(); const my = ++seq;
     try { sessionStorage.setItem("mk.req", req.value); } catch (e) {}
     if (!text) { last = null; out.replaceChildren(empty("cube", "Describe a part", "A shape, its sizes with units, the CAD application, and where any holes go.")); gate(); return; }
@@ -1686,13 +1719,25 @@ async function viewMake() {
     last = it; gate(); render(it);
   }
   function render(it) {
-    const state = it.executable ? ["ok", "check", "Ready to build", "Every value is stated or calculated from stated values."]
+    const gemReady = it.plan_id && !it.missing.length && !otherDecisions(it).length;
+    const state = it.plan_id && gemReady && proposals(it) ? ["warn", "alert", "Needs your acceptance", "Gemini chose some values the request does not state. Check them below."]
+      : it.executable ? ["ok", "check", "Ready to build", it.plan_id ? "Every number in Gemini's plan was found in your request." : "Every value is stated or calculated from stated values."]
       : it.intent === "unrecognised" ? ["na", "ban", "Not recognised", "The request does not name a supported shape."]
       : it.ambiguities.length ? ["warn", "alert", "Needs a decision", "Something could be read more than one way. Nothing is guessed."]
       : ["warn", "info", "Needs information", "Add what is listed below; nothing is defaulted."];
     const pv = it.spec ? partPreview(it.spec) : null;
     const exp = it.expect || {};
+    let gmBanner = null;
+    if (it.plan_id) {
+      const cb = h("input", { type: "checkbox", checked: accepted, onchange: () => { accepted = cb.checked; gate(); } });
+      gmBanner = h("div", { class: "mk-gm-plan" }, ic("layers"),
+        h("div", {}, h("b", {}, `Plan by Gemini (${it.provider}, ${it.model})`),
+          h("div", {}, "Sent to Google: this request text and ASTraCAD's fixed instructions - no drawings or files. Each number Gemini says is yours was checked against your words; the others are marked Proposed."),
+          gemReady && proposals(it) ? h("label", { class: "dsg-opt", style: "margin-top:8px" }, cb, h("span", {}, "I accept the values Gemini proposed (Proposed, below) for this build")) : null,
+          h("div", { class: "muted mono", style: "font-size:11.5px;margin-top:6px" }, "plan " + it.plan_id)));
+    }
     out.replaceChildren(
+      gmBanner,
       h("div", { class: `mk-state t-${state[0]}` }, ic(state[1]), h("div", {}, h("b", {}, state[2]), h("div", {}, state[3])),
         h("span", { class: "mk-app" }, it.application ? human(it.application) : "no application", it.exports?.length ? " · " + it.exports.map(e => e.toUpperCase()).join(", ") : "")),
       it.missing.length || it.ambiguities.length ? h("ul", { class: "mk-todo" },
@@ -1711,14 +1756,19 @@ async function viewMake() {
           ], it.facts, {}) : null)),
       it.spec ? h("details", { class: "mk-spec" }, h("summary", {}, "Part spec sent to the CAD runtime (JSON)"), h("pre", { class: "mono" }, JSON.stringify(it.spec, null, 2))) : null);
   }
-  req.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 220); });
+  req.addEventListener("input", () => { gateAsk(); clearTimeout(timer); timer = setTimeout(run, 220); });
+  askBtn.addEventListener("click", askGemini);
+  api("/api/model/status").then(s => { ms = s;
+    gmChip.replaceChildren(h("span", { class: "dot " + (s.available ? "ok" : "") }), s.available ? `Gemini ready · ${s.provider} · ${s.model}` : "Gemini not set up");
+    gmChip.title = s.detail || ""; gateAsk(); }).catch(() => { gmChip.textContent = "Gemini status unavailable"; });
   req.addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !go.disabled) go.click(); });
   who.addEventListener("input", () => { try { localStorage.setItem("mk.who", who.value); } catch (e) {} gate(); });
   go.addEventListener("click", async () => {
     go.disabled = true; go.replaceChildren(h("span", { class: "spin" }), " Building in SolidWorks…");
     result.replaceChildren(card("Build", "SolidWorks is building the part, exporting STEP, then ASTraCAD re-reads the file independently.", null, h("div", { class: "body" }, h("div", { class: "skel", style: "height:14px;width:70%" }), h("div", { class: "skel", style: "height:14px;width:45%;margin-top:8px" }))));
     try {
-      const r = await post("/api/cad/build", { request: req.value.trim(), authorize: who.value.trim() });
+      const r = gm ? await post("/api/cad/model_build", { plan_id: gm.plan_id, authorize: who.value.trim(), accept: accepted })
+        : await post("/api/cad/build", { request: req.value.trim(), authorize: who.value.trim() });
       const tone = r.status === "SUCCEEDED" ? "ok" : r.status === "EXECUTED_UNVERIFIED" ? "warn" : "bad";
       const head = r.status === "SUCCEEDED" ? "Built and verified" : r.status === "EXECUTED_UNVERIFIED" ? "Built, NOT verified" : "Not built";
       toast(`${head} · task ${r.task_id}`, tone);
@@ -1742,6 +1792,8 @@ async function viewMake() {
     h("div", { class: "ph" }, h("div", {}, h("h1", {}, "Text to CAD"), h("p", {}, "Describe a part in plain words. You see exactly what was understood, and where every number came from, before anything runs."))),
     card(null, null, null, h("div", { class: "body mk-compose" },
       req, chips,
+      h("div", { class: "mk-gm-row" }, askBtn, gmChip,
+        h("span", { class: "muted", style: "font-size:12px" }, "For parts the fixed phrasings do not cover. Optional: only the request text is sent, and Gemini's plan is checked before it can run.")),
       h("div", { class: "mk-auth" },
         h("label", { class: "field" }, h("span", {}, "Authorised by"), who),
         h("div", { class: "muted mk-note" }, ic("shield"), "Your name authorises one build into a new folder. The part is re-measured by SolidWorks and its STEP file re-read independently; a value that cannot be checked is reported as not verifiable."),

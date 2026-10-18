@@ -146,6 +146,61 @@ class Workspace:
                 "files": files, "folder": self.key_for(out), "authorized_by": who,
                 "expect": it.expect, "spec": it.spec}
 
+    # ---- model gateway (opt-in: Gemini plans, ASTraCAD checks, the user accepts) -------------------
+    def model_status(self) -> dict:
+        from astracad_core.model_gateway import status
+        return status()
+
+    def _plans_dir(self) -> Path:
+        return self.runs[0] / "model_plans"
+
+    def model_plan(self, body: dict) -> dict:
+        """Send the request text - nothing else - to the configured model and check its plan. Builds nothing."""
+        from astracad_core.model_gateway import ModelError, provider, status
+        from astracad_core.model_planner import plan
+        prov = provider()
+        if prov is None:
+            raise PermissionError("no model is set up: " + status()["detail"])
+        try:
+            it, rec = plan(str(body.get("request", "")), prov, store=self._plans_dir())
+        except ModelError as ex:
+            raise ValueError(f"Gemini: {ex}") from None
+        d = it.to_dict()
+        d.update(plan_id=rec["plan_id"], provider=prov.name, model=prov.model, cad_enabled=self._orch_factory is not None)
+        return d
+
+    def model_build(self, body: dict) -> dict:
+        """Build exactly the plan that was shown: re-read from its record, the record's hash checked, the
+        answer checked again - never asked for again."""
+        import hashlib
+        from astracad_core.model_gateway import Reply
+        from astracad_core.model_planner import accept, interpret_reply
+        who = re.sub(r"\s+", " ", str(body.get("authorize") or "")).strip()
+        if not who:
+            raise PermissionError("type your name to authorise this build")
+        if len(who) > 80:
+            raise ValueError("authoriser name is limited to 80 characters")
+        if self._orch_factory is None:
+            raise PermissionError("CAD is switched off in this workspace (started with --no-cad-status)")
+        pid = str(body.get("plan_id", ""))
+        if not re.fullmatch(r"[0-9a-f]{16}", pid):
+            raise PermissionError("unknown plan")
+        p = self._plans_dir() / f"{pid}.json"
+        if not p.is_file():
+            raise FileNotFoundError("no such plan")
+        ex = json.loads(p.read_text(encoding="utf-8"))["exchange"]
+        body_ex = {k: v for k, v in ex.items() if k != "plan_id"}
+        if hashlib.sha256(json.dumps(body_ex, sort_keys=True).encode("utf-8")).hexdigest()[:16] != pid:
+            raise PermissionError("the stored plan was changed after it was made; ask again")
+        it = interpret_reply(ex["request"], Reply(ex["response"], ex["provider"], ex["model"]))
+        if it.spec:
+            it.spec["notes"] = {**(it.spec.get("notes") or {}), "planner": ex["provider"], "model": ex["model"], "plan_id": pid}
+        if body.get("accept") is True:
+            accept(it, who)
+        if not it.executable:
+            raise ValueError("not executable: " + "; ".join(it.missing + it.ambiguities))
+        return self._create(it, who)
+
     def _dxf_source(self, body: dict) -> Path:
         """A project's preserved drawing - its hash re-checked first, as for an inspection."""
         src = self._need_projects().source_path(str(body.get("project", "")), str(body.get("source", "")), verify=True)
@@ -1070,6 +1125,8 @@ def make_handler(ws: Workspace):
                     return self._json(ws.instruments())
                 if u.path == "/api/signers":
                     return self._json(ws.signers())
+                if u.path == "/api/model/status":
+                    return self._json(ws.model_status())
                 if u.path == "/api/dossier_info":
                     return self._json(ws.dossier_info(q.get("key", [""])[0]))
                 if u.path == "/api/ncrs":
@@ -1239,6 +1296,10 @@ def make_handler(ws: Workspace):
                     return self._json(ws.cad_build(body.get("request", ""), body.get("authorize", "")))
                 if u.path == "/api/drawing_cad/interpret":
                     return self._json(ws.drawing_interpret(body))
+                if u.path == "/api/cad/model_plan":
+                    return self._json(ws.model_plan(body))
+                if u.path == "/api/cad/model_build":
+                    return self._json(ws.model_build(body))
                 if u.path == "/api/drawing_cad/build":
                     return self._json(ws.drawing_build(body))
                 if u.path == "/api/dossier":
