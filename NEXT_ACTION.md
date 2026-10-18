@@ -12,10 +12,15 @@ of mass, bodies, STEP box) and is accepted only when the kernels agree - 32/32 r
 `_out/m0_20261018/` (Qwen's L-bracket, a plate with a hole row) SUCCEEDED with every check; shaded 3D previews on the
 Text to CAD page. docs/engineering/two-kernel-verification.md.
 
-Next (M1): the v2 operations in OpenCascade (planes, any-sketch cut, revolve about a line, mirror, patterns, holes,
-shell, query fillets, booleans, sweep, loft). The SOLIDWORKS side is proposed as its own session ("mac: Part Language
-v2 operations + assemblies", worktree C:\New folder (4)\mac-v2, branch part-language-v2). Then assemblies (M2) and the
-V6 template (M3).
+M1, OpenCascade half - done: every v2 operation builds in the second kernel against closed forms (48 geometry tests:
+planes, directions, revolve about any line, groove, mirror, 2-D and any-axis patterns, counterbore/countersink, shell,
+query fillets with convex/concave and count enforcement, booleans, line/arc and helix sweeps, ruled lofts).
+docs/engineering/two-kernel-verification.md "M1".
+
+Next: the SOLIDWORKS half of M1 is the proposed session ("mac: Part Language v2 operations + assemblies", worktree
+C:\New folder (4)\mac-v2, branch part-language-v2) - when it lands, add the v2 operations to model_planner's `_OPS`
+and instructions, then build one live spec per operation and compare. Meanwhile here: assemblies in OpenCascade (M2:
+AssemblySpec, interfaces, placement, interference) and the V6 generators (M3).
 
 ## 2026-10-18 (Claude): the local model (Qwen via Strata) as the planner, Gemini removed + live check of the other agent's work
 

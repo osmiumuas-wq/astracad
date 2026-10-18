@@ -41,6 +41,21 @@ Classes B (blends) and F (free-form) start at 1e-4 / 1e-3 and are set from measu
 - Replays of real SOLIDWORKS runs in the adapter tests (`tests/test_geom_compare.py`): agreement accepted, a 0.1 %
   volume difference rejected, a disagreeing build not accepted.
 
+## M1 - the v2 operations in OpenCascade (2026-10-18)
+
+The second kernel now builds every Part Language v2 operation (`tests/test_geom_v2.py`, each against a closed form):
+reference planes (offset and explicit frames; the `top` and `right` frames as in section 1 of the language), extrude
+and cut from any sketch in any direction (one-sided, reversed, mid-plane), revolve and cut-revolve about the sketch's
+u / v axes or any line, at any angle (Pappus), mirror of features and bodies, linear patterns in two directions and
+circular patterns about any axis, counterbore and countersink holes (cylinders and cones, exact), shell with faces
+chosen by query (exact on a box), fillets and chamfers on edges chosen by query - convex and concave told apart by
+the dihedral rule, the count enforced (a 6-edge expectation against 5 convex edges stops the step), multi-body parts
+and `body.boolean` (subtract, intersect), sweeps along lines and arcs (Pappus to 1e-7) and along a helix (a spring:
+area x helix length to 1e-4, class F), and piecewise-ruled lofts (prismatoid and frustum, exact).
+
+The SOLIDWORKS half of the same operations is the separate `mac` session (branch `part-language-v2`); until a v2
+operation lands there, a v2 spec cannot be built in SOLIDWORKS at all - nothing is claimed for it.
+
 ## Previews
 
 `astracad_geom/preview.py` meshes the OpenCascade build and draws a shaded isometric SVG with visible edges only
@@ -49,8 +64,8 @@ Text to CAD page (`POST /api/cad/preview`), with OpenCascade's volume and size -
 
 ## Limits
 
-- The second kernel builds the v1 operations today; v2 operations (planes, sweeps, lofts, shells, query fillets...)
-  come with M1 - until then those parts are "not verifiable" by the second kernel, never passed.
+- The second kernel builds v1 and v2 operations; a closed hollow (shell without an opened face) is not built yet -
+  "not verifiable", never passed.
 - Two kernels reading the same spec can share a misreading of the language itself; the closed forms (a third,
   independent leg), the STEP re-read and the language document are the guard against that.
 - Requires `cadquery-ocp` (the `geometry` extra, ~131 MB with vtk); without it nothing is claimed.

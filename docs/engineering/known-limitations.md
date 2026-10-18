@@ -313,8 +313,9 @@ covered by a check that now fails if it regresses.
 
 ## M. Two-kernel verification (2026-10-18)
 
-- The second kernel (OpenCascade) builds the v1 operations; a spec with v2 operations is "not verifiable" by it until
-  M1 brings them - never passed (docs/engineering/two-kernel-verification.md).
+- The second kernel (OpenCascade) builds v1 and v2 operations; SOLIDWORKS builds only v1 until the `mac` half of M1
+  lands, so a v2 spec cannot be built in SOLIDWORKS yet. A closed hollow (shell with no face opened) is not built by
+  the second kernel yet ("not verifiable", never passed). docs/engineering/two-kernel-verification.md.
 - Through-all features are compared at 1e-5 relative: SOLIDWORKS's own through-all result deviates from the exact
   solid (measured up to 5.6e-6).
 - Two kernels reading the same spec could share a misreading of the language; the closed forms and the STEP re-read

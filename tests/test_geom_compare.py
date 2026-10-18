@@ -62,7 +62,7 @@ def test_what_the_second_kernel_cannot_build_yet_is_not_verifiable():
     spec = {**prism_spec(), "language": 2,
             "features": prism_spec()["features"] + [{"$op": "feature.shell", "id": "x", "args": {"thickness": 2}}]}
     (c,), _ = cmp.compare(spec, REAL)
-    assert c["outcome"] == "not_verifiable" and "not built by the second kernel" in c["why"]
+    assert c["outcome"] == "not_verifiable" and "not built here yet" in c["why"]          # a closed hollow
 
 
 def test_a_spec_the_second_kernel_refuses_is_a_failure():

@@ -35,7 +35,7 @@ def compare(spec: dict, measured: dict, step_bbox: list | None = None,
     if not available():
         return [_c("occ:build", "not_verifiable", "an OpenCascade build of the spec", "OpenCascade not installed",
                    "install cadquery-ocp (docs/engineering/two-kernel-verification.md)")], {}
-    from .occ_build import BuildError, NotSupported, SpecError, build
+    from .occ_build import BuildError, NotSupported, QueryMismatch, SpecError, build
     from .props import measure
     try:
         built = build(spec)
@@ -44,6 +44,8 @@ def compare(spec: dict, measured: dict, step_bbox: list | None = None,
     except SpecError as ex:
         return [_c("occ:build", "failed", "the spec is valid Part Language", f"refused: {ex}",
                    "SOLIDWORKS ran a spec the second kernel finds invalid")], {"refused": str(ex)}
+    except QueryMismatch as ex:            # the language fixes what a query selects: a different count is a fault
+        return [_c("occ:build", "failed", "the spec's edge/face queries hold", "count differs", str(ex))], {}
     except BuildError as ex:
         return [_c("occ:build", "not_verifiable", "an OpenCascade build of the spec",
                    "OpenCascade could not build it", str(ex))], {}

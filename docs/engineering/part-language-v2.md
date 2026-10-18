@@ -85,7 +85,9 @@ Args: `profile` (sketch id, closed); `path`:
   right-handed, starting at origin + r * start_dir;
 
 `operation`: `"add"` | `"cut"`; `new_body` / `body`. The profile plane must contain the path's start point and be
-perpendicular to its start tangent (within 1e-9). Profile orientation follows the path (no twist).
+perpendicular to its start tangent (within 1e-9). Profile orientation: along lines and arcs the profile keeps its
+attitude to the path (no twist); along a helix it follows the helix's Frenet frame (it turns with the helix, as a
+spring's wire does).
 Expectation: lines and arcs in one plane - Pappus per segment (exact); helix - no closed form (the other kernel).
 
 ### 3.4 `feature.loft` (piecewise ruled)
@@ -96,7 +98,8 @@ consecutive sections - both kernels build exactly that (no smooth lofts in v2).
 Expectation: between parallel section planes, the prismatoid formula h/6 (A1 + 4 Am + A2) per pair (exact).
 
 ### 3.5 `feature.shell`
-Args: `thickness` > 0 (inward); `remove`: a face query (section 4), the faces left open; `body`.
+Args: `thickness` > 0 (inward); `remove`: `{"faces": <face query>}` (section 4), the faces left open; `body`.
+Inner walls meet at sharp edges (the offset faces are intersected, not rounded).
 Expectation: no closed form in general (the other kernel decides).
 
 ### 3.6 `feature.fillet` / `feature.chamfer`
@@ -106,7 +109,8 @@ Args: `radius` (fillet) | `distance` (+ optional `angle`, chamfer, default 45); 
 ### 3.7 `feature.hole`
 Args: `diameter`; `depth` | `through_all`; `centers`: `[[u, v], ...]` in the `sketched_on` frame (or v1 `center`);
 `type`: `"simple"` | `"counterbore"` (`cbore_diameter`, `cbore_depth`) | `"countersink"` (`csk_diameter`,
-`csk_angle`, default 90); `direction` `"normal"` | `"reverse"` | `"both"` (default `"both"` = v1); `thread`:
+`csk_angle`, default 90); `direction` `"normal"` | `"reverse"` | `"both"` (default `"both"` = v1; a counterbore or
+countersink needs `"normal"` or `"reverse"`: its entry is the sketch plane, its drill goes that way); `thread`:
 optional label such as `"M8x1.25"` (a cosmetic thread in SOLIDWORKS, an attribute in OpenCascade - the geometry
 is the drilled `diameter`). Expectation: cylinders and cones, exact.
 

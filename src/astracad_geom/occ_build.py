@@ -15,12 +15,21 @@ from typing import Any
 
 from OCP.BRep import BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Curve
-from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut, BRepAlgoAPI_Fuse
+from OCP.BRepAlgoAPI import BRepAlgoAPI_Common, BRepAlgoAPI_Cut, BRepAlgoAPI_Fuse
+from OCP.BRepLib import BRepLib
+from OCP.BRepOffset import BRepOffset_Skin
+from OCP.BRepOffsetAPI import (BRepOffsetAPI_MakePipe, BRepOffsetAPI_MakePipeShell, BRepOffsetAPI_MakeThickSolid,
+                               BRepOffsetAPI_ThruSections)
+from OCP.BRepTools import BRepTools
+from OCP.Geom import Geom_CylindricalSurface
+from OCP.Geom2d import Geom2d_Line
+from OCP.GeomAbs import GeomAbs_Intersection
+from OCP.collections import List_TopoDS_Shape
 from OCP.BRepBndLib import BRepBndLib
 from OCP.BRepBuilderAPI import (BRepBuilderAPI_MakeEdge, BRepBuilderAPI_MakeFace, BRepBuilderAPI_MakeWire,
                                 BRepBuilderAPI_Transform)
 from OCP.BRepFilletAPI import BRepFilletAPI_MakeChamfer, BRepFilletAPI_MakeFillet
-from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism, BRepPrimAPI_MakeRevol
+from OCP.BRepPrimAPI import BRepPrimAPI_MakeCone, BRepPrimAPI_MakeCylinder, BRepPrimAPI_MakePrism, BRepPrimAPI_MakeRevol
 from OCP.Bnd import Bnd_Box
 from OCP.GC import GC_MakeArcOfCircle
 from OCP.GeomAbs import GeomAbs_Circle, GeomAbs_Line
@@ -29,9 +38,10 @@ from OCP.TopAbs import TopAbs_EDGE
 from OCP.TopExp import TopExp
 from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher as TopTools_IndexedMapOfShape
 from OCP.TopoDS import TopoDS
-from OCP.gp import gp_Ax1, gp_Ax2, gp_Circ, gp_Dir, gp_Pnt, gp_Trsf, gp_Vec
+from OCP.gp import gp_Ax1, gp_Ax2, gp_Ax3, gp_Circ, gp_Dir, gp_Dir2d, gp_Pnt, gp_Pnt2d, gp_Trsf, gp_Vec
 
 from . import frames as F
+from . import queries as Q
 
 LIN_TOL = 1e-6          # mm: coincidence of points, "parallel to Z" etc.
 V1_OPS = {"sketch.rectangle", "sketch.circle", "sketch.loops", "sketch.profile", "feature.extrude", "feature.cut",
@@ -51,6 +61,12 @@ class NotSupported(Exception):
 class BuildError(RuntimeError):
     """OpenCascade could not build a valid spec (a kernel limitation or a geometric impossibility)."""
 
+
+class QueryMismatch(BuildError):
+    """A query found a different number of edges or faces than the spec expects (the step fails)."""
+
+
+CLASS_ORDER = "EBF"          # verification classes, tightest first (part-language-v2.md section 6)
 
 @dataclass
 class Sketch:
@@ -105,7 +121,14 @@ def _unify(shape):
 
 
 def _boolean(kind: str, a, b, what: str):
-    op = BRepAlgoAPI_Fuse(a, b) if kind == "add" else BRepAlgoAPI_Cut(a, b)
+    if kind in ("add", "fuse"):
+        op = BRepAlgoAPI_Fuse(a, b)
+    elif kind in ("cut", "subtract"):
+        op = BRepAlgoAPI_Cut(a, b)
+    elif kind == "intersect":
+        op = BRepAlgoAPI_Common(a, b)
+    else:
+        raise SpecError(f"{what}: unknown boolean {kind!r}")
     if not op.IsDone() or op.Shape().IsNull():
         raise BuildError(f"{what}: OpenCascade boolean {kind} failed")
     return _unify(op.Shape())
@@ -150,6 +173,7 @@ class Builder:
         self.frames: dict[str, F.Frame] = dict(F.NAMED)
         self.sketches: dict[str, Sketch] = {}
         self.pending: str | None = None
+        self.unused: list[str] = []             # sketches not used yet, oldest first
         self.bodies: dict[str, Any] = {}
         self.tools: dict[str, Tool] = {}
         self.log: list[str] = []
@@ -184,8 +208,8 @@ class Builder:
             if fn is None:
                 raise NotSupported(f"{f.get('id')}: {op} is not built by the second kernel yet")
             fn(f, f.get("args") or {})
-        if self.pending is not None:
-            raise SpecError(f"sketch {self.pending} is never used")
+        if self.unused:
+            raise SpecError(f"sketch {self.unused[0]} is never used")
         if not self.bodies:
             raise SpecError("the spec makes no solid")
         shapes = list(self.bodies.values())
@@ -210,11 +234,24 @@ class Builder:
         return fr
 
     def _add_sketch(self, f, loops, kind):
-        if self.pending is not None and self.language < 2:
-            raise SpecError(f"{f.get('id')}: sketch {self.pending} was never used")
+        if self.unused and self.language < 2:
+            raise SpecError(f"{f.get('id')}: sketch {self.unused[-1]} was never used")
         sid = str(f.get("id"))
+        if sid in self.sketches:
+            raise SpecError(f"{sid}: sketch id already used")
         self.sketches[sid] = Sketch(sid, self._frame(f), loops, kind)
+        self.unused.append(sid)
         self.pending = sid
+
+    def _class(self, c: str):
+        if CLASS_ORDER.index(c) > CLASS_ORDER.index(self.tolerance_class):
+            self.tolerance_class = c
+
+    def _plane(self, name) -> F.Frame:
+        fr = self.frames.get(str(name).strip().lower()) or self.frames.get(str(name))
+        if fr is None:
+            raise SpecError(f"{name!r} is not a known plane")
+        return fr
 
     def op_sketch_rectangle(self, f, a):
         w, h = float(a["width"]), float(a["height"])
@@ -241,12 +278,23 @@ class Builder:
         self._add_sketch(f, [F.polygon_loop([(float(p[0]), float(p[1])) for p in pts])], "profile")
 
     def _take(self, f, wanted: str | None = None) -> Sketch:
-        sid = wanted or self.pending
-        if sid is None or sid not in self.sketches:
-            raise SpecError(f"{f.get('id')}: no sketch to use")
-        if sid == self.pending:
-            self.pending = None
-        return self.sketches.pop(sid)
+        sid = wanted or (self.unused[-1] if self.unused else None)
+        if sid is None or sid not in self.unused:
+            raise SpecError(f"{f.get('id')}: no unused sketch {sid or ''} to use".rstrip())
+        self.unused.remove(sid)
+        self.pending = self.unused[-1] if self.unused else None
+        return self.sketches[sid]
+
+    def _wire(self, loop, fr: F.Frame):
+        mw = BRepBuilderAPI_MakeWire()
+        for seg in loop:
+            mw.Add(self._edge(seg, fr))
+            if not mw.IsDone():
+                raise SpecError("a loop is not closed or its segments do not connect")
+        wire = mw.Wire()
+        if not BRep_Tool.IsClosed_s(wire):
+            raise SpecError("a loop is not closed")
+        return wire
 
     # ---- faces and tools ----
     def _edge(self, seg, fr: F.Frame):
@@ -272,15 +320,7 @@ class Builder:
         raise SpecError(f"unknown segment kind {k!r}")
 
     def _face(self, loop, fr: F.Frame):
-        mw = BRepBuilderAPI_MakeWire()
-        for seg in loop:
-            mw.Add(self._edge(seg, fr))
-            if not mw.IsDone():
-                raise SpecError("a loop is not closed or its segments do not connect")
-        wire = mw.Wire()
-        if not BRep_Tool.IsClosed_s(wire):
-            raise SpecError("a loop is not closed")
-        mf = BRepBuilderAPI_MakeFace(wire, True)
+        mf = BRepBuilderAPI_MakeFace(self._wire(loop, fr), True)
         if not mf.IsDone():
             raise BuildError("no planar face from a loop")
         return mf.Face()
@@ -421,8 +461,9 @@ class Builder:
             raise SpecError(f"{f.get('id')}: diameter must be > 0")
         fr = self._frame({**f, "sketched_on": f.get("sketched_on") or "front"})
         centers = a.get("centers") or [a.get("center") or [0, 0]]
-        if (a.get("type") or "simple") != "simple":
-            raise NotSupported(f"{f.get('id')}: counterbore/countersink holes come with M1")
+        kind = str(a.get("type") or "simple")
+        if kind not in ("simple", "counterbore", "countersink"):
+            raise SpecError(f"{f.get('id')}: hole type must be simple, counterbore or countersink")
         sk = Sketch(str(f.get("id")), fr, [[["C", float(c[0]), float(c[1]), d / 2]] for c in centers], "holes")
         depth = self._through_length(sk) if a.get("through_all") else float(a.get("depth", float("nan")))
         if not depth > 0:
@@ -430,10 +471,31 @@ class Builder:
         direction = str(a.get("direction", "both"))
         tool = None
         for lp in sk.loops:   # each centre is its own bore (not an opening of a larger loop)
-            one = self._prism(Sketch(sk.id, fr, [lp], "hole"), depth, direction)
+            if kind == "simple":
+                one = self._prism(Sketch(sk.id, fr, [lp], "hole"), depth, direction)
+            else:
+                one = self._stepped_hole(f, a, fr.point(lp[0][1], lp[0][2]), fr.n, d, depth, direction, kind)
             tool = one if tool is None else _boolean("add", tool, one, str(f.get("id")))
         self._apply(f, tool, "cut", str(a.get("body") or "main"))
         self.log.append(f"{f.get('id')}: hole dia {d} x {len(centers)}")
+
+    def _stepped_hole(self, f, a, p, n, d, depth, direction, kind):
+        if direction not in ("normal", "reverse"):
+            raise SpecError(f"{f.get('id')}: a {kind} hole needs direction normal or reverse (its entry side)")
+        ax = gp_Ax2(_p(p), _d(n if direction == "normal" else F.mul(n, -1)))
+        tool = BRepPrimAPI_MakeCylinder(ax, d / 2, depth).Shape()
+        if kind == "counterbore":
+            cd, ch = float(a.get("cbore_diameter", float("nan"))), float(a.get("cbore_depth", float("nan")))
+            if not (cd > d and 0 < ch < depth):
+                raise SpecError(f"{f.get('id')}: cbore_diameter must exceed diameter, 0 < cbore_depth < depth")
+            return _boolean("add", tool, BRepPrimAPI_MakeCylinder(ax, cd / 2, ch).Shape(), str(f.get("id")))
+        cd, ang = float(a.get("csk_diameter", float("nan"))), float(a.get("csk_angle", 90))
+        if not (cd > d and 0 < ang < 180):
+            raise SpecError(f"{f.get('id')}: csk_diameter must exceed diameter, 0 < csk_angle < 180")
+        h = (cd - d) / 2 / math.tan(math.radians(ang) / 2)
+        if h >= depth:
+            raise SpecError(f"{f.get('id')}: the countersink is deeper than the hole")
+        return _boolean("add", tool, BRepPrimAPI_MakeCone(ax, cd / 2, d / 2, h).Shape(), str(f.get("id")))
 
     # ---- edge treatments ----
     def _select_edges(self, f, a, body):
@@ -470,7 +532,15 @@ class Builder:
                 picks += [c[0] for c in plane if abs(c[3] - rmax) < LIN_TOL]
             return picks
         if isinstance(sel, dict):
-            raise NotSupported(f"{f.get('id')}: query selection comes with M1")
+            if self.language < 2 or set(sel) != {"edges"}:
+                raise SpecError(f"{f.get('id')}: a query select is {{\"edges\": {{...}}}} in a language 2 spec")
+            self._class("B")
+            try:
+                return Q.select_edges(body, sel["edges"])
+            except Q.QueryCountError as ex:
+                raise QueryMismatch(f"{f.get('id')}: {ex}") from None
+            except ValueError as ex:
+                raise SpecError(f"{f.get('id')}: {ex}") from None
         raise SpecError(f"{f.get('id')}: select must be corners or end_circles")
 
     def op_feature_fillet(self, f, a):
@@ -508,30 +578,43 @@ class Builder:
         self.log.append(f"{f.get('id')}: chamfer {c} on {len(picks)} edge(s)")
 
     # ---- patterns ----
+    def _seeds(self, f, a) -> list[Tool]:
+        names = a.get("features") or [a.get("feature")]
+        out = []
+        for seed in names:
+            if seed not in self.tools:
+                raise SpecError(f"{f.get('id')}: feature {seed!r} is not an earlier solid feature")
+            out.append(self.tools[seed])
+        return out
+
     def _seed(self, f, a) -> Tool:
-        seed = a.get("feature")
-        if seed not in self.tools:
-            raise SpecError(f"{f.get('id')}: feature {seed!r} is not an earlier solid feature")
-        return self.tools[seed]
+        return self._seeds(f, a)[0]
 
     def op_feature_pattern_linear(self, f, a):
-        t = self._seed(f, a)
+        seeds = self._seeds(f, a)
         count, spacing = int(a.get("count", 2)), float(a.get("spacing", float("nan")))
         if not (2 <= count <= 1000 and spacing > 0):
             raise SpecError(f"{f.get('id')}: count 2..1000 and spacing > 0 needed")
         d = F.axis(a.get("direction", "X"))
         if a.get("reversed"):
             d = F.mul(d, -1)
-        if a.get("count2") or a.get("direction2"):
-            raise NotSupported(f"{f.get('id')}: two-direction patterns come with M1")
-        for k in range(1, count):
-            inst = _translated(t.shape, F.mul(d, k * spacing))
-            self.bodies[t.body] = _boolean(t.op, self.bodies[t.body], inst, str(f.get("id")))
-        self.tools[str(f.get("id"))] = Tool(t.shape, t.op, t.body)
-        self.log.append(f"{f.get('id')}: {count} x {spacing} along {d}")
+        steps = [F.mul(d, k * spacing) for k in range(count)]
+        if a.get("count2") or a.get("direction2") or a.get("spacing2"):
+            c2, s2 = int(a.get("count2", 2)), float(a.get("spacing2", float("nan")))
+            if not (2 <= c2 <= 1000 and s2 > 0):
+                raise SpecError(f"{f.get('id')}: count2 2..1000 and spacing2 > 0 needed")
+            d2 = F.axis(a.get("direction2", "Y"))
+            steps = [F.add(s, F.mul(d2, k * s2)) for s in steps for k in range(c2)]
+        for t in seeds:
+            for off in steps[1:]:
+                inst = _translated(t.shape, off)
+                self.bodies[t.body] = _boolean(t.op, self.bodies[t.body], inst, str(f.get("id")))
+        self.tools[str(f.get("id"))] = Tool(seeds[0].shape, seeds[0].op, seeds[0].body)
+        self.log.append(f"{f.get('id')}: {len(steps)} instance(s) along {d}")
 
     def op_feature_pattern_circular(self, f, a):
-        t = self._seed(f, a)
+        seeds = self._seeds(f, a)
+        t = seeds[0]
         count, angle = int(a.get("count", 2)), float(a.get("angle", 360))
         if not (2 <= count <= 1000 and 0 < angle <= 360):
             raise SpecError(f"{f.get('id')}: count 2..1000 and angle in (0, 360] needed")
@@ -555,11 +638,191 @@ class Builder:
         step = angle / count if abs(angle - 360) < 1e-9 else angle / (count - 1)
         if a.get("reversed"):
             step = -step
-        for k in range(1, count):
-            inst = _rotated(t.shape, origin, direction, math.radians(k * step))
-            self.bodies[t.body] = _boolean(t.op, self.bodies[t.body], inst, str(f.get("id")))
+        for t in seeds:
+            for k in range(1, count):
+                inst = _rotated(t.shape, origin, direction, math.radians(k * step))
+                self.bodies[t.body] = _boolean(t.op, self.bodies[t.body], inst, str(f.get("id")))
         self.tools[str(f.get("id"))] = Tool(t.shape, t.op, t.body)
         self.log.append(f"{f.get('id')}: {count} around {direction} at {origin}, step {step} deg")
+
+    # ---- v2: planes, bodies, mirror, shell, sweep, loft ----
+    def op_ref_plane(self, f, a):
+        fid = str(f.get("id"))
+        if not fid or fid in self.frames:
+            raise SpecError(f"{fid!r}: a plane needs a new id")
+        try:
+            self.frames[fid] = F.plane_frame(a, self.frames)
+        except ValueError as ex:
+            raise SpecError(f"{fid}: {ex}") from None
+        fr = self.frames[fid]
+        self.log.append(f"{fid}: plane at {tuple(round(c, 6) for c in fr.origin)} normal {tuple(round(c, 9) for c in fr.n)}")
+
+    def op_body_boolean(self, f, a):
+        kind, target, tools = a.get("op"), a.get("target", "main"), a.get("tools")
+        if kind not in ("add", "subtract", "intersect") or not (isinstance(tools, list) and tools):
+            raise SpecError(f"{f.get('id')}: op add|subtract|intersect and a list of tool bodies needed")
+        if target not in self.bodies or any(t not in self.bodies or t == target for t in tools):
+            raise SpecError(f"{f.get('id')}: unknown body among {target!r}, {tools!r}")
+        shape = self.bodies[target]
+        for t in tools:
+            shape = _boolean(kind, shape, self.bodies.pop(t), str(f.get("id")))
+        self.bodies[target] = shape
+        self.log.append(f"{f.get('id')}: {kind} {tools} -> {target}")
+
+    def op_feature_mirror(self, f, a):
+        fr = self._plane(a.get("plane", "right"))
+        t = gp_Trsf()
+        t.SetMirror(gp_Ax2(_p(fr.origin), _d(fr.n)))
+        if a.get("body"):
+            b = "main" if a["body"] is True else str(a["body"])
+            if b not in self.bodies:
+                raise SpecError(f"{f.get('id')}: no body {b!r} to mirror")
+            image = BRepBuilderAPI_Transform(self.bodies[b], t, True).Shape()
+            self.bodies[b] = _boolean("add", self.bodies[b], image, str(f.get("id")))
+            self.log.append(f"{f.get('id')}: body {b} joined with its mirror image")
+            return
+        names = a.get("features")
+        if not (isinstance(names, list) and names):
+            raise SpecError(f"{f.get('id')}: mirror needs features [ids] or body: true")
+        for name in names:
+            if name not in self.tools:
+                raise SpecError(f"{f.get('id')}: feature {name!r} is not an earlier solid feature")
+            tool = self.tools[name]
+            image = BRepBuilderAPI_Transform(tool.shape, t, True).Shape()
+            self.bodies[tool.body] = _boolean(tool.op, self.bodies[tool.body], image, str(f.get("id")))
+        self.log.append(f"{f.get('id')}: mirrored {names}")
+
+    def op_feature_shell(self, f, a):
+        b = str(a.get("body") or "main")
+        body, t = self.bodies.get(b), float(a.get("thickness", float("nan")))
+        if body is None or not t > 0:
+            raise SpecError(f"{f.get('id')}: shell needs a solid and thickness > 0")
+        rem = a.get("remove")
+        if not (isinstance(rem, dict) and set(rem) == {"faces"}):
+            raise NotSupported(f"{f.get('id')}: a closed hollow (no face removed) is not built here yet")
+        try:
+            faces = Q.select_faces(body, rem["faces"])
+        except Q.QueryCountError as ex:
+            raise QueryMismatch(f"{f.get('id')}: {ex}") from None
+        except ValueError as ex:
+            raise SpecError(f"{f.get('id')}: {ex}") from None
+        lst = List_TopoDS_Shape()
+        for face in faces:
+            lst.Append(face)
+        mk = BRepOffsetAPI_MakeThickSolid()
+        mk.MakeThickSolidByJoin(body, lst, -t, 1e-6, BRepOffset_Skin, False, False, GeomAbs_Intersection)
+        mk.Build()
+        if not mk.IsDone():
+            raise BuildError(f"{f.get('id')}: OpenCascade could not shell at {t}")
+        self.bodies[b] = _unify(mk.Shape())
+        self._class("B")
+        self.log.append(f"{f.get('id')}: shell {t}, {len(faces)} face(s) open")
+
+    def _path(self, f, segs):
+        """A connected wire of 3D lines and arcs-through-three-points; returns (wire, start point, start tangent)."""
+        if not (isinstance(segs, list) and segs):
+            raise SpecError(f"{f.get('id')}: path segments needed")
+        mw, prev, start, tangent = BRepBuilderAPI_MakeWire(), None, None, None
+        for s in segs:
+            pts = [tuple(float(c) for c in p) for p in s[1:]]
+            if s[0] == "L" and len(pts) == 2:
+                e = BRepBuilderAPI_MakeEdge(_p(pts[0]), _p(pts[1])).Edge()
+                tan = F.sub(pts[1], pts[0])
+            elif s[0] == "A" and len(pts) == 3:
+                curve = GC_MakeArcOfCircle(_p(pts[0]), _p(pts[1]), _p(pts[2])).Value()
+                e = BRepBuilderAPI_MakeEdge(curve).Edge()
+                p0, v0 = gp_Pnt(), gp_Vec()
+                curve.D1(curve.FirstParameter(), p0, v0)
+                tan = (v0.X(), v0.Y(), v0.Z())
+            else:
+                raise SpecError(f"{f.get('id')}: path segment must be [\"L\", p1, p2] or [\"A\", p1, pm, p2]")
+            if prev is not None and F.norm(F.sub(prev, pts[0])) > LIN_TOL:
+                raise SpecError(f"{f.get('id')}: path segments do not connect")
+            if start is None:
+                start, tangent = pts[0], F.unit(tan, "path tangent")
+            prev = pts[-1]
+            mw.Add(e)
+            if not mw.IsDone():
+                raise SpecError(f"{f.get('id')}: path segments do not connect")
+        return mw.Wire(), start, tangent
+
+    def _helix(self, f, h):
+        try:
+            o = tuple(float(c) for c in h["origin"])
+            ax, sd = F.unit(h["axis"], "helix axis"), F.unit(h["start_dir"], "helix start_dir")
+            r, p, turns = float(h["radius"]), float(h["pitch"]), float(h["turns"])
+        except (KeyError, TypeError, ValueError) as ex:
+            raise SpecError(f"{f.get('id')}: helix needs origin, axis, radius, pitch, turns, start_dir ({ex})") from None
+        if abs(F.dot(ax, sd)) > 1e-9 or not (r > 0 and p > 0 and turns > 0):
+            raise SpecError(f"{f.get('id')}: start_dir must be perpendicular to the axis; radius, pitch, turns > 0")
+        surf = Geom_CylindricalSurface(gp_Ax3(_p(o), _d(ax), _d(sd)), r)
+        line = Geom2d_Line(gp_Pnt2d(0.0, 0.0), gp_Dir2d(2 * math.pi, p))
+        length = turns * math.hypot(2 * math.pi, p)
+        edge = BRepBuilderAPI_MakeEdge(line, surf, 0.0, length).Edge()
+        BRepLib.BuildCurves3d_s(edge)
+        wire = BRepBuilderAPI_MakeWire(edge).Wire()
+        start = F.add(o, F.mul(sd, r))
+        tangent = F.unit(F.add(F.mul(F.cross(ax, sd), 2 * math.pi * r), F.mul(ax, p)), "helix tangent")
+        return wire, start, tangent
+
+    def op_feature_sweep(self, f, a):
+        sk = self._take(f, a.get("profile"))
+        path = a.get("path") or {}
+        helix = isinstance(path, dict) and "helix" in path
+        if helix:
+            wire, start, tangent = self._helix(f, path["helix"])
+            self._class("F")
+        elif isinstance(path, dict) and "segments" in path:
+            wire, start, tangent = self._path(f, path["segments"])
+        else:
+            raise SpecError(f"{f.get('id')}: path must be {{segments: [...]}} or {{helix: {{...}}}}")
+        fr = sk.frame
+        if abs(F.dot(F.sub(start, fr.origin), fr.n)) > LIN_TOL or abs(abs(F.dot(fr.n, tangent)) - 1) > 1e-9:
+            raise SpecError(f"{f.get('id')}: the profile plane must contain the path's start point and be "
+                            "perpendicular to its start tangent")
+
+        def make(face):
+            if not helix:
+                return BRepOffsetAPI_MakePipe(wire, face).Shape()
+            ps = BRepOffsetAPI_MakePipeShell(wire)
+            ps.SetMode(True)                              # Frenet: the profile turns with the helix
+            ps.Add(BRepTools.OuterWire_s(face), False, False)
+            ps.Build()
+            if not ps.IsDone() or not ps.MakeSolid():
+                raise BuildError(f"{f.get('id')}: OpenCascade could not sweep along the helix")
+            return ps.Shape()
+        tool = self._sweep_tool(sk, make)
+        op = str(a.get("operation", "add"))
+        if op not in ("add", "cut"):
+            raise SpecError(f"{f.get('id')}: operation must be add or cut")
+        self._apply(f, tool, op, str(a.get("body") or a.get("new_body") or "main"))
+        self.log.append(f"{f.get('id')}: sweep {sk.id} along {'a helix' if helix else 'lines/arcs'}")
+
+    def op_feature_loft(self, f, a):
+        ids = a.get("sections")
+        if not (isinstance(ids, list) and len(ids) >= 2):
+            raise SpecError(f"{f.get('id')}: a loft needs two or more sections")
+        secs = [self._take(f, sid) for sid in ids]
+        if any(len(s.loops) != 1 for s in secs):
+            raise SpecError(f"{f.get('id')}: each loft section is one closed loop")
+        loops = [s.loops[0] for s in secs]
+        circles = [len(lp) == 1 and lp[0][0] == "C" for lp in loops]
+        polys = [all(seg[0] == "L" for seg in lp) for lp in loops]
+        if not (all(circles) or (all(polys) and len({len(lp) for lp in loops}) == 1)):
+            raise SpecError(f"{f.get('id')}: sections must all be single circles, or polygons with the same "
+                            "number of segments")
+        ts = BRepOffsetAPI_ThruSections(True, True, 1e-6)
+        ts.CheckCompatibility(False)
+        for s, lp in zip(secs, loops):
+            ts.AddWire(self._wire(lp, s.frame))
+        ts.Build()
+        if not ts.IsDone():
+            raise BuildError(f"{f.get('id')}: OpenCascade could not loft the sections")
+        op = str(a.get("operation", "add"))
+        if op not in ("add", "cut"):
+            raise SpecError(f"{f.get('id')}: operation must be add or cut")
+        self._apply(f, ts.Shape(), op, str(a.get("body") or a.get("new_body") or "main"))
+        self.log.append(f"{f.get('id')}: ruled loft through {ids}")
 
     # ---- records ----
     def op_feature_parameter(self, f, a):
