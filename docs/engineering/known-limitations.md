@@ -261,12 +261,15 @@ covered by a check that now fails if it regresses.
 
 ## H. Text → CAD (2026-10-17)
 
-- Shapes: block / plate, cylinder / disc / flange, stepped shaft, tube / washer / spacer, through holes
+- Shapes: block / plate, cylinder / disc / flange, stepped shaft, tube / washer / spacer, through holes or blind holes
   (one, a straight row, a bolt circle), and rectangular pockets and slots (pocket, recess, slot, groove, channel)
   in the front face, and one fillet or 45 deg chamfer per request on the 4 outline corners of a block or the
-  outer edge at both ends of a round part (cylinder / disc / stepped shaft). No threads, blind holes,
+  outer edge at both ends of a round part (cylinder / disc / stepped shaft). No threads,
   counterbores, features on other faces, other edges (e.g. "all edges", "one end", a tube's bore) or other
   chamfer angles: a fillet / chamfer word that is not a supported phrase is reported missing, never dropped.
+- Blind holes: hole depth must be positive and not exceed part thickness (non-positive depths or depths exceeding
+  part thickness are reported as ambiguities and refused). Analytic volume subtraction and web UI preview SVG
+  reflect the blind depth (dashed outline and depth callout ↧).
 - Fillets / chamfers: holes and pockets must stay clear of the treated corner squares (s x s) or end rims
   (radius R - s); the check is conservative (a hole's bounding box), so a hole that would just clear the
   curved edge can still be refused. A bare "R5" takes the request's unit only when it has exactly one.

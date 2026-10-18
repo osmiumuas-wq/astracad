@@ -236,7 +236,7 @@ def interpret(request: str, default_app: str | None = None) -> Interpretation:
         if cuts["removed_mm3"]:
             vol_calc += f" - {cuts['removed_mm3']:g}"
         if holes["count"]:
-            vol_calc += f" - {holes['count']}*pi*(dh/2)^2*d"
+            vol_calc += f" - {holes['count']}*pi*(dh/2)^2*{holes['depth']:g}" if holes.get("is_blind") else f" - {holes['count']}*pi*(dh/2)^2*d"
         it.facts.append(Fact("volume_mm3", vol, "mm^3", "CALCULATED", vol_calc))
         tag = f"block_{w:g}x{h:g}x{d:g}" + treat_tag + cuts["tag"] + holes["tag"]
         it.spec = {"name": _safe_name(tag), "units": "mm",
@@ -328,7 +328,7 @@ def interpret(request: str, default_app: str | None = None) -> Interpretation:
         if cuts["removed_mm3"]:
             vol_calc += f" - {cuts['removed_mm3']:g}"
         if holes["count"]:
-            vol_calc += f" - {holes['count']}*pi*(dh/2)^2*L"
+            vol_calc += f" - {holes['count']}*pi*(dh/2)^2*{holes['depth']:g}" if holes.get("is_blind") else f" - {holes['count']}*pi*(dh/2)^2*L"
         it.facts.append(Fact("volume_mm3", vol, "mm^3", "CALCULATED", vol_calc))
         tag = f"{m.group(1)}_d{dia:g}_l{length:g}" + treat_tag + cuts["tag"] + holes["tag"]
         it.spec = {"name": _safe_name(tag),
@@ -642,22 +642,50 @@ def _holes(it: Interpretation, low: str, face: str, w: float, h: float,
         if not inside:
             it.ambiguities.append(f"a {dh:g} mm hole at ({x:.4g}, {y:.4g}) breaks out of the face")
             return None
-    # Depth = the part's thickness, not "through all": on SW 2026 through-all resolved inside the
+    dm = re.search(r"\b(?:depth|deep)\s*(?:of\s*)?" + _NUM + _UNIT, low) or \
+        re.search(_NUM + _UNIT + r"\s*(?:deep|depth)\b", low)
+    through_m = re.search(r"\b(through|thru|through-all|through\s+all)\b", low)
+    d_hole = depth
+    is_blind = False
+    if dm:
+        h_depth = _to_mm(dm.group(1), _norm_unit(dm.group(2)), "hole_depth", it, dm.group(0))
+        if h_depth is None:
+            return None
+        if h_depth <= 0:
+            it.ambiguities.append("hole depth must be greater than zero")
+            return None
+        if h_depth > depth:
+            it.ambiguities.append(f"hole depth {h_depth:g} mm exceeds part thickness {depth:g} mm")
+            return None
+        d_hole = h_depth
+        is_blind = h_depth < depth
+        if is_blind:
+            it.facts.append(Fact("hole_depth", d_hole, "mm", "USER_SPECIFIED", dm.group(0)))
+            if n == 1:
+                tag = f"_hole{dh:g}x{d_hole:g}"
+            elif pcd:
+                tag = f"_{n}x{dh:g}x{d_hole:g}_pcd{p:g}"
+            else:
+                tag = f"_{n}x{dh:g}x{d_hole:g}_p{s:g}"
+    elif through_m:
+        it.facts.append(Fact("hole_depth", depth, "mm", "USER_SPECIFIED", through_m.group(0)))
+
+    # Depth = the part's thickness (or stated depth for blind holes), not "through all": on SW 2026 through-all resolved inside the
     # kernel left 0.4-2 ppm of material and a 6e-6 mm sliver in the STEP box (measured
     # 2026-10-17: disc 5 mm -> 5.000006); a dimensioned depth from the start face measured exact.
     if extra:
         feats = [{"$op": "feature.hole", "id": "hole1", "sketched_on": "front",
-                  "args": {"diameter": dh, "depth": depth,
+                  "args": {"diameter": dh, "depth": round(d_hole, 9),
                            "center": [round(centres[0][0], 9), round(centres[0][1], 9)]}}] + extra
     else:
         feats = [{"$op": "feature.hole", "id": f"hole{k + 1}", "sketched_on": "front",
-                  "args": {"diameter": dh, "depth": depth,
+                  "args": {"diameter": dh, "depth": round(d_hole, 9),
                            "center": [round(x, 9), round(y, 9)]}}
                  for k, (x, y) in enumerate(centres)]
     it.facts.append(Fact("hole_centres_mm", [[round(x, 6), round(y, 6)] for x, y in centres], "mm",
                          "CALCULATED", "from the stated count, diameter and pitch / circle"))
-    return {"features": feats, "removed_mm3": n * math.pi * (dh / 2) ** 2 * depth, "count": n,
-            "tag": tag}
+    return {"features": feats, "removed_mm3": n * math.pi * (dh / 2) ** 2 * d_hole, "count": n,
+            "tag": tag, "depth": d_hole, "is_blind": is_blind}
 
 
 def _cuts(it: Interpretation, low: str, face: str, w: float, h: float,

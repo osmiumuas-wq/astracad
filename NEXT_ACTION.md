@@ -1,5 +1,36 @@
 # NEXT ACTION
 
+## 2026-10-18 (Antigravity): Text → CAD: Blind holes with depth validation & SVG styling
+
+    workspace: "Text to CAD" (e.g. "SolidWorks 60 x 40 x 20 mm block with a 10 mm hole, 15 mm deep, centred")
+    py -m pytest -q tests/test_text_to_cad.py
+
+Text → CAD now supports blind holes with explicit depth across prismatic and cylindrical parts:
+- Regex parsing: recognizes natural language depth phrasings (e.g. `15 mm deep`, `depth 15 mm`, `depth of 15 mm`, `through`, `thru`, `through-all`).
+- Bounds validation: strictly refuses non-positive depth (`depth <= 0`) and depths exceeding the part thickness (`h_depth > depth`) as ambiguities rather than guessing or defaulting.
+- Provenance & Spec: records `hole_depth` Fact (`USER_SPECIFIED`), passes exact depth in `feature.hole` args, and includes depth in generated part tags (e.g. `block_60x40x20_hole10x15`).
+- Exact Volume Calculation: computes exact removed material `n * pi * (dh / 2)^2 * d_hole` for single holes, linear hole rows, and bolt circles.
+- Web UI Part Preview: in `src/astracad_web/index.html` `partPreview`, blind holes are rendered with dashed pocket styling (`pv-pocket`) and depth callout annotation (`↧depth`, e.g. `Ø10 ↧15`).
+- CAD runtime verification compatibility: `mac` (C# / .NET 10) `Verification.cs` already analytically validates blind holes (`volume = volume - Math.PI * r^2 * depth; area = a + 2 * Math.PI * r * depth`); selftest `hb` (bored block) confirms exact verification.
+
+### What was changed:
+- `src/astracad_core/requests.py`: updated `_holes` parser to extract depth, validate against part thickness, populate `is_blind` and `depth`, update volume calculation formula, and update block and disc volume formulas.
+- `src/astracad_web/index.html`: updated `partPreview` to track hole depth and render blind holes with `pv-pocket` dashed stroke and `↧` depth callouts.
+- `tests/test_text_to_cad.py`: added 5 unit tests covering single blind hole on a block, row of blind holes on a plate, blind hole on a disc, bounds refusal tests, and through-hole default compatibility (42/42 passing).
+- `docs/competitive/parity-matrix.md`: updated row C-18.
+- `docs/engineering/known-limitations.md`: updated section H.
+- `CURRENT_STATE.md`: updated baseline to 605 tests passed.
+
+### What was verified and how:
+- `py -m pytest -q tests/test_text_to_cad.py`: 42/42 passed.
+- `py -m pytest -q tests/test_web.py`: 14/14 passed (including JavaScript syntax check).
+- `py -m pytest -q --basetemp "$env:TEMP\pytest_astracad"`: full suite 605 passed, 0 failed in 224s.
+- `dotnet run --project src/Mac -- selftest`: 50/50 checks passed (including analytic blind hole derivation).
+- Line ending audit: 100% byte-level consistency preserved across all modified files.
+
+### What could not be verified:
+- Live SOLIDWORKS CAD build was not triggered against the live SolidWorks instance in this step to respect the non-negotiable rule that user's open documents (food-processor assembly) must never be modified or closed, and CAD writes require explicit authorization (`--authorize`).
+
 ## 2026-10-18 (Antigravity): Drawing → CAD for turned parts (stepped shafts, chamfered pins, hollow bushings)
 
     py -m astracad_cad from-drawing <drawing.dxf> --out OUT --authorize KM [--through] [--thickness MM] [--scale K]

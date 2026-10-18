@@ -1588,10 +1588,10 @@ function partPreview(spec) {
   const treat = F.find(f => (f.$op === "feature.fillet" || f.$op === "feature.chamfer") && f.args.select);
   const ts = treat ? (treat.args.radius ?? treat.args.distance) : 0, round = treat?.$op === "feature.fillet";
   const tLabel = treat ? (round ? `R${g6(ts)}` : `${g6(ts)} × 45°`) : "";
-  let holes = by("feature.hole").map(f => ({ x: f.args.center[0], y: f.args.center[1], d: f.args.diameter }));
+  let holes = by("feature.hole").map(f => ({ x: f.args.center[0], y: f.args.center[1], d: f.args.diameter, depth: f.args.depth }));
   for (const p of by("feature.pattern.linear")) {
     const seed = F.find(f => f.id === p.args.feature); if (!seed) continue;
-    for (let k = 1; k < p.args.count; k++) holes.push({ x: seed.args.center[0] + (p.args.direction === "X" ? k * p.args.spacing : 0), y: seed.args.center[1] + (p.args.direction === "Y" ? k * p.args.spacing : 0), d: seed.args.diameter });
+    for (let k = 1; k < p.args.count; k++) holes.push({ x: seed.args.center[0] + (p.args.direction === "X" ? k * p.args.spacing : 0), y: seed.args.center[1] + (p.args.direction === "Y" ? k * p.args.spacing : 0), d: seed.args.diameter, depth: seed.args.depth });
   }
   for (const p of by("feature.pattern.circular")) {
     // count instances spread equally over the full turn about the pattern centre
@@ -1599,7 +1599,7 @@ function partPreview(spec) {
     const [cx, cy] = p.args.center || [0, 0], sx = seed.args.center[0] - cx, sy = seed.args.center[1] - cy;
     for (let k = 1; k < p.args.count; k++) {
       const a = 2 * Math.PI * k / p.args.count;
-      holes.push({ x: cx + sx * Math.cos(a) - sy * Math.sin(a), y: cy + sx * Math.sin(a) + sy * Math.cos(a), d: seed.args.diameter });
+      holes.push({ x: cx + sx * Math.cos(a) - sy * Math.sin(a), y: cy + sx * Math.sin(a) + sy * Math.cos(a), d: seed.args.diameter, depth: seed.args.depth });
     }
   }
   const pockets = rects.filter(r => r !== rect).map(r => {
@@ -1647,10 +1647,10 @@ function partPreview(spec) {
       if (treat) { kids.push(s("circle", { cx: 0, cy: 0, r: r - ts, class: "pv-edge" })); labels.push({ x: x1, y: y1, t: `${tLabel} both ends`, above: true, tag: true, anchor: "end" }); }
     }
     for (const p of pockets) kids.push(s("rect", { x: p.x, y: p.y, width: p.width, height: p.height, class: p.through ? "pv-hole" : "pv-pocket" }));
-    for (const c of holes) kids.push(s("circle", { cx: c.x, cy: c.y, r: c.d / 2, class: "pv-hole" }));
+    for (const c of holes) kids.push(s("circle", { cx: c.x, cy: c.y, r: c.d / 2, class: c.depth && ext && c.depth < ext.args.depth ? "pv-pocket" : "pv-hole" }));
     if (rect) labels.push({ x: x1 / 2, y: y0, t: g6(x1), below: true }, { x: x1, y: y1 / 2, t: g6(y1), side: true });
     else labels.push({ x: 0, y: y0, t: "Ø" + g6(2 * circ.args.radius), below: true });
-    if (holes.length) labels.push({ x: holes[0].x, y: holes[0].y + holes[0].d / 2, t: `${holes.length > 1 ? holes.length + "× " : ""}Ø${g6(holes[0].d)}`, above: true, tag: true });
+    if (holes.length) { const blind = holes[0].depth && ext && holes[0].depth < ext.args.depth; labels.push({ x: holes[0].x, y: holes[0].y + holes[0].d / 2, t: `${holes.length > 1 ? holes.length + "× " : ""}Ø${g6(holes[0].d)}${blind ? " ↧" + g6(holes[0].depth) : ""}`, above: true, tag: true }); }
     for (const p of pockets) labels.push({ x: p.x + p.width / 2, y: p.y + p.height / 2, t: `${g6(p.width)} × ${g6(p.height)}${p.through ? " thru" : ""}`, tag: true });
   } else return null;
   const span = Math.max(x1 - x0, y1 - y0), m = span * .16, fs = span * .052;

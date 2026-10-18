@@ -286,3 +286,47 @@ def test_export_step_does_not_make_a_shaft_stepped():
     assert it.exports == ["step"]
     stepped = interpret("SolidWorks stepped shaft dia 20 mm x 50 mm, export STEP")      # one step only
     assert not stepped.executable and "at least two steps" in stepped.missing[0]
+
+
+# ---- blind holes with specified depth -----------------------------------------------------------
+def test_blind_hole_on_a_block_predicts_exact_volume():
+    it = interpret("SolidWorks 60 x 40 x 20 mm block with a 10 mm hole, 15 mm deep, centred")
+    assert it.executable
+    assert it.fact("hole_depth") == 15.0
+    assert it.fact("hole_centres_mm") == [[30.0, 20.0]]
+    assert it.spec["features"][-1]["args"]["depth"] == 15.0
+    assert it.spec["features"][-1]["args"]["diameter"] == 10.0
+    assert it.expect["volume_mm3"] == pytest.approx(48000 - math.pi * 25 * 15)
+    assert "_hole10x15" in it.spec["name"]
+
+
+def test_blind_holes_in_linear_row():
+    it = interpret("SolidWorks 100 x 40 x 10 mm plate with 4 x 6 mm holes at 20 mm pitch along the width, 5 mm deep, centred")
+    assert it.executable
+    assert it.fact("hole_depth") == 5.0
+    assert it.spec["features"][2]["args"]["depth"] == 5.0
+    assert it.expect["volume_mm3"] == pytest.approx(40000 - 4 * math.pi * 9 * 5)
+
+
+def test_blind_holes_on_a_disc():
+    it = interpret("SolidWorks disc diameter 50 mm thick 20 mm with a 10 mm hole, 12 mm deep, centred")
+    assert it.executable
+    assert it.fact("hole_depth") == 12.0
+    assert it.spec["features"][-1]["args"]["depth"] == 12.0
+    assert it.expect["volume_mm3"] == pytest.approx(math.pi * 625 * 20 - math.pi * 25 * 12)
+
+
+def test_blind_hole_depth_exceeding_thickness_or_non_positive_is_refused():
+    deep = interpret("SolidWorks 60 x 40 x 20 mm block with a 10 mm hole, 25 mm deep, centred")
+    assert not deep.executable and any("exceeds part thickness" in a for a in deep.ambiguities)
+    zero = interpret("SolidWorks 60 x 40 x 20 mm block with a 10 mm hole, 0 mm deep, centred")
+    assert not zero.executable and any("greater than zero" in a for a in zero.ambiguities)
+
+
+def test_through_hole_explicit_or_default_retains_part_thickness():
+    thru = interpret("SolidWorks 60 x 40 x 20 mm block with a 10 mm through hole, centred")
+    assert thru.executable and thru.spec["features"][-1]["args"]["depth"] == 20.0
+    assert thru.expect["volume_mm3"] == pytest.approx(48000 - math.pi * 25 * 20)
+    default = interpret("SolidWorks 60 x 40 x 20 mm block with a 10 mm hole, centred")
+    assert default.executable and default.spec["features"][-1]["args"]["depth"] == 20.0
+    assert default.expect["volume_mm3"] == pytest.approx(48000 - math.pi * 25 * 20)
