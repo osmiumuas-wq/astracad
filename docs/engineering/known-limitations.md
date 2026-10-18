@@ -299,6 +299,11 @@ covered by a check that now fails if it regresses.
 
 ## I. Quality dossiers (2026-10-17)
 
+- **Signatures (2026-10-18)**: one key per person, kept on this PC, opened by a passphrase - no hardware token,
+  no certificate authority, no trusted timestamp (the signing time is the PC clock). A recipient without the
+  register sees "VALID, key not trusted here" and must confirm the key id with the signer. The cover PDF is not
+  itself a signed PDF (PAdES): the signature lives in `signatures/` inside the ZIP. Format and an independent
+  check: docs/engineering/dossier-signatures.md.
 - **Project-level quality dossier**: aggregates all runs in a project folder. If a run has multiple samples, each is checked; an empty project cannot build a dossier. Drawing sources modified outside ASTraCAD are excluded from the sources/ folder with a note in the manifest and PDF rather than halting the dossier generation.
 
 

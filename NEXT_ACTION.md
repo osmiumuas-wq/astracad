@@ -1,5 +1,29 @@
 # NEXT ACTION
 
+## 2026-10-18 (Claude): signed quality dossiers (HANDOFF §7 item 7, second half)
+
+    py -m astracad_web ... --keys %USERPROFILE%\.astracad\keys   ->  Signing keys (make a key), then Quality dossier -> Sign
+    py -m astracad_inspect dossier verify <dossier.zip> --register <projects>\signers.json
+
+An Ed25519 signature over `manifest.json` (every file by SHA-256), one of three fixed meanings - prepared,
+reviewed, approved (only when the dossier states conformance, and not by the preparer). Signatures sit in
+`signatures/NN.json` inside the ZIP and chain to the earlier ones. Private keys exist only encrypted with the
+signer's passphrase, outside every project and run folder; the register holds public keys. A rebuild never
+overwrites a signed dossier (`_v2.zip`). Format + an independent check: docs/engineering/dossier-signatures.md
+(the recipe there was run against the signed dossier and passes).
+
+Used live on the 7550-021 project dossier with a key named "Test Signer (Claude UI check)" in a scratch key
+folder (`_out/ui3/test_signing_keys`) - no key or signature was made in anyone's real name: key made, wrong
+passphrase refused (package unchanged), signed as prepared, "approved" offered disabled (3 open items),
+checked by the CLI with and without the register, key revoked (the earlier signature still checks out,
+"revoked later").
+
+Found and fixed while doing so: a package with a changed file still showed its signature as TRUSTED (the
+signed manifest itself was intact); now any changed or added file makes every signature on it fail.
+
+Tests: **577 passed**. Not done: trusted timestamps, certificates / hardware tokens, PAdES signing of the cover PDF (see
+known-limitations §I).
+
 ## 2026-10-18 (Claude): fillets and chamfers on edges named without guessing (HANDOFF §7 item 7, first half)
 
     py -m astracad_cad build "SolidWorks 100 x 60 x 10 mm plate with R5 corners and 4 x 6 mm holes at 20 mm pitch along the width, centred, export STEP" --out OUT --authorize KM

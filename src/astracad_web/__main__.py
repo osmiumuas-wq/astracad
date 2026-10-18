@@ -21,18 +21,21 @@ def main(argv: list[str] | None = None) -> int:
                     help="folder of inspection runs / change sets (repeatable; first gets new runs)")
     ap.add_argument("--projects", default=str(Path.home() / ".astracad" / "projects"),
                     help="project store: uploaded drawings are preserved here (read-only, by SHA-256)")
+    ap.add_argument("--keys", default=str(Path.home() / ".astracad" / "keys"),
+                    help="folder of the encrypted signing keys (never inside a project or run folder)")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--no-cad-status", action="store_true",
                     help="do not probe CAD applications (faster start, no COM access)")
     a = ap.parse_args(argv)
     runs = a.runs or [str(Path.cwd() / "_out" / "web")]
-    ws = Workspace(a.db, runs, None if a.no_cad_status else _orch, projects=a.projects)
+    ws = Workspace(a.db, runs, None if a.no_cad_status else _orch, projects=a.projects, keys_dir=a.keys)
     httpd = serve(ws, "127.0.0.1", a.port)
     print(f"WORKSPACE  http://127.0.0.1:{a.port}/   (local only; Ctrl+C to stop)")
     print(f"TASKS      {a.db}")
     for r in ws.runs:
         print(f"RUNS       {r}")
     print(f"PROJECTS   {ws.projects.root}")
+    print(f"KEYS       {ws.keys_dir}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

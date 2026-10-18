@@ -21,6 +21,9 @@ dependencies = [
 # (Apache-2.0 / BSD-3). PyMuPDF (AGPL-3.0) is needed ONLY by tools/iso286_extract.py, the offline
 # rebuild of the ISO 286-2 table, and is never imported at run time.
 table-rebuild = ["PyMuPDF==1.28.2"]
+# Signed quality dossiers (Ed25519, encrypted private keys): cryptography (Apache-2.0 OR BSD-3-Clause).
+# Without it, dossiers are still built and hash-checked; signing and signature checks say it is missing.
+signing = ["cryptography==50.0.1"]
 # Scanned drawings: two OCR engines that must agree. Windows-only (Windows.Media.Ocr ships with
 # Windows 10/11); without this extra the raster route reports the engines as unavailable.
 ocr = ["rapidocr_onnxruntime==1.2.3", "winrt-runtime==3.2.1", "winrt-Windows.Media.Ocr==3.2.1",

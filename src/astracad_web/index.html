@@ -419,6 +419,35 @@ pre.code { margin: 0; white-space: pre-wrap; word-break: break-word; font-family
 .mk-spec summary { padding: 10px 14px; cursor: pointer; font-size: 13px; color: var(--ink-2); }
 .mk-spec pre { margin: 0; padding: 12px 14px; border-top: 1px solid var(--line); max-height: 320px; overflow: auto; font-size: 12px; background: var(--surface-2); }
 @media (max-width: 900px) { .mk-grid { grid-template-columns: 1fr; } .mk-auth { grid-template-columns: 1fr; } .mk-app { display: none; } }
+.btn.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+.ellip { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+dialog.dsg { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--line-strong); border-radius: 14px;
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow-lg); overflow: hidden; }
+dialog.dsg::backdrop { background: rgba(8, 10, 14, .45); backdrop-filter: blur(2px); }
+.dsg-hd { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.dsg-hd > div { flex: 1; } .dsg-hd b { font-size: 15px; } .dsg-hd .muted { font-size: 12.5px; }
+.dsg-hd .ic { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.dsg-bd { padding: 14px 16px 16px; display: grid; gap: 10px; overflow: auto; max-height: calc(100vh - 130px); }
+.dsg-bd > *, .dsg-bd .mk-state > div, .dsg-sigs li > * { min-width: 0; }
+.dsg-bd .mk-state div, .dsg-sigs li, .dsg-checks li .muted { overflow-wrap: anywhere; }
+.dsg-bd h3 { margin: 8px 0 0; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.dsg-checks, .dsg-sigs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.dsg-checks li { display: flex; gap: 10px; align-items: center; font-size: 13px; min-width: 0; }
+.dsg-checks li .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsg-sigs li { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 4px; font-size: 13px; background: var(--surface-2); }
+.dsg-sig-top { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.dsg-q { color: var(--ink-2); font-style: italic; font-size: 12.5px; }
+.dsg-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; align-items: end; }
+.dsg-form .wide { grid-column: 1 / -1; }
+.dsg-stmt { margin: 0; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; font-size: 13px; }
+.dsg-go { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12.5px; }
+.dsg-ft { display: flex; gap: 8px; justify-content: flex-end; padding-top: 6px; border-top: 1px solid var(--line); margin-top: 4px; }
+.sgn-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 14px; align-items: end; }
+.sgn-rev { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.sgn-rev .input { width: 150px; }
+.sgn-means { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.sgn-means p { margin: 4px 0; color: var(--ink-2); font-style: italic; font-size: 13px; }
+@media (max-width: 640px) { .dsg-form { grid-template-columns: 1fr; } .sgn-rev .input { width: 100%; } }
 .mapgrid { display: grid; grid-template-columns: minmax(120px, max-content) max-content minmax(200px, 420px); gap: 8px 14px; align-items: center; }
 .mapsave { display: flex; gap: 8px; align-items: center; padding-top: 0; }
 .mapsave .input { width: 260px; }
@@ -478,6 +507,7 @@ pre.code { margin: 0; white-space: pre-wrap; word-break: break-word; font-family
     <button class="nav" data-tab="templates"><svg class="i" data-i="tasks"></svg><span class="lbl">Checklist templates</span></button>
     <button class="nav" data-tab="ncrs"><svg class="i" data-i="flag"></svg><span class="lbl">Nonconformances</span><span class="count" id="n-ncr"></span></button>
     <button class="nav" data-tab="instruments"><svg class="i" data-i="crosshair"></svg><span class="lbl">Instruments</span><span class="count" id="n-inst"></span></button>
+    <button class="nav" data-tab="signatures"><svg class="i" data-i="shield"></svg><span class="lbl">Signing keys</span></button>
     <button class="nav" data-tab="changes"><svg class="i" data-i="diff"></svg><span class="lbl">Revision changes</span></button>
     <div class="navlabel">Manufacturing</div>
     <button class="nav" data-tab="machining"><svg class="i" data-i="cube"></svg><span class="lbl">Machining</span></button>
@@ -665,6 +695,7 @@ function palBase() {
     { label: "Projects", group: "Page", icon: "file", run: () => location.hash = "#projects" },
     { label: "Inspections", group: "Page", icon: "scan", run: () => location.hash = "#inspections" },
     { label: "Instruments", group: "Page", icon: "crosshair", run: () => location.hash = "#instruments" },
+    { label: "Signing keys", group: "Page", icon: "shield", run: () => location.hash = "#signatures" },
     { label: "Machining calculations", group: "Page", icon: "cube", run: () => location.hash = "#machining" },
     { label: "Nonconformances", group: "Page", icon: "flag", run: () => location.hash = "#ncrs" },
     { label: "Checklist templates", group: "Page", icon: "tasks", run: () => location.hash = "#templates" },
@@ -1028,8 +1059,7 @@ async function viewInspection(key, keepSel, focusId) {
             const r = await post("/api/dossier", { key, sample: serial });
             const okv = r.checks.every(c => c.ok);
             toast(`${okv ? "Dossier built and re-verified" : "Dossier built, verification FAILED"}: ${r.files} files${serial ? " for " + serial : ""}`, okv ? "ok" : "bad");
-            toast(r.status.conforming ? "Records show conformance (no open items)" : `${r.status.open_items.length} open item(s): ${r.status.open_items[0]}`, r.status.conforming ? "ok" : "warn");
-            window.open("/file?key=" + encodeURIComponent(r.file), "_blank", "noopener");
+            dossierDialog(r.file);
           } catch (e) { toast("Dossier not built: " + e.message.replace(/^\w+Error: /, ""), "bad"); }
           finally { b.disabled = false; b.replaceChildren(ic("shield"), "Quality dossier"); }
         } }, ic("shield"), "Quality dossier")));
@@ -1717,6 +1747,117 @@ async function viewMake() {
   gate();
 }
 
+// ---------- Dossier signatures ----------
+// A signature is a named person's Ed25519 signature over the dossier's manifest (every file by
+// SHA-256). "valid" = genuine and bound to this exact package; "trusted" = also made by a key in this
+// workstation's register, under that name, not revoked at the time.
+const sigPill = s => s.trusted ? pill("ok", "shield", "Valid · registered key") : s.valid ? pill("warn", "alert", "Valid · key not trusted here") : pill("bad", "x", "Does not check out");
+async function dossierDialog(fileKey) {
+  const dlg = h("dialog", { class: "dsg", "aria-label": "Quality dossier" });
+  document.body.append(dlg);
+  dlg.addEventListener("close", () => dlg.remove());
+  dlg.addEventListener("click", e => { if (e.target === dlg) dlg.close(); });
+  const F = (label, el, cls = "") => h("label", { class: "field " + cls }, h("span", {}, label), el);
+  async function draw() {
+    let d;
+    try { d = await api("/api/dossier_info?key=" + encodeURIComponent(fileKey)); }
+    catch (e) { dlg.replaceChildren(h("div", { class: "dsg-bd" }, empty("alert", "Dossier not readable", e.message))); return; }
+    const pkgOk = d.checks.every(c => c.ok), conf = d.status.conforming;
+    const close = h("button", { class: "btn sm ghost", "aria-label": "Close", onclick: () => dlg.close() }, ic("x"));
+    const head = h("div", { class: "dsg-hd" }, h("span", { class: "ic" }, ic("shield", "i lg")),
+      h("div", { style: "min-width:0" }, h("b", { class: "ellip" }, d.name), h("div", { class: "muted" }, `${d.type === "project" ? "Project dossier" : "Run dossier"}${d.sample ? " · serial " + d.sample : ""} · ${d.files} files · built ${when(d.created_utc)}`)), close);
+    const state = h("div", { class: `mk-state t-${conf ? "ok" : "warn"}` }, ic(conf ? "shield" : "alert"),
+      h("div", {}, h("b", {}, conf ? "The records show conformance" : `${d.status.open_items.length} open item(s) on the records`),
+        h("div", {}, conf ? "Nothing open: every run releasable, every serial complete, no open NCR, every started checklist signed." : d.status.open_items[0])));
+    const checks = h("ul", { class: "dsg-checks" }, d.checks.map(c => h("li", {}, pill(c.ok ? "ok" : "bad", c.ok ? "check" : "x", human(c.name)), h("span", { class: "muted" }, c.detail))));
+    const sigs = d.signatures.length ? h("ol", { class: "dsg-sigs" }, d.signatures.map(s => h("li", {},
+      h("div", { class: "dsg-sig-top" }, h("b", {}, human(s.meaning || "unknown")), h("span", {}, "by"), h("b", {}, s.signer || "unknown"),
+        h("span", { class: "muted nowrap" }, when(s.signed_utc)), h("span", { style: "margin-left:auto" }, sigPill(s))),
+      s.statement ? h("div", { class: "dsg-q" }, "“" + s.statement + "”") : null,
+      h("div", { class: "muted mono", style: "font-size:12px" }, `key ${s.key_id || "?"} · ${s.trust}`),
+      s.problems.length ? h("div", { class: "c-bad", style: "font-size:12.5px" }, s.problems.join("; ")) : null)))
+      : h("div", { class: "muted", style: "font-size:13px" }, "Not signed yet. A signature binds your registered key to exactly these files.");
+    let form;
+    if (!d.signing_available) form = h("div", { class: "muted" }, "Signing needs the cryptography package on this PC.");
+    else if (!pkgOk) form = h("div", { class: "c-bad" }, "The package fails its own checks, so it cannot be signed.");
+    else {
+      const who = h("input", { class: "input", value: store.get("astracad.reviewer"), autocomplete: "name", maxlength: 80 });
+      const mean = h("select", { class: "input" }, Object.keys(d.meanings).map(k => h("option", { value: k, disabled: k === "approved" && !conf }, human(k) + (k === "approved" && !conf ? " (open items)" : ""))));
+      const stmt = h("p", { class: "dsg-stmt" }, d.meanings[mean.value]);
+      mean.addEventListener("change", () => { stmt.textContent = d.meanings[mean.value]; });
+      const pass = h("input", { class: "input", type: "password", autocomplete: "current-password", placeholder: "the passphrase of your signing key" });
+      const go = h("button", { class: "btn primary", type: "submit" }, ic("shield"), "Sign dossier");
+      form = h("form", { class: "dsg-form", onsubmit: async ev => {
+          ev.preventDefault(); go.disabled = true;
+          try {
+            const r = await post("/api/dossier_sign", { key: fileKey, name: who.value.trim(), meaning: mean.value, passphrase: pass.value });
+            pass.value = ""; store.set("astracad.reviewer", who.value.trim());
+            toast(`Signed as ${mean.value} and re-verified: ${r.signatures.length} signature(s), all check out`);
+            draw();
+          } catch (e) { pass.value = ""; toast("Not signed: " + e.message.replace(/^\w+Error: /, ""), "bad"); go.disabled = false; }
+        } }, F("Signer", who), F("Meaning", mean), h("div", { class: "wide" }, stmt), F("Passphrase", pass, "wide"),
+        h("div", { class: "wide dsg-go" }, h("a", { href: "#signatures", class: "muted", onclick: () => dlg.close() }, "No signing key yet?"), go));
+    }
+    dlg.replaceChildren(head, h("div", { class: "dsg-bd" }, state,
+      h("h3", {}, "Package"), checks,
+      h("h3", {}, `Signatures (${d.signatures.length})`), sigs,
+      h("h3", {}, "Sign"), form,
+      h("div", { class: "dsg-ft" }, h("a", { class: "btn", href: "/file?key=" + encodeURIComponent(fileKey), download: d.name }, ic("file"), "Download ZIP"),
+        h("button", { class: "btn ghost", onclick: () => dlg.close() }, "Close"))));
+  }
+  await draw();
+  dlg.showModal();
+}
+
+async function viewSignatures() {
+  crumbs("Signing keys");
+  const d = await api("/api/signers");
+  const F = (label, el) => h("label", { class: "field" }, h("span", {}, label), el);
+  const name = h("input", { class: "input", maxlength: 80, autocomplete: "name", required: true, value: store.get("astracad.reviewer") });
+  const role = h("input", { class: "input", maxlength: 80, placeholder: "e.g. Quality engineer" });
+  const p1 = h("input", { class: "input", type: "password", autocomplete: "new-password", required: true, minlength: d.min_passphrase });
+  const p2 = h("input", { class: "input", type: "password", autocomplete: "new-password", required: true });
+  const go = h("button", { class: "btn primary", type: "submit", disabled: !d.available }, ic("plus"), "Make signing key");
+  const form = h("form", { class: "sgn-form", onsubmit: async ev => {
+      ev.preventDefault(); go.disabled = true;
+      try {
+        const e = await post("/api/signers", { action: "enrol", name: name.value, role: role.value, passphrase: p1.value, confirm: p2.value });
+        p1.value = p2.value = ""; toast(`Signing key ${e.key_id} made for ${e.name}`); viewSignatures();
+      } catch (e) { p1.value = p2.value = ""; toast("Not made: " + e.message.replace(/^\w+Error: /, ""), "bad"); go.disabled = false; }
+    } }, F("Name, as it will appear on signatures", name), F("Role", role), F(`Passphrase (at least ${d.min_passphrase} characters)`, p1), F("Passphrase again", p2), h("div", { class: "field sgn-go" }, go));
+  const revokeCell = s => {
+    const cell = h("div", { class: "sgn-rev" });
+    const start = () => {
+      const by = h("input", { class: "input sm", placeholder: "your name", value: store.get("astracad.reviewer"), "aria-label": "Revoked by" });
+      const why = h("input", { class: "input sm", placeholder: "reason, e.g. passphrase lost", "aria-label": "Reason" });
+      cell.replaceChildren(by, why, h("button", { class: "btn sm danger", onclick: async () => {
+          try { await post("/api/signers", { action: "revoke", key_id: s.key_id, by: by.value, reason: why.value }); toast(`Key ${s.key_id} revoked`); viewSignatures(); }
+          catch (e) { toast("Not revoked: " + e.message.replace(/^\w+Error: /, ""), "bad"); } } }, "Revoke"),
+        h("button", { class: "btn sm ghost", onclick: () => cell.replaceChildren(btn) }, "Cancel"));
+      why.focus();
+    };
+    const btn = h("button", { class: "btn sm ghost", onclick: start }, ic("ban"), "Revoke…");
+    cell.append(btn);
+    return cell;
+  };
+  const table = d.signers.length ? dataTable([
+    { k: "name", label: "Signer", render: s => h("div", {}, h("div", { class: "title" }, s.name), s.role ? h("div", { class: "subline" }, s.role) : null) },
+    { k: "key_id", label: "Key id", render: s => h("span", { class: "mono" }, s.key_id) },
+    { k: "enrolled_utc", label: "Made", render: s => h("span", { class: "nowrap" }, when(s.enrolled_utc)) },
+    { k: "revoked_utc", label: "Status", render: s => s.revoked_utc ? h("span", { title: `${s.revoked_by}: ${s.revoked_reason}` }, pill("na", "ban", "Revoked " + when(s.revoked_utc)))
+        : s.key_on_this_pc ? pill("ok", "shield", "Active") : pill("warn", "alert", "Active · private key not on this PC") },
+    { k: "act", label: "", render: s => s.revoked_utc ? null : revokeCell(s) },
+  ], d.signers, { initial: { k: "enrolled_utc", dir: -1 } }) : empty("user", "No signing keys yet", "Make one below: each person signs with their own key and passphrase.");
+  main.replaceChildren(
+    h("div", { class: "ph" }, h("div", {}, h("h1", {}, "Signing keys"), h("p", {}, "A dossier signature is a named person's Ed25519 signature over the dossier's manifest - every file by its SHA-256. Change one byte and the signature no longer checks out."))),
+    d.available ? null : card(null, null, null, empty("alert", "Signing is not available", "Install the 'cryptography' package on this PC.")),
+    card("Who can sign", `${d.signers.filter(s => !s.revoked_utc).length} active key(s)`, null, h("div", { class: "body", style: "padding-top:0" }, table)),
+    card("Make a signing key", "The private key is stored only encrypted with your passphrase, in " + d.keys_dir + " - never in a project or run folder. The passphrase is not stored anywhere; if it is lost, revoke the key and make a new one.", null, h("div", { class: "body" }, form)),
+    card("What each signature says", "Fixed statements; a signature never says more than this.", null, h("div", { class: "body sgn-means" },
+      Object.entries(d.meanings).map(([k, v]) => h("div", {}, h("b", {}, human(k)), h("p", {}, "“" + v + "”"),
+        k === "approved" ? h("div", { class: "muted", style: "font-size:12.5px" }, "Only when the dossier shows conformance, and not by the person who prepared it.") : null)))));
+}
+
 // ---------- Projects ----------
 const fmtBytes = n => n < 1024 ? n + " B" : n < 1 << 20 ? (n / 1024).toFixed(1) + " KiB" : (n / (1 << 20)).toFixed(1) + " MiB";
 const ACCEPT = ".dxf,.pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp";
@@ -1843,8 +1984,7 @@ async function viewProject(pid) {
         const r = await post("/api/project_dossier", { project: pid });
         const okv = r.checks.every(c => c.ok);
         toast(`${okv ? "Project dossier built and re-verified" : "Project dossier built, verification FAILED"}: ${r.files} files across ${r.runs} run(s)`, okv ? "ok" : "bad");
-        toast(r.status.conforming ? "Records show project conformance (no open items)" : `${r.status.open_items.length} open item(s): ${r.status.open_items[0]}`, r.status.conforming ? "ok" : "warn");
-        window.open("/file?key=" + encodeURIComponent(r.file), "_blank", "noopener");
+        dossierDialog(r.file);
       } catch (e) { toast("Project dossier not built: " + e.message.replace(/^\w+Error: /, ""), "bad"); }
       finally { b.disabled = false; b.replaceChildren(ic("shield"), "Quality dossier"); }
     } }, ic("shield"), "Quality dossier");
@@ -2229,6 +2369,7 @@ async function route() {
     else if (tab === "changes") await viewChanges();
     else if (tab === "cad") await viewCad();
     else if (tab === "make") await viewMake();
+    else if (tab === "signatures") await viewSignatures();
     else await viewInspections();
   } catch (e) { main.replaceChildren(card(null, null, null, empty("alert", "Could not load this page", e.message))); }
   window.scrollTo(0, 0);

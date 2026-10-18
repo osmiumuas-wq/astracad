@@ -35,8 +35,11 @@ class Workspace:
     """Everything the pages read. Separate from HTTP so it can be tested without a socket."""
 
     def __init__(self, db: str | Path, runs: list[str | Path], orchestrator_factory=None,
-                 status_ttl_s: float = 30.0, projects: str | Path | None = None):
+                 status_ttl_s: float = 30.0, projects: str | Path | None = None,
+                 keys_dir: str | Path | None = None):
         self.db = Path(db)
+        # signing keys: encrypted private keys, never inside a project or run folder (those are shared)
+        self.keys_dir = (Path(keys_dir) if keys_dir else Path.home() / ".astracad" / "keys").resolve()
         self.runs = [Path(r).resolve() for r in runs]
         self.runs[0].mkdir(parents=True, exist_ok=True)
         # projects: preserved source documents + their runs; the root is also a run folder, so
@@ -50,6 +53,7 @@ class Workspace:
         self._status_ttl = status_ttl_s
         self._lock = threading.Lock()
         self._cad_lock = threading.Lock()
+        self._sign_lock = threading.Lock()
 
     # ---- CAD status ---------------------------------------------------------------------------
     def status(self, refresh: bool = False) -> dict:
@@ -506,7 +510,7 @@ class Workspace:
         ncrs = [n for n in self.ncr.for_run(key)
                 if not sample or (n.get("link") or {}).get("sample") in (sample, None)]
         tail = f"_{re.sub(r'[^\w.-]', '_', sample)[:40]}" if sample else ""
-        out = plan_path.with_name(f"{stem}_dossier{tail}.zip")
+        out = self._free_dossier_name(plan_path.with_name(f"{stem}_dossier{tail}.zip"))
         res = build(plan_path, out, sample=sample, meas=meas, ncrs=ncrs, checklists=states, extra=[], instruments=[])
         checks = verify(out)
         return {"file": self.key_for(out), "status": res["status"], "files": len(res["manifest"]["files"]),
@@ -580,7 +584,7 @@ class Workspace:
             except (OSError, ValueError):
                 sources.append({"filename": s.filename, "sha256": s.sha256,
                                 "size": s.size, "media_type": s.media_type, "path": None})
-        out = runs_dir / f"{pid}_project_dossier.zip"
+        out = self._free_dossier_name(runs_dir / f"{pid}_project_dossier.zip")
         res = build_project(project.name, out, runs=run_data, ncrs=all_ncrs, sources=sources)
         checks = verify(out)
         return {"file": self.key_for(out), "status": res["status"],
@@ -588,6 +592,85 @@ class Workspace:
                 "sources": res["manifest"]["sources"],
                 "runs": len(run_data),
                 "checks": [{"name": n, "ok": ok, "detail": d} for n, ok, d in checks]}
+
+    # ---- dossier signatures ----------------------------------------------------------------------------
+    @staticmethod
+    def _free_dossier_name(out: Path) -> Path:
+        """A signed dossier is evidence: rebuilding writes the next free name instead of over it.
+        An unsigned one is only a rendering of the records and is rebuilt in place."""
+        from astracad_inspect.signing import is_signed
+        cand, n = out, 1
+        while is_signed(cand):
+            n += 1
+            cand = out.with_name(f"{out.stem}_v{n}{out.suffix}")
+        return cand
+
+    @property
+    def signers_path(self) -> Path:
+        return self.instruments_path.with_name("signers.json")
+
+    def signers(self) -> dict:
+        from astracad_inspect.signing import MEANINGS, MIN_PASSPHRASE, available, load_register
+        reg = load_register(self.signers_path)
+        return {"available": available(), "keys_dir": str(self.keys_dir), "meanings": MEANINGS,
+                "min_passphrase": MIN_PASSPHRASE,
+                "signers": [{k: v for k, v in s.items()} | {"key_on_this_pc": (self.keys_dir / f"{s['key_id']}.pem").is_file()}
+                            for s in reg["signers"]],
+                "log": reg["log"][-50:]}
+
+    def signer_action(self, body: dict) -> dict:
+        from astracad_inspect.signing import enrol, revoke
+        action = str(body.get("action", ""))
+        with self._sign_lock:
+            if action == "enrol":
+                if str(body.get("passphrase", "")) != str(body.get("confirm", "")):
+                    raise ValueError("the two passphrases differ")
+                return enrol(self.signers_path, self.keys_dir, str(body.get("name", "")),
+                             str(body.get("passphrase", "")), str(body.get("role", "")))
+            if action == "revoke":
+                return revoke(self.signers_path, str(body.get("key_id", "")), str(body.get("by", "")),
+                              str(body.get("reason", "")))
+        raise ValueError("action must be enrol or revoke")
+
+    def _dossier_path(self, key: str) -> Path:
+        p = self.resolve_key(key)
+        if p.suffix.lower() != ".zip" or not p.is_file():
+            raise PermissionError("not a dossier")
+        try:
+            import zipfile
+            with zipfile.ZipFile(p) as z:
+                man = json.loads(z.read("manifest.json"))
+        except (OSError, KeyError, ValueError) as ex:
+            raise PermissionError(f"not a dossier ({type(ex).__name__})") from None
+        if man.get("generator") != "astracad_inspect.dossier":
+            raise PermissionError("not a dossier made by ASTraCAD")
+        return p
+
+    def dossier_info(self, key: str) -> dict:
+        """What the package is, whether it still checks out, and every signature on it."""
+        import zipfile
+        from astracad_inspect.dossier import verify
+        from astracad_inspect.signing import MEANINGS, available, check, load_register
+        p = self._dossier_path(key)
+        with zipfile.ZipFile(p) as z:
+            man = json.loads(z.read("manifest.json"))
+        st = man.get("status") or {}
+        return {"file": self.key_for(p), "name": p.name, "type": man.get("type") or "run",
+                "created_utc": man.get("created_utc"), "files": len(man.get("files") or []),
+                "sample": man.get("sample"), "project": man.get("project"),
+                "status": {"conforming": st.get("conforming") is True, "open_items": st.get("open_items") or []},
+                "checks": [{"name": n, "ok": ok, "detail": d} for n, ok, d in verify(p)],
+                "signatures": check(p, load_register(self.signers_path)),
+                "meanings": MEANINGS, "signing_available": available()}
+
+    def dossier_sign(self, body: dict) -> dict:
+        from astracad_inspect.dossier import verify
+        from astracad_inspect.signing import sign
+        p = self._dossier_path(str(body.get("key", "")))
+        with self._sign_lock:
+            sign(p, self.signers_path, self.keys_dir, str(body.get("name", "")), str(body.get("meaning", "")),
+                 str(body.get("passphrase", "")), verify)
+        return self.dossier_info(self.key_for(p))
 
     # ---- nonconformance reports --------------------------------------------------------------------
 
@@ -931,6 +1014,10 @@ def make_handler(ws: Workspace):
                     return self._json(ws.projects_list())
                 if u.path == "/api/instruments":
                     return self._json(ws.instruments())
+                if u.path == "/api/signers":
+                    return self._json(ws.signers())
+                if u.path == "/api/dossier_info":
+                    return self._json(ws.dossier_info(q.get("key", [""])[0]))
                 if u.path == "/api/ncrs":
                     return self._json(ws.ncr_list())
                 if u.path == "/api/ncr":
@@ -1082,6 +1169,10 @@ def make_handler(ws: Workspace):
                     return self._json(ws.review(str(body.get("key", "")), body))
                 if u.path == "/api/instruments":
                     return self._json(ws.save_instrument(body))
+                if u.path == "/api/signers":
+                    return self._json(ws.signer_action(body))
+                if u.path == "/api/dossier_sign":
+                    return self._json(ws.dossier_sign(body))
                 if u.path == "/api/checklist":
                     return self._json(ws.checklist_decide(body))
                 if u.path == "/api/ncr":

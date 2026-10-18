@@ -36,6 +36,11 @@ six==1.17.0
 charset-normalizer==3.5.2
 et-xmlfile==2.0.0
 
+# --- optional extra `signing` (measured present 2026-10-18) ---
+cryptography==50.0.1    # Ed25519 dossier signatures + passphrase-encrypted keys (Apache-2.0 OR BSD-3-Clause)
+cffi==2.1.1             # needed by cryptography (MIT-0)
+pycparser==3.0          # needed by cffi (BSD-3-Clause)
+
 # --- interpreter / platform this lock was measured on ---
 # python==3.14.7   (C:\Users\solid\AppData\Local\Python\pythoncore-3.14-64\python.exe)
 # Windows 11 (10.0.26200) AMD64

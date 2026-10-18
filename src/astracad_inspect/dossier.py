@@ -212,14 +212,16 @@ def build(plan_path: Path, out_zip: Path, *, sample: str | None, meas: dict, ncr
 
 
 def verify(out_zip: Path) -> list[tuple[str, bool, str]]:
-    """Re-open the package: every manifest entry present with the same SHA-256; the PDF opens."""
+    """Re-open the package: every manifest entry present with the same SHA-256; the PDF opens; any
+    signatures (signatures/NN.json, outside the manifest they sign) check out."""
+    from .signing import check as check_signatures, signature_files
     checks = []
     with zipfile.ZipFile(out_zip) as z:
         names = set(z.namelist())
         man = json.loads(z.read("manifest.json"))
         bad = [f["path"] for f in man["files"] if f["path"] not in names or _sha(z.read(f["path"])) != f["sha256"]]
         checks.append(("manifest_hashes", not bad, f"{len(man['files'])} files" if not bad else f"mismatch: {bad[:5]}"))
-        extra = sorted(names - {f["path"] for f in man["files"]} - {"manifest.json"})
+        extra = sorted(names - {f["path"] for f in man["files"]} - {"manifest.json"} - set(signature_files(z)))
         checks.append(("no_unlisted_files", not extra, "none" if not extra else ", ".join(extra[:5])))
         try:
             import pypdfium2 as pdfium
@@ -227,6 +229,11 @@ def verify(out_zip: Path) -> list[tuple[str, bool, str]]:
             checks.append(("pdf_opens", n >= 1, f"{n} page(s)"))
         except Exception as e:  # noqa: BLE001 - reported as a failed check
             checks.append(("pdf_opens", False, f"{type(e).__name__}: {e}"))
+    sigs = check_signatures(out_zip)
+    if sigs:
+        broken = [s for s in sigs if not s["valid"]]
+        checks.append(("signatures", not broken, f"{len(sigs)} check out" if not broken else
+                       f"{len(broken)} of {len(sigs)} do not check out: {broken[0]['problems'][0]}"))
     return checks
 
 

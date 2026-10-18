@@ -108,6 +108,50 @@ def cmd_fai(a) -> int:
     return 0 if all(ok for _, ok, _ in checks) else 1
 
 
+def cmd_dossier(a) -> int:
+    """Check a dossier and its signatures (any recipient), or sign one / manage signing keys (signer).
+    Passphrases are read without echo, never taken from the command line."""
+    import getpass
+    from . import signing
+    from .dossier import verify
+    reg_path = Path(a.register)
+    if a.action == "verify":
+        if not a.zip:
+            raise ValueError("verify needs the dossier ZIP")
+        checks = verify(Path(a.zip))
+        for name, ok, detail in checks:
+            print(f"  {'ok ' if ok else 'BAD'} {name:<20} {detail}")
+        reg = signing.load_register(reg_path) if reg_path.exists() else None
+        sigs = signing.check(Path(a.zip), reg)
+        if not sigs:
+            print("SIGNATURES none")
+        for s in sigs:
+            mark = "TRUSTED" if s["trusted"] else "VALID  " if s["valid"] else "BAD    "
+            print(f"  {mark} {s.get('meaning', '?'):<9} {s.get('signer', '?')}  {s.get('signed_utc', '?')}  "
+                  f"key {s.get('key_id', '?')}  {s['trust']}")
+            for p in s["problems"]:
+                print(f"           problem: {p}")
+        return 0 if all(ok for _, ok, _ in checks) and all(s["valid"] for s in sigs) else 3
+    if a.action == "enrol":
+        p1 = getpass.getpass(f"new passphrase for {a.signer} (min {signing.MIN_PASSPHRASE} characters): ")
+        if getpass.getpass("again: ") != p1:
+            raise ValueError("the two passphrases differ")
+        e = signing.enrol(reg_path, Path(a.keys), a.signer or "", p1, a.role)
+        print(f"ENROLLED   {e['name']}  key {e['key_id']}  register {reg_path}  private key {Path(a.keys) / (e['key_id'] + '.pem')}")
+        return 0
+    if a.action == "revoke":
+        e = signing.revoke(reg_path, a.key_id or "", a.by or "", a.reason or "")
+        print(f"REVOKED    {e['name']}  key {e['key_id']}  {e['revoked_utc']}")
+        return 0
+    if not a.zip or not a.meaning:
+        raise ValueError("sign needs the dossier ZIP and --meaning")
+    sigs = signing.sign(Path(a.zip), reg_path, Path(a.keys), a.signer or "", a.meaning,
+                        getpass.getpass(f"passphrase for {a.signer}: "), verify)
+    s = sigs[-1]
+    print(f"SIGNED     {s['meaning']} by {s['signer']}  key {s['key_id']}  {s['signed_utc']}  ({len(sigs)} signature(s), all check out)")
+    return 0
+
+
 def cmd_doctor(a) -> int:
     print(f"ENGINE     astracad-inspect {__version__} (python {sys.version.split()[0]})")
     for name, version in sorted(tool_versions().items()):
@@ -215,6 +259,21 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_fai)
     sp = sub.add_parser("selftest", help="run the no-drawing checks")
     sp.set_defaults(func=cmd_selftest)
+
+    home = Path.home() / ".astracad"
+    sp = sub.add_parser("dossier", help="check a quality dossier and its signatures; sign one; manage signing keys")
+    sp.add_argument("action", choices=("verify", "sign", "enrol", "revoke"))
+    sp.add_argument("zip", nargs="?", default=None, help="the dossier ZIP (verify, sign)")
+    sp.add_argument("--register", default=str(home / "projects" / "signers.json"),
+                    help="signer register, public keys only (default: the workspace's)")
+    sp.add_argument("--keys", default=str(home / "keys"), help="folder of the encrypted private keys")
+    sp.add_argument("--signer", default=None, help="the signer's name (sign, enrol)")
+    sp.add_argument("--meaning", choices=("prepared", "reviewed", "approved"), default=None)
+    sp.add_argument("--role", default="")
+    sp.add_argument("--key-id", dest="key_id", default=None, help="key to revoke")
+    sp.add_argument("--by", default=None, help="who revokes")
+    sp.add_argument("--reason", default=None, help="why it is revoked")
+    sp.set_defaults(func=cmd_dossier)
     return p
 
 
@@ -227,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
-    except (FileNotFoundError, ValueError, KeyError) as ex:
+    except (FileNotFoundError, ValueError, KeyError, PermissionError) as ex:
         print(f"ERROR      {type(ex).__name__}: {ex}", file=sys.stderr)
         return 1
 

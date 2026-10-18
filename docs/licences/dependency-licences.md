@@ -21,6 +21,7 @@ Versions in this table are the ones in `requirements.lock` (measured, not declar
 | `reportlab` | 5.0.1 | BSD-style, "Copyright (c) 2000-2024, ReportLab Inc., All rights reserved" | keep copyright + licence text in redistributions |
 | `openpyxl` | 3.1.5 | MIT | keep the notice |
 | `pypdfium2` | 5.14.0 (PDFium 156.0.8076.0) | Apache-2.0 / BSD-3-Clause (wrapper) + PDFium BSD-3 | **declared run-time PDF reader since 2026-10-17**: report read-back and vector-PDF drawing ingestion; keep the notices |
+| `cryptography` (extra `signing`) | 50.0.1 | Apache-2.0 OR BSD-3-Clause (licence files in the dist-info, read 2026-10-18) | dossier signatures: Ed25519 and passphrase-encrypted PKCS#8 keys; brings `cffi` 2.1.1 (MIT-0) and `pycparser` 3.0 (BSD-3-Clause); keep the notices |
 | `rapidocr_onnxruntime` (extra `ocr`) | 1.2.3 | Apache-2.0 (bundled PaddleOCR model weights: Apache-2.0) | second OCR engine for scans; brings `onnxruntime` 1.31.0 (MIT), `opencv-python` 5.0.0.93 (Apache-2.0), `shapely` (BSD-3), `pyclipper` (MIT) |
 | `winrt-*` (extra `ocr`) | 3.2.1 | MIT (License-Expression in package metadata) | Python bindings to Windows.Media.Ocr, the OCR engine built into Windows; Windows-only |
 | **`PyMuPDF`** (optional extra `table-rebuild` only) | **1.28.2** | **Dual licensed: GNU AGPL-3.0 **or** Artifex Commercial Licence** ("Dual Licensed - GNU AFFERO GPL 3.0 or Artifex Commercial License") | **see §2 — this is the one that constrains distribution** |
