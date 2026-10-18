@@ -146,7 +146,7 @@ class Workspace:
                 "files": files, "folder": self.key_for(out), "authorized_by": who,
                 "expect": it.expect, "spec": it.spec}
 
-    # ---- model gateway (opt-in: Gemini plans, ASTraCAD checks, the user accepts) -------------------
+    # ---- model gateway (opt-in: the local model plans, ASTraCAD checks, the user accepts) -----------
     def model_status(self) -> dict:
         from astracad_core.model_gateway import status
         return status()
@@ -164,9 +164,10 @@ class Workspace:
         try:
             it, rec = plan(str(body.get("request", "")), prov, store=self._plans_dir())
         except ModelError as ex:
-            raise ValueError(f"Gemini: {ex}") from None
+            raise ValueError(f"local model: {ex}") from None
         d = it.to_dict()
-        d.update(plan_id=rec["plan_id"], provider=prov.name, model=prov.model, cad_enabled=self._orch_factory is not None)
+        d.update(plan_id=rec["plan_id"], provider=prov.name, model=rec["exchange"]["model"],
+                 where=(rec["exchange"].get("meta") or {}).get("where"), cad_enabled=self._orch_factory is not None)
         return d
 
     def model_build(self, body: dict) -> dict:
@@ -192,7 +193,7 @@ class Workspace:
         body_ex = {k: v for k, v in ex.items() if k != "plan_id"}
         if hashlib.sha256(json.dumps(body_ex, sort_keys=True).encode("utf-8")).hexdigest()[:16] != pid:
             raise PermissionError("the stored plan was changed after it was made; ask again")
-        it = interpret_reply(ex["request"], Reply(ex["response"], ex["provider"], ex["model"]))
+        it = interpret_reply(ex["request"], Reply(ex["response"], ex["provider"], ex["model"], ex.get("meta") or {}))
         if it.spec:
             it.spec["notes"] = {**(it.spec.get("notes") or {}), "planner": ex["provider"], "model": ex["model"], "plan_id": pid}
         if body.get("accept") is True:

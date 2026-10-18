@@ -26,7 +26,7 @@ def _orch(db: str) -> Orchestrator:
 
 
 def _model_plan(request: str, store):
-    """Gemini's plan for a request, checked by ASTraCAD (astracad_core.model_planner)."""
+    """The local model's plan for a request, checked by ASTraCAD (astracad_core.model_planner)."""
     from astracad_core.model_gateway import ModelError, provider, status
     from astracad_core.model_planner import plan
     prov = provider()
@@ -35,7 +35,7 @@ def _model_plan(request: str, store):
     try:
         return plan(request, prov, store=store)
     except ModelError as ex:
-        raise SystemExit(f"Gemini: {ex}") from None
+        raise SystemExit(f"local model: {ex}") from None
 
 
 def _print(obj) -> None:
@@ -79,8 +79,8 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("app", choices=sorted(ALL))
     i = sub.add_parser("interpret", help="parse a request; never executes")
     i.add_argument("request")
-    i.add_argument("--planner", choices=("rules", "gemini"), default="rules",
-                   help="gemini: send the request text (only) to Google Gemini for a plan ASTraCAD then checks")
+    i.add_argument("--planner", choices=("rules", "local"), default="rules",
+                   help="local: ask the language model on this PC (Strata) for a plan ASTraCAD then checks")
     fd = sub.add_parser("from-drawing", help="rebuild a part from its 2D drawing (DXF) and verify it")
     fd.add_argument("drawing")
     fd.add_argument("--out", required=True)
@@ -104,10 +104,10 @@ def main(argv: list[str] | None = None) -> int:
                    help="your name: authorises this one create run and writes under --out")
     b.add_argument("--expect-size", nargs=3, type=float, dest="expect_size")
     b.add_argument("--expect-volume", type=float, dest="expect_volume")
-    b.add_argument("--planner", choices=("rules", "gemini"), default="rules",
-                   help="gemini: send the request text (only) to Google Gemini for a plan ASTraCAD then checks")
+    b.add_argument("--planner", choices=("rules", "local"), default="rules",
+                   help="local: ask the language model on this PC (Strata) for a plan ASTraCAD then checks")
     b.add_argument("--accept-proposals", action="store_true", dest="accept_proposals",
-                   help="accept the values Gemini proposed (shown first) for this build")
+                   help="accept the values the model proposed (shown first) for this build")
     sp = sub.add_parser("spec", help="execute a typed part spec (JSON) through the permission gate")
     sp.add_argument("path")
     sp.add_argument("--app", default="solidworks")
@@ -156,7 +156,7 @@ def main(argv: list[str] | None = None) -> int:
         _print(ALL[a.app]().declaration().to_dict())
         return 0
     if a.cmd == "interpret":
-        if a.planner == "gemini":
+        if a.planner == "local":
             it, rec = _model_plan(a.request, None)
             _print({"plan_id": rec["plan_id"], **it.to_dict()})
             return 0
@@ -263,7 +263,7 @@ def main(argv: list[str] | None = None) -> int:
         return {OpStatus.SUCCEEDED: 0, OpStatus.EXECUTED_UNVERIFIED: 3,
                 OpStatus.REQUIRES_AUTHORIZATION: 3}.get(res.status, 1)
     if a.cmd == "build":
-        if a.planner == "gemini":
+        if a.planner == "local":
             it, rec = _model_plan(a.request, Path(a.out) / "model_plans")
             if a.accept_proposals:
                 from astracad_core.model_planner import accept

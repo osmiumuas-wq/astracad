@@ -1,4 +1,5 @@
-"""Gemini as a planner for part requests the fixed phrasings do not cover - checked, never trusted.
+"""The user's local language model as a planner for part requests the fixed phrasings do not cover - checked,
+never trusted.
 
 The model returns one JSON object: a typed part spec (only the CAD runtime's own operations) plus, for every
 number in it, where the number came from. ASTraCAD then decides what that is worth:
@@ -12,7 +13,7 @@ number in it, where the number came from. ASTraCAD then decides what that is wor
 - the model's questions, when a size is missing, are shown and nothing runs.
 
 The plan that is built is exactly the plan that was shown: it is kept under its own id (the SHA-256 of the
-exchange) with the full prompt and answer, so what Gemini said is auditable afterwards. Kernel and STEP
+exchange) with the full prompt and answer, so what the model said is auditable afterwards. Kernel and STEP
 verification then apply as to every build: the CAD runtime derives its expectations from the spec itself.
 """
 from __future__ import annotations
@@ -29,7 +30,7 @@ from .model_gateway import ModelError, Reply
 from .requests import UNIT_MM, Fact, Interpretation, _norm_unit, _safe_name
 
 INSTRUCTIONS = """You are the planning stage of ASTraCAD, a CAD automation tool that drives SOLIDWORKS.
-Turn the part request at the end into ONE JSON object and nothing else - no prose, no markdown, no code.
+Turn the part request in the user's message into ONE JSON object and nothing else - no prose, no markdown, no code.
 Do not use any tools, files or web access.
 
 The JSON object:
@@ -86,6 +87,7 @@ _OPS: dict[str, dict[str, Any]] = {
     "feature.pattern.circular": {"req": {"feature": "ref", "count": "count"}, "opt": {"axis": ("X", "Y", "Z"), "center": "xy"}},
 }
 _SKETCHES = {"sketch.rectangle", "sketch.circle", "sketch.loops", "sketch.profile"}
+PROPOSED = "The model proposed "      # the start of the one decision accept() settles (the workspace matches it too)
 _CONSUMERS = {"feature.extrude", "feature.cut", "feature.revolve"}
 MAX = 10000.0
 
@@ -231,10 +233,11 @@ def plan(request: str, prov, *, store: Path | None = None) -> tuple[Interpretati
     text = str(request or "").strip()
     if not text or len(text) > 2000:
         raise ValueError("a request of 1 to 2000 characters is needed")
-    prompt = INSTRUCTIONS + "\nRequest: " + text + "\n"
-    reply: Reply = prov.complete(prompt)
+    user = "Request: " + text
+    reply: Reply = prov.complete(INSTRUCTIONS, user)
     exchange = {"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "provider": reply.provider,
-                "model": reply.model, "request": text, "prompt": prompt, "response": reply.text, "meta": reply.meta}
+                "model": reply.model, "request": text, "system": INSTRUCTIONS, "user": user,
+                "response": reply.text, "meta": reply.meta}
     pid = hashlib.sha256(json.dumps(exchange, sort_keys=True).encode("utf-8")).hexdigest()[:16]
     exchange["plan_id"] = pid
     it = interpret_reply(text, reply)
@@ -250,21 +253,23 @@ def plan(request: str, prov, *, store: Path | None = None) -> tuple[Interpretati
 def interpret_reply(request: str, reply: Reply) -> Interpretation:
     it = Interpretation(request, "create_part", "solidworks",
                         exports=["step"] if re.search(r"\bstep\b|\bstp\b", request, re.I) else [])
+    where = (reply.meta or {}).get("where") or "the configured model server"
     it.facts.append(Fact("planner", f"{reply.provider} ({reply.model})", None, "CALCULATED",
-                         "the request text was sent to Google Gemini at the user's request; its answer is checked below"))
+                         f"the request text was sent to the language model at {where} at the user's request; "
+                         "its answer is checked below"))
     try:
         doc = _json_object(reply.text)
     except ValueError as ex:
-        it.ambiguities.append(f"Gemini's answer was not a usable JSON plan ({ex})")
+        it.ambiguities.append(f"The model's answer was not a usable JSON plan ({ex})")
         return it
     if doc.get("status") == "need_info" or not doc.get("spec"):
         qs = [str(q) for q in (doc.get("questions") or []) if str(q).strip()]
-        it.missing.extend(qs or ["Gemini could not plan this part and asked nothing specific"])
+        it.missing.extend(qs or ["The model could not plan this part and asked nothing specific"])
         return it
     spec = doc["spec"]
     errs = validate_spec(spec)
     if errs:
-        it.ambiguities.append("Gemini's plan is not one ASTraCAD can run: " + "; ".join(errs[:8]))
+        it.ambiguities.append("The model's plan is not one ASTraCAD can run: " + "; ".join(errs[:8]))
         return it
     proposed: list[str] = []
     explained: set[float] = set()
@@ -277,31 +282,31 @@ def interpret_reply(request: str, reply: Reply) -> Interpretation:
         if src == "request" and _quote_holds(val, quote, request):
             it.facts.append(Fact(name, val, v.get("unit"), "USER_SPECIFIED", quote))
         else:
-            why = (f"derived by Gemini: {quote}" if src == "derived" else
-                   "Gemini quoted words that are not in the request (or do not contain this number)" if src == "request"
-                   else f"assumed by Gemini{': ' + quote if quote else ''}")
+            why = (f"derived by the model: {quote}" if src == "derived" else
+                   "the model quoted words that are not in the request (or do not contain this number)"
+                   if src == "request" else f"assumed by the model{': ' + quote if quote else ''}")
             it.facts.append(Fact(name, val, v.get("unit"), "AI_PROPOSED", why))
             proposed.append(f"{name} = {val:g}")
     unexplained = sorted(n for n in _numbers(spec) if n not in explained and n != 0.0)   # 0: the origin
     if unexplained:
-        it.ambiguities.append("Gemini's plan uses numbers it does not account for: "
+        it.ambiguities.append("The model's plan uses numbers it does not account for: "
                               + ", ".join(f"{n:g}" for n in unexplained[:10]))
     for a in (doc.get("assumptions") or [])[:20]:
-        it.facts.append(Fact("assumption", str(a)[:200], None, "AI_PROPOSED", "stated by Gemini"))
+        it.facts.append(Fact("assumption", str(a)[:200], None, "AI_PROPOSED", "stated by the model"))
     if proposed:
-        it.ambiguities.append(f"Gemini proposed {len(proposed)} value(s) the request does not state: "
+        it.ambiguities.append(f"{PROPOSED}{len(proposed)} value(s) the request does not state: "
                               + "; ".join(proposed[:12]) + " - accept them to build")
-    name = _safe_name(str(spec.get("name") or "gemini_part"))
-    it.spec = {"name": f"gm_{name}"[:40], "units": "mm", "features": spec["features"],
+    name = _safe_name(str(spec.get("name") or "model_part"))
+    it.spec = {"name": f"lm_{name}"[:40], "units": "mm", "features": spec["features"],
                "exports": [{"format": e} for e in it.exports], "notes": {"request": request}}
     return it
 
 
 def accept(it: Interpretation, who: str) -> Interpretation:
-    """The user accepts the values Gemini proposed, for this build. Questions and refusals still stop it."""
-    keep = [a for a in it.ambiguities if not a.startswith("Gemini proposed ")]
+    """The user accepts the values the model proposed, for this build. Questions and refusals still stop it."""
+    keep = [a for a in it.ambiguities if not a.startswith(PROPOSED)]
     if len(keep) != len(it.ambiguities):
         it.ambiguities = keep
         it.facts.append(Fact("proposals_accepted", who, None, "USER_SPECIFIED",
-                             "the values Gemini proposed were accepted for this build by the person named"))
+                             "the values the model proposed were accepted for this build by the person named"))
     return it

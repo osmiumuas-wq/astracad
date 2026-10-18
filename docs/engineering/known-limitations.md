@@ -311,13 +311,16 @@ covered by a check that now fails if it regresses.
 
 
 
-## L. Gemini planner (2026-10-18)
+## L. Local model planner (2026-10-18)
 
-- Optional and off until set up (docs/engineering/model-gateway.md); only the request text is sent.
+- Optional: the language model on this PC (Qwen3.8-Flash-Next Coder IQ1_M, served by Strata) -
+  docs/engineering/model-gateway.md. Only the request text is sent, and only to this PC. (Gemini was removed.)
 - ASTraCAD checks the plan's form, operations, quotes and numbers - not whether a well-formed plan is the part the
-  user meant; the preview and the Proposed values are there for that review, and Gemini's choices need acceptance.
-- Gemini can only use the operations the CAD runtime has; it cannot make threads, lofts, sweeps or assemblies.
-- Not yet run live with a signed-in Gemini CLI on this PC (not installed at the time of writing).
+  user meant; the preview and the Proposed values are there for that review, and the model's choices need acceptance.
+- The model can only use the operations the CAD runtime has; it cannot make threads, lofts, sweeps or assemblies.
+- Not yet run with the real model: on this laptop's 8 GB GPU, Strata could not load it while SOLIDWORKS was open.
+  Tested against a stand-in server and against Strata's own server with its scripted engine.
+- 8,192-token context (instructions ~1,100 tokens, thinking capped at 2,500); an answer that does not fit is refused.
 
 ## K. Drawing → CAD (2026-10-18)
 

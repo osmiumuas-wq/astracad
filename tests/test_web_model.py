@@ -1,5 +1,5 @@
-"""Workspace + Gemini: asking is explicit, the build runs exactly the plan that was shown (never a new
-answer), a changed stored plan is refused, and Gemini's own choices need the user's acceptance."""
+"""Workspace + the local model: asking is explicit, the build runs exactly the plan that was shown (never a new
+answer), a changed stored plan is refused, and the model's own choices need the user's acceptance."""
 import json
 
 import pytest
@@ -60,7 +60,7 @@ def test_proposed_values_need_the_users_acceptance(tmp_path, monkeypatch):
     calls = []
     w = ws(tmp_path, calls)
     d = w.model_plan({"request": REQ})
-    assert not d["executable"] and any(a.startswith("Gemini proposed 1 value") for a in d["ambiguities"])
+    assert not d["executable"] and any(a.startswith("The model proposed 1 value") for a in d["ambiguities"])
     with pytest.raises(ValueError, match="accept them to build"):
         w.model_build({"plan_id": d["plan_id"], "authorize": "K M"})
     w.model_build({"plan_id": d["plan_id"], "authorize": "K M", "accept": True})

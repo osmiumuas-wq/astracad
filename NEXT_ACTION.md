@@ -1,18 +1,32 @@
 # NEXT ACTION
 
-## 2026-10-18 (Claude): Gemini as an optional, checked planner + live check of the other agent's work
+## 2026-10-18 (Claude): the local model (Qwen via Strata) as the planner, Gemini removed + live check of the other agent's work
 
-**Gemini (user request: "integrate astracad with my Google Gemini Pro plan").** Built and tested with a stand-in model;
-NOT yet run live - the Gemini CLI is not installed on this PC and signing in to Google is the user's step:
+**Local model (user request: "integrate my local qwen3.8 flash next model which i have installed through strata in
+it dont integrate gemini").** The Gemini code, page controls, CLI option and docs are gone. ASTraCAD asks the model on
+this PC over Strata's OpenAI-compatible API (http://127.0.0.1:8080/v1, model qwen3.8-flash-next-coder-iq1_m): only the
+request text, no tools, no proxy, other addresses refused. The answer is checked exactly as before (typed spec of
+known operations, quotes re-checked, every number accounted for, the model's choices Proposed until accepted, the
+stored plan hash-checked and built as shown). docs/engineering/model-gateway.md.
 
-    npm install -g @google/gemini-cli     (then run `gemini` once and choose Login with Google - uses the AI Pro plan)
-    workspace: Text to CAD -> Ask Gemini        CLI: astracad_cad build "<request>" --planner gemini --authorize KM
+Verified: 31 tests (incl. a stand-in server); against Strata's own server with its scripted `mock` engine (request
+accepted, thinking kept apart from the answer, a non-JSON answer refused by Strata's check; CLI and workspace show the
+checked plan). NOT verified: a plan from the real Qwen model - Strata stopped at start-up four times on 2026-10-18
+because SOLIDWORKS held ~5 GB of the laptop's 8 GB VRAM ("no VRAM is left for the expert cache ... ~994 MiB more
+than this card has free"), also with a lighter test config (no MTP draft layer, no vision: still 907 MiB short).
+Next, with SOLIDWORKS closed: start Strata (run-coder-iq1_m.bat), then
 
-Only the request text is sent. Gemini returns a typed spec (only `mac`'s operations, never code); ASTraCAD checks the
-form, re-checks every number Gemini says is from the request against the request, requires every number to be
-accounted for, marks Gemini's own choices Proposed (the build waits for the user's acceptance), and builds exactly the
-stored plan (hash-checked, never asked twice). docs/engineering/model-gateway.md. 18 tests (incl. a hostile request
-that must stay on stdin, the API key only in a header).
+    py -m astracad_cad interpret "SolidWorks L-shaped bracket, 80 x 60 mm outline with 10 mm legs, 8 mm thick, export STEP" --planner local
+
+and judge the plan quality at IQ1_M (every number listed? quotes exact?); tune ASTRACAD_MODEL_THINKING (default low).
+
+**The other agent's pending loopsPreview change (index.html, uncommitted) throws.** Inside `loopsPreview(spec)` it
+reads `it.spec?.notes?.blind_pockets`, but `it` is not defined there: every loops preview without a rectangle cut
+fails with "it is not defined" (seen in the workspace). `spec.notes?.blind_pockets` is meant. **And the pending
+pocket build is offset:** drawing_to_cad.py passes the pocket's centre as `sketch.rectangle` `x`/`y`
+(`_is_rectangular_loop_segs` returns cx, cy), but `mac` draws `CreateCornerRectangle(x, y, x + W, y + H)` - the corner
+- so SOLIDWORKS would cut the pocket shifted by half its size; a volume check does not see a shift. Left as it is
+(not mine, not committed).
 
 **Live check of the other agent's commits (0eb73d6..2f161ec), SOLIDWORKS 2026, `_out/verify_ag_20261018/`:**
 - Text -> CAD blind hole (dia 10 x 15 deep in 60x40x20): SUCCEEDED, kernel 46821.902755 = prediction.

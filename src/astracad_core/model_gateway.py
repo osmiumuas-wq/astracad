@@ -1,29 +1,38 @@
-"""Model gateway: a language model as an optional planner - opt-in, typed specs only, never code.
+"""Model gateway: the user's own local language model as an optional planner - typed specs only, never code.
 
-Two ways to reach Google Gemini (constitution: an external provider only with the user's explicit opt-in):
+The model is the one the user runs on this PC with Strata (Qwen3.8-Flash-Next, the Coder build), reached over
+Strata's OpenAI-compatible chat API on the loopback address (default http://127.0.0.1:8080/v1). Any other local
+server with that API (llama.cpp, LM Studio, ...) works the same way.
 
-- ``gemini-cli`` - the Gemini CLI signed in with the user's Google account, so a Google AI Pro plan's quota is
-  used and no key is stored here. Run as a subprocess in headless mode (``-p`` + ``--output-format json``),
-  in an empty scratch folder, read-only (``--approval-mode plan`` where the CLI has it), with the request on
-  standard input - never on the command line, where text could be read as arguments.
-- ``gemini-api`` - the Gemini API with a key the user created in Google AI Studio, read from the environment
-  variable GEMINI_API_KEY (never written to a file here) and sent as a header, never in the URL.
+Nothing leaves the PC: an address that is not this computer is refused unless the user sets
+ASTRACAD_MODEL_ALLOW_REMOTE=1, and requests never go through a proxy. No key is stored here (an API key, when the
+local server asks for one, is read from ASTRACAD_MODEL_API_KEY). The request asks for no tools ("tool_choice": none,
+and never Strata's "strata_mcp" opt-in), so the model can only answer, not act.
 
-What leaves the PC: the request text and ASTraCAD's fixed planning instructions. No drawing, model, file or
-path is sent. Choose with ASTRACAD_MODEL_PROVIDER = gemini-cli | gemini-api | off (default: the CLI when
-installed, else the API when a key is set, else off); the model with ASTRACAD_GEMINI_MODEL.
+Settings (environment variables):
+    ASTRACAD_MODEL_PROVIDER    local | off                     (default local)
+    ASTRACAD_MODEL_URL         the API's base URL              (default http://127.0.0.1:8080/v1)
+    ASTRACAD_MODEL_NAME        the model name sent             (default qwen3.8-flash-next-coder-iq1_m)
+    ASTRACAD_MODEL_THINKING    none | low | medium | high      (default low; Strata's reasoning_effort)
+    ASTRACAD_MODEL_TIMEOUT_S   seconds to wait for an answer   (default 900)
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
-import shutil
-import subprocess
-import tempfile
+import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
+
+DEFAULT_URL = "http://127.0.0.1:8080/v1"
+DEFAULT_MODEL = "qwen3.8-flash-next-coder-iq1_m"
+THINKING = ("none", "low", "medium", "high")
+THINKING_BUDGET = 2500          # tokens; with an 8K context the answer keeps the rest
+START_HINT = "start the local model server (Strata: run-coder-iq1_m.bat) and wait until the model is loaded"
 
 
 class ModelError(RuntimeError):
@@ -38,127 +47,138 @@ class Reply:
     meta: dict[str, Any] = field(default_factory=dict)
 
 
-class GeminiCLI:
-    name = "gemini-cli"
-    # the -p text is appended to standard input by the CLI; the request itself only ever travels on stdin
-    INSTRUCTION = "Follow the instructions above exactly. Reply with the single JSON object only."
+def _loopback(host: str) -> bool:
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
-    def __init__(self, model: str | None = None, exe: str | None = None, timeout_s: float = 240.0):
-        self.model = model or os.environ.get("ASTRACAD_GEMINI_MODEL") or "pro"
-        self._exe = exe
-        self.timeout_s = timeout_s
-        self._help: str | None = None
 
-    def exe(self) -> str | None:
-        return self._exe or shutil.which("gemini")
+# direct connections only: a system proxy must never see the request (it would leave the PC)
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-    def available(self) -> tuple[bool, str]:
-        exe = self.exe()
-        if not exe:
-            return False, ("the Gemini CLI is not installed: npm install -g @google/gemini-cli, then run `gemini` "
-                           "once and choose 'Login with Google' (your Google AI Pro plan's quota is then used)")
-        return True, f"Gemini CLI at {exe}, model '{self.model}' (signed in with your Google account)"
 
-    def _supports(self, text: str) -> bool:
-        if self._help is None:
-            try:
-                cp = subprocess.run([self.exe(), "--help"], capture_output=True, text=True, timeout=60,
-                                    encoding="utf-8", errors="replace")
-                self._help = (cp.stdout or "") + (cp.stderr or "")
-            except (OSError, subprocess.SubprocessError):
-                self._help = ""
-        return text in self._help
+class LocalModel:
+    """An OpenAI-compatible chat server on this PC - by default Strata serving Qwen3.8-Flash-Next."""
+    name = "local"
 
-    def complete(self, prompt: str) -> Reply:
-        exe = self.exe()
-        if not exe:
-            raise ModelError(self.available()[1])
-        argv = [exe, "-p", self.INSTRUCTION, "--output-format", "json", "-m", self.model]
-        if self._supports("--approval-mode") and self._supports("plan"):
-            argv += ["--approval-mode", "plan"]                  # read-only: no edits, no shell
-        with tempfile.TemporaryDirectory(prefix="astracad_gemini_") as cwd:   # nothing here to read
-            try:
-                cp = subprocess.run(argv, input=prompt, capture_output=True, text=True, cwd=cwd,
-                                    timeout=self.timeout_s, encoding="utf-8", errors="replace")
-            except subprocess.TimeoutExpired:
-                raise ModelError(f"the Gemini CLI did not answer within {self.timeout_s:.0f} s") from None
-            except OSError as ex:
-                raise ModelError(f"the Gemini CLI could not be started: {ex}") from None
-        out = (cp.stdout or "").strip()
+    def __init__(self, url: str | None = None, model: str | None = None, thinking: str | None = None,
+                 timeout_s: float | None = None):
+        self.url = (url or os.environ.get("ASTRACAD_MODEL_URL") or DEFAULT_URL).strip().rstrip("/")
+        self.model = (model or os.environ.get("ASTRACAD_MODEL_NAME") or DEFAULT_MODEL).strip()
+        self.thinking = (thinking or os.environ.get("ASTRACAD_MODEL_THINKING") or "low").strip().lower()
         try:
-            doc = json.loads(out[out.index("{"):]) if "{" in out else {}
+            self.timeout_s = float(timeout_s or os.environ.get("ASTRACAD_MODEL_TIMEOUT_S") or 900)
         except ValueError:
-            doc = {}
-        if doc.get("error"):
-            err = doc["error"]
-            raise ModelError(f"Gemini CLI error: {err.get('message', err) if isinstance(err, dict) else err}")
-        if cp.returncode != 0 or "response" not in doc:
-            hint = " (not signed in? run `gemini` once and choose Login with Google)" if cp.returncode in (1, 41) else ""
-            raise ModelError(f"the Gemini CLI exited with {cp.returncode}{hint}: {(cp.stderr or out)[-400:]}")
-        return Reply(str(doc["response"]), self.name, self.model, {"stats": doc.get("stats") or {}})
+            self.timeout_s = 900.0
 
+    def problem(self) -> str | None:
+        """Why this configuration may not be used; None when it may."""
+        u = urllib.parse.urlsplit(self.url)
+        if u.scheme not in ("http", "https") or not u.hostname:
+            return f"ASTRACAD_MODEL_URL must be an http address such as {DEFAULT_URL}, not {self.url!r}"
+        if not _loopback(u.hostname) and os.environ.get("ASTRACAD_MODEL_ALLOW_REMOTE") != "1":
+            return (f"{u.hostname} is not this PC; ASTraCAD sends requests only to a model on this computer "
+                    "(ASTRACAD_MODEL_ALLOW_REMOTE=1 allows another address - then the request leaves the PC)")
+        if self.thinking not in THINKING:
+            return f"ASTRACAD_MODEL_THINKING must be one of {', '.join(THINKING)}, not {self.thinking!r}"
+        return None
 
-class GeminiAPI:
-    name = "gemini-api"
-    URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    def where(self) -> str:
+        host = urllib.parse.urlsplit(self.url).hostname or ""
+        return f"{self.url} ({'on this PC' if _loopback(host) else 'another computer'})"
 
-    def __init__(self, model: str | None = None, timeout_s: float = 120.0):
-        self.model = model or os.environ.get("ASTRACAD_GEMINI_MODEL") or "gemini-2.5-pro"
-        self.timeout_s = timeout_s
+    def _open(self, path: str, body: dict | None, timeout: float):
+        headers = {"Content-Type": "application/json"}
+        key = os.environ.get("ASTRACAD_MODEL_API_KEY")
+        if key:
+            headers["Authorization"] = f"Bearer {key}"
+        data = json.dumps(body).encode("utf-8") if body is not None else None
+        req = urllib.request.Request(self.url + path, data=data, headers=headers,
+                                     method="POST" if body is not None else "GET")
+        return _OPENER.open(req, timeout=timeout)
+
+    @staticmethod
+    def _http_error(ex: urllib.error.HTTPError) -> str:
+        raw = ex.read().decode("utf-8", "replace")
+        try:
+            msg = json.loads(raw)["error"]["message"]
+        except (ValueError, KeyError, TypeError):
+            msg = raw[:300]
+        hint = {401: " (the server wants an API key: set ASTRACAD_MODEL_API_KEY)",
+                409: " (the model is busy with another request; ask again when it is done)",
+                503: " (the model is still loading or restarting; ask again in a moment)"}.get(ex.code, "")
+        return f"the local model server answered {ex.code}: {msg}{hint}"
 
     def available(self) -> tuple[bool, str]:
-        if not os.environ.get("GEMINI_API_KEY"):
-            return False, "no GEMINI_API_KEY in the environment (a key from Google AI Studio; not the AI Pro plan)"
-        return True, f"Gemini API, model '{self.model}' (key from the environment)"
-
-    def complete(self, prompt: str) -> Reply:
-        key = os.environ.get("GEMINI_API_KEY")
-        if not key:
-            raise ModelError(self.available()[1])
-        body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": 0, "responseMimeType": "application/json"}}
-        req = urllib.request.Request(self.URL.format(model=self.model), data=json.dumps(body).encode("utf-8"),
-                                     headers={"Content-Type": "application/json", "x-goog-api-key": key},
-                                     method="POST")
+        bad = self.problem()
+        if bad:
+            return False, bad
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout_s) as r:
+            with self._open("/models", None, timeout=3) as r:
                 doc = json.loads(r.read().decode("utf-8"))
         except urllib.error.HTTPError as ex:
-            detail = ex.read().decode("utf-8", "replace")[:300]
-            raise ModelError(f"Gemini API answered {ex.code}: {detail}") from None
-        except (urllib.error.URLError, TimeoutError, ValueError) as ex:
-            raise ModelError(f"Gemini API not reached: {ex}") from None
+            return False, self._http_error(ex)
+        except (urllib.error.URLError, OSError, ValueError):
+            return False, f"no model server answers at {self.url} - {START_HINT}"
+        names = [str(m.get("id")) for m in (doc.get("data") or []) if isinstance(m, dict) and m.get("id")]
+        return True, f"{', '.join(names[:3]) or self.model} at {self.where()}, thinking {self.thinking}"
+
+    def complete(self, system: str, user: str) -> Reply:
+        bad = self.problem()
+        if bad:
+            raise ModelError(bad)
+        body: dict[str, Any] = {
+            "model": self.model, "stream": False,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "response_format": {"type": "json_object"},   # Strata checks that the answer is one JSON object
+            "tool_choice": "none",                          # no tools: the model answers, it does not act
+            "reasoning_effort": self.thinking,
+        }
+        if self.thinking != "none":
+            body["reasoning_budget_tokens"] = THINKING_BUDGET
         try:
-            text = "".join(p.get("text", "") for p in doc["candidates"][0]["content"]["parts"])
+            with self._open("/chat/completions", body, timeout=self.timeout_s) as r:
+                doc = json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as ex:
+            raise ModelError(self._http_error(ex)) from None
+        except TimeoutError:
+            raise ModelError(f"the local model did not answer within {self.timeout_s:.0f} s") from None
+        except (urllib.error.URLError, OSError) as ex:
+            reason = getattr(ex, "reason", ex)
+            raise ModelError(f"the local model at {self.url} was not reached ({reason}) - {START_HINT}") from None
+        except ValueError:
+            raise ModelError("the local model server sent something that is not JSON") from None
+        try:
+            choice = doc["choices"][0]
+            msg = choice["message"]
         except (KeyError, IndexError, TypeError):
-            raise ModelError(f"Gemini API gave no answer: {json.dumps(doc)[:300]}") from None
-        return Reply(text, self.name, self.model, {"usage": doc.get("usageMetadata") or {}})
+            raise ModelError(f"the local model server gave no answer: {json.dumps(doc)[:300]}") from None
+        text = re.sub(r"<think>.*?</think>", "", str(msg.get("content") or ""), flags=re.S).strip()
+        if choice.get("finish_reason") == "length":
+            raise ModelError("the local model ran out of room before its answer was complete (context full); "
+                             "try a shorter request or ASTRACAD_MODEL_THINKING=none")
+        if not text:
+            raise ModelError("the local model gave an empty answer")
+        reasoning = str(msg.get("reasoning_content") or "")
+        return Reply(text, self.name, str(doc.get("model") or self.model),
+                     {"where": self.where(), "thinking": self.thinking, "usage": doc.get("usage") or {},
+                      "finish_reason": choice.get("finish_reason"), "reasoning": reasoning[:20000]})
 
 
 def provider():
-    """The configured provider, or None when the model gateway is off or nothing is set up."""
-    choice = (os.environ.get("ASTRACAD_MODEL_PROVIDER") or "auto").strip().lower()
-    if choice == "off":
-        return None
-    if choice == "gemini-cli":
-        return GeminiCLI()
-    if choice == "gemini-api":
-        return GeminiAPI()
-    cli = GeminiCLI()
-    if cli.available()[0]:
-        return cli
-    api = GeminiAPI()
-    return api if api.available()[0] else None
+    """The configured provider, or None when the model gateway is switched off."""
+    choice = (os.environ.get("ASTRACAD_MODEL_PROVIDER") or "local").strip().lower()
+    return None if choice == "off" else LocalModel()
 
 
 def status() -> dict[str, Any]:
-    choice = (os.environ.get("ASTRACAD_MODEL_PROVIDER") or "auto").strip().lower()
-    if choice == "off":
-        return {"provider": None, "available": False, "detail": "switched off (ASTRACAD_MODEL_PROVIDER=off)"}
     p = provider()
     if p is None:
-        return {"provider": None, "available": False,
-                "detail": GeminiCLI().available()[1] + "; or set GEMINI_API_KEY for the Gemini API"}
+        return {"provider": None, "available": False, "detail": "switched off (ASTRACAD_MODEL_PROVIDER=off)"}
     ok, detail = p.available()
-    return {"provider": p.name, "model": p.model, "available": ok, "detail": detail,
-            "sends": "the request text and ASTraCAD's fixed planning instructions - no drawings, models or files"}
+    return {"provider": p.name, "model": p.model, "url": p.url, "thinking": p.thinking, "available": ok,
+            "detail": detail, "sends": f"the request text and ASTraCAD's fixed planning instructions, to {p.where()} "
+                                       "- no drawings, models or files"}

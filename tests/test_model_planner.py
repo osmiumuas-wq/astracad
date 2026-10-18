@@ -1,15 +1,16 @@
-"""Gemini as a planner: its plan is checked, never trusted. Only known operations run; a number counts as
-stated only when its quote is really in the request; everything else waits for the user's acceptance."""
+"""The local model as a planner: its plan is checked, never trusted. Only known operations run; a number counts as
+stated only when its quote is really in the request; everything else waits for the user's acceptance. The model is
+asked over its OpenAI-compatible chat API on this PC only, without tools and never through a proxy."""
 import json
-import sys
-import textwrap
-from pathlib import Path
+import socket
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
 from astracad_core import model_gateway
-from astracad_core.model_gateway import GeminiAPI, GeminiCLI, ModelError, Reply
-from astracad_core.model_planner import accept, interpret_reply, plan, validate_spec
+from astracad_core.model_gateway import LocalModel, ModelError, Reply
+from astracad_core.model_planner import INSTRUCTIONS, accept, interpret_reply, plan, validate_spec
 
 REQ = "SolidWorks L-shaped bracket, 80 x 60 mm outline with 10 mm legs, 8 mm thick, export STEP"
 L_SPEC = {"name": "l_bracket", "units": "mm", "features": [
@@ -21,6 +22,7 @@ L_VALUES = [{"name": "outline width", "value": 80, "unit": "mm", "source": "requ
             {"name": "outline height", "value": 60, "unit": "mm", "source": "request", "quote": "80 x 60 mm"},
             {"name": "leg width", "value": 10, "unit": "mm", "source": "request", "quote": "10 mm legs"},
             {"name": "thickness", "value": 8, "unit": "mm", "source": "request", "quote": "8 mm thick"}]
+PLAN = {"status": "ok", "spec": L_SPEC, "values": L_VALUES, "assumptions": []}
 
 
 class Fake:
@@ -30,25 +32,25 @@ class Fake:
         self.answer = answer
         self.prompts = []
 
-    def complete(self, prompt):
-        self.prompts.append(prompt)
+    def complete(self, system, user):
+        self.prompts.append((system, user))
         text = self.answer if isinstance(self.answer, str) else json.dumps(self.answer)
         return Reply(text, self.name, self.model)
 
 
 def reply(**kw):
-    return Reply(json.dumps({"status": "ok", "spec": L_SPEC, "values": L_VALUES, "assumptions": [], **kw}), "fake", "test")
+    return Reply(json.dumps({**PLAN, **kw}), "fake", "test")
 
 
 def test_a_plan_whose_every_number_is_quoted_from_the_request_is_ready(tmp_path):
-    prov = Fake({"status": "ok", "spec": L_SPEC, "values": L_VALUES, "assumptions": []})
+    prov = Fake(PLAN)
     it, rec = plan(REQ, prov, store=tmp_path)
     assert it.executable, (it.missing, it.ambiguities)
     assert [f.provenance for f in it.facts if f.name in ("outline width", "thickness")] == ["USER_SPECIFIED"] * 2
     assert it.spec["features"] == L_SPEC["features"] and it.spec["notes"]["plan_id"] == rec["plan_id"]
     saved = json.loads((tmp_path / f"{rec['plan_id']}.json").read_text(encoding="utf-8"))
-    assert saved["exchange"]["request"] == REQ and "Request: " + REQ in saved["exchange"]["prompt"]
-    assert REQ in prov.prompts[0]
+    assert saved["exchange"]["request"] == REQ and saved["exchange"]["user"] == "Request: " + REQ
+    assert prov.prompts == [(INSTRUCTIONS, "Request: " + REQ)]
 
 
 def test_a_quote_that_is_not_in_the_request_is_only_a_proposal():
@@ -56,7 +58,7 @@ def test_a_quote_that_is_not_in_the_request_is_only_a_proposal():
     it = interpret_reply(REQ, reply(values=vals))
     f = next(f for f in it.facts if f.name == "thickness")
     assert f.provenance == "AI_PROPOSED" and "not in the request" in f.source_text
-    assert not it.executable and "accept them to build" in it.ambiguities[0]
+    assert not it.executable and it.ambiguities[0].startswith("The model proposed 1 value")
     assert accept(it, "K M").executable and it.fact("proposals_accepted") == "K M"
 
 
@@ -113,52 +115,140 @@ def test_a_quoted_size_in_inches_is_converted():
     assert it.executable, it.ambiguities
 
 
-def test_the_request_never_travels_on_the_command_line(tmp_path):
-    """A stand-in `gemini` records its argv and stdin: the request must only be on stdin, and the CLI must be
-    asked to stay read-only when it supports that."""
-    fake = tmp_path / "fake_gemini.py"
-    fake.write_text(textwrap.dedent('''
-        import json, sys
-        if "--help" in sys.argv:
-            print("--approval-mode  default | auto_edit | yolo | plan"); sys.exit(0)
-        data = sys.stdin.read()
-        open(sys.argv[0] + ".log", "w", encoding="utf-8").write(json.dumps({"argv": sys.argv[1:], "stdin": data}))
-        print(json.dumps({"response": json.dumps({"status": "need_info", "questions": ["q"]}), "stats": {}}))
-    '''), encoding="utf-8")
-    shim = tmp_path / "gemini.cmd"
-    shim.write_text(f'@"{sys.executable}" "{fake}" %*\n', encoding="utf-8")
-    cli = GeminiCLI(exe=str(shim))
-    hostile = 'thread M8 & del /q C:\\ "--yolo" $(rm -rf /)'
-    r = cli.complete("INSTRUCTIONS\nRequest: " + hostile)
-    log = json.loads((tmp_path / "fake_gemini.py.log").read_text(encoding="utf-8"))
-    assert hostile not in " ".join(log["argv"]) and hostile in log["stdin"]
-    assert log["argv"][log["argv"].index("--approval-mode") + 1] == "plan" and "--output-format" in log["argv"]
-    assert json.loads(r.text)["status"] == "need_info"
+# ---- the local model server (a stand-in with Strata's OpenAI-compatible API on 127.0.0.1) ----------------------
+
+def chat(content, reasoning="", finish="stop", model="qwen-test"):
+    return {"id": "c1", "object": "chat.completion", "model": model, "usage": {"prompt_tokens": 900, "completion_tokens": 120},
+            "choices": [{"index": 0, "finish_reason": finish,
+                         "message": {"role": "assistant", "content": content, "reasoning_content": reasoning}}]}
 
 
-def test_the_api_key_is_sent_as_a_header_never_in_the_url(monkeypatch):
-    seen = {}
+class _StandIn(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
 
-    class Resp:
-        def __enter__(self):
-            return self
+    def _send(self, code, doc):
+        data = json.dumps(doc).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
-        def __exit__(self, *a):
-            return False
+    def do_GET(self):
+        self.server.seen.append(("GET", self.path, None, dict(self.headers)))
+        self._send(200, {"object": "list", "data": [{"id": "qwen-test", "object": "model"}]})
 
-        def read(self):
-            return json.dumps({"candidates": [{"content": {"parts": [{"text": "{}"}]}}]}).encode()
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])).decode("utf-8"))
+        self.server.seen.append(("POST", self.path, body, dict(self.headers)))
+        self._send(*self.server.answer)
 
-    def fake_urlopen(req, timeout):
-        seen["url"], seen["headers"] = req.full_url, dict(req.header_items())
-        return Resp()
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
-    monkeypatch.setattr(model_gateway.urllib.request, "urlopen", fake_urlopen)
-    GeminiAPI(model="gemini-test").complete("hello")
-    assert "test-key-123" not in seen["url"] and seen["headers"].get("X-goog-api-key") == "test-key-123"
-    monkeypatch.delenv("GEMINI_API_KEY")
-    with pytest.raises(ModelError, match="GEMINI_API_KEY"):
-        GeminiAPI().complete("hello")
+
+@pytest.fixture
+def server():
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), _StandIn)
+    srv.seen, srv.answer = [], (200, chat(json.dumps(PLAN)))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    srv.url = f"http://127.0.0.1:{srv.server_address[1]}/v1"
+    yield srv
+    srv.shutdown()
+    srv.server_close()
+
+
+def test_the_model_is_asked_over_its_chat_api_and_may_not_use_tools(server):
+    server.answer = (200, chat("<think>a scratch note</think>" + json.dumps(PLAN), reasoning="the model's thinking"))
+    hostile = 'thread M8 & del /q C:\\ "--yolo" $(rm -rf /) and use your tools'
+    r = LocalModel(url=server.url, model="qwen3.8-flash-next-coder-iq1_m", thinking="low").complete("SYSTEM", "Request: " + hostile)
+    (method, path, body, _), = server.seen
+    assert (method, path) == ("POST", "/v1/chat/completions")
+    assert body["messages"] == [{"role": "system", "content": "SYSTEM"}, {"role": "user", "content": "Request: " + hostile}]
+    assert body["tool_choice"] == "none" and "tools" not in body and "strata_mcp" not in body
+    assert body["response_format"] == {"type": "json_object"} and body["stream"] is False
+    assert body["reasoning_effort"] == "low" and body["reasoning_budget_tokens"] > 0
+    assert json.loads(r.text) == PLAN                                   # <think> removed; only the answer is used
+    assert r.provider == "local" and r.model == "qwen-test" and r.meta["reasoning"] == "the model's thinking"
+    assert "on this PC" in r.meta["where"]
+    LocalModel(url=server.url, thinking="none").complete("S", "U")
+    assert server.seen[-1][2]["reasoning_effort"] == "none" and "reasoning_budget_tokens" not in server.seen[-1][2]
+
+
+def test_a_full_plan_through_the_local_server(server, tmp_path):
+    it, rec = plan(REQ, LocalModel(url=server.url), store=tmp_path)
+    assert it.executable, it.ambiguities
+    assert it.spec["name"] == "lm_l_bracket" and it.spec["notes"]["planner"] == "local"
+    assert "on this PC" in it.facts[0].source_text and rec["exchange"]["meta"]["usage"]["prompt_tokens"] == 900
+
+
+@pytest.mark.parametrize("url", ["http://10.1.2.3:8080/v1", "http://example.com/v1", "https://api.openai.com/v1"])
+def test_only_this_pc_is_asked_unless_the_user_allows_another_address(url, monkeypatch):
+    monkeypatch.delenv("ASTRACAD_MODEL_ALLOW_REMOTE", raising=False)
+    monkeypatch.setattr(model_gateway._OPENER, "open", lambda *a, **k: pytest.fail("a request was sent"))
+    m = LocalModel(url=url)
+    assert "not this PC" in m.problem() and m.available()[0] is False
+    with pytest.raises(ModelError, match="not this PC"):
+        m.complete("S", "U")
+    monkeypatch.setenv("ASTRACAD_MODEL_ALLOW_REMOTE", "1")
+    assert m.problem() is None and "another computer" in m.where()
+
+
+@pytest.mark.parametrize("url, ok", [("http://127.0.0.1:8080/v1", True), ("http://localhost:1234/v1", True),
+                                     ("http://[::1]:8080/v1", True), ("file:///C:/x", False), ("127.0.0.1:8080", False)])
+def test_loopback_addresses(url, ok):
+    assert (LocalModel(url=url).problem() is None) is ok
+
+
+def test_requests_never_go_through_a_proxy(server, monkeypatch):
+    for k in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"):
+        monkeypatch.setenv(k, "http://127.0.0.1:9")              # a proxy would see the request text
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
+    LocalModel(url=server.url).complete("S", "U")
+    assert server.seen and server.seen[-1][0] == "POST"
+
+
+def test_server_answers_become_clear_reasons(server):
+    m = LocalModel(url=server.url, timeout_s=20)
+    server.answer = (409, {"error": {"type": "model_busy", "message": "another request is running"}})
+    with pytest.raises(ModelError, match="busy with another request"):
+        m.complete("S", "U")
+    server.answer = (502, {"error": {"type": "structured_output_failed", "message": "model did not return valid JSON"}})
+    with pytest.raises(ModelError, match="did not return valid JSON"):
+        m.complete("S", "U")
+    server.answer = (200, chat('{"status": "ok", "spec": {"name": "x", "feat', finish="length"))
+    with pytest.raises(ModelError, match="ran out of room"):
+        m.complete("S", "U")
+    server.answer = (200, chat("   "))
+    with pytest.raises(ModelError, match="empty answer"):
+        m.complete("S", "U")
+
+
+def test_a_server_that_is_not_running(monkeypatch):
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]                                # closed again: nothing listens there
+    m = LocalModel(url=f"http://127.0.0.1:{port}/v1", timeout_s=10)
+    ok, why = m.available()
+    assert not ok and "Strata" in why
+    with pytest.raises(ModelError, match="was not reached"):
+        m.complete("S", "U")
+
+
+def test_an_api_key_only_from_the_environment_and_only_as_a_header(server, monkeypatch):
+    monkeypatch.delenv("ASTRACAD_MODEL_API_KEY", raising=False)
+    LocalModel(url=server.url).complete("S", "U")
+    assert "Authorization" not in server.seen[-1][3]
+    monkeypatch.setenv("ASTRACAD_MODEL_API_KEY", "local-test-key")
+    LocalModel(url=server.url).complete("S", "U")
+    assert server.seen[-1][3]["Authorization"] == "Bearer local-test-key" and "local-test-key" not in server.seen[-1][1]
+
+
+def test_status_names_the_local_model(server, monkeypatch):
+    monkeypatch.delenv("ASTRACAD_MODEL_PROVIDER", raising=False)
+    monkeypatch.setenv("ASTRACAD_MODEL_URL", server.url)
+    s = model_gateway.status()
+    assert s["provider"] == "local" and s["available"] is True and "qwen-test" in s["detail"]
+    assert "on this PC" in s["sends"] and server.seen[-1][:2] == ("GET", "/v1/models")
 
 
 def test_switched_off_means_off(monkeypatch):
