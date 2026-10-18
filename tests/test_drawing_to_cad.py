@@ -177,3 +177,154 @@ def test_a_single_views_outline_is_never_taken_for_a_sheet_frame(tmp_path):
     dropped and only the hole was rebuilt (an 8 mm disc). A dimensioned outline is part geometry."""
     it = reconstruct(single_view_plate(tmp_path / "gasket.dxf"), through=True)
     assert it.expect["size_mm"] == pytest.approx([50, 30, 4]) and it.fact("sheet_frame") is None
+
+
+def turned_part_dxf(path: Path, *, kind: str = "stepped", s: float = 1.0, dims: bool = True,
+                    end_view: bool = True, dia_dims: bool = False, chamfer: float = 0.0,
+                    asymmetric: bool = False, wrong_text: str | None = None) -> Path:
+    """Drawings of turned parts: stepped shaft, chamfered cylinder, or hollow tube/bushing."""
+    doc = ezdxf.new("R2010", setup=True)
+    doc.header["$INSUNITS"] = 4
+    msp = doc.modelspace()
+    if kind == "stepped":
+        L1, R1, L2, R2 = 25.0 * s, 10.0 * s, 35.0 * s, 15.0 * s
+        Lt = L1 + L2
+        msp.add_line((-5 * s, 0), (Lt + 5 * s, 0), dxfattribs={"linetype": "CENTER"})
+        # Top
+        msp.add_line((0, R1), (L1, R1))
+        msp.add_line((L1, R1), (L1, R2))
+        msp.add_line((L1, R2), (Lt, R2))
+        # Bottom
+        R1_bot = R1 if not asymmetric else R1 * 1.5
+        msp.add_line((0, -R1_bot), (L1, -R1_bot))
+        msp.add_line((L1, -R1_bot), (L1, -R2))
+        msp.add_line((L1, -R2), (Lt, -R2))
+        # Ends
+        msp.add_line((0, -R1_bot), (0, R1))
+        msp.add_line((Lt, -R2), (Lt, R2))
+        if end_view:
+            cx = Lt + 40 * s
+            msp.add_circle((cx, 0), R1)
+            msp.add_circle((cx, 0), R2)
+        if dims:
+            msp.add_linear_dim(base=(L1 / 2, -25 * s), p1=(0, 0), p2=(L1, 0),
+                              override={"dimlfac": 1 / s}).render()
+            msp.add_linear_dim(base=(L1 + L2 / 2, -25 * s), p1=(L1, 0), p2=(Lt, 0),
+                              override={"dimlfac": 1 / s}).render()
+            if dia_dims:
+                msp.add_linear_dim(base=(-15 * s, 0), p1=(0, -R1), p2=(0, R1), angle=90,
+                                  text=wrong_text or "%%c<>", override={"dimlfac": 1 / s}).render()
+                msp.add_linear_dim(base=(Lt + 15 * s, 0), p1=(Lt, -R2), p2=(Lt, R2), angle=90,
+                                  text="%%c<>", override={"dimlfac": 1 / s}).render()
+    elif kind == "chamfered":
+        L, R, c = 50.0 * s, 10.0 * s, chamfer * s
+        msp.add_line((-5 * s, 0), (L + 5 * s, 0), dxfattribs={"linetype": "CENTER"})
+        # Top
+        msp.add_line((c, R), (L - c, R))
+        msp.add_line((0, R - c), (c, R))
+        msp.add_line((L - c, R), (L, R - c))
+        # Bottom
+        msp.add_line((c, -R), (L - c, -R))
+        msp.add_line((0, -(R - c)), (c, -R))
+        msp.add_line((L - c, -R), (L, -(R - c)))
+        # Ends
+        msp.add_line((0, -(R - c)), (0, R - c))
+        msp.add_line((L, -(R - c)), (L, R - c))
+        if end_view:
+            cx = L + 40 * s
+            msp.add_circle((cx, 0), R)
+        if dims:
+            msp.add_linear_dim(base=(L / 2, -25 * s), p1=(0, 0), p2=(L, 0),
+                              override={"dimlfac": 1 / s}).render()
+            if dia_dims:
+                msp.add_linear_dim(base=(-15 * s, 0), p1=(0, -R), p2=(0, R), angle=90,
+                                  text="%%c<>", override={"dimlfac": 1 / s}).render()
+    elif kind == "tube":
+        L, Ro, Ri = 50.0 * s, 20.0 * s, 10.0 * s
+        msp.add_line((-5 * s, 0), (L + 5 * s, 0), dxfattribs={"linetype": "CENTER"})
+        # Outer
+        msp.add_line((0, Ro), (L, Ro))
+        msp.add_line((0, -Ro), (L, -Ro))
+        # Inner (hidden)
+        msp.add_line((0, Ri), (L, Ri), dxfattribs={"linetype": "HIDDEN"})
+        msp.add_line((0, -Ri), (L, -Ri), dxfattribs={"linetype": "HIDDEN"})
+        # Ends
+        msp.add_line((0, Ri), (0, Ro))
+        msp.add_line((0, -Ro), (0, -Ri))
+        msp.add_line((L, Ri), (L, Ro))
+        msp.add_line((L, -Ro), (L, -Ri))
+        if end_view:
+            cx = L + 40 * s
+            msp.add_circle((cx, 0), Ri)
+            msp.add_circle((cx, 0), Ro)
+        if dims:
+            msp.add_linear_dim(base=(L / 2, -35 * s), p1=(0, 0), p2=(L, 0),
+                              override={"dimlfac": 1 / s}).render()
+            if dia_dims:
+                msp.add_linear_dim(base=(-15 * s, 0), p1=(0, -Ro), p2=(0, Ro), angle=90,
+                                  text="%%c<>", override={"dimlfac": 1 / s}).render()
+    doc.saveas(path)
+    return path
+
+
+def test_stepped_shaft_two_views_rebuilds_exact_revolve_profile_and_volume(tmp_path):
+    p = turned_part_dxf(tmp_path / "stepped_2v.dxf", kind="stepped", end_view=True)
+    it = reconstruct(p)
+    assert it.executable, (it.missing, it.ambiguities)
+    assert it.expect["size_mm"] == [30, 30, 60]
+    assert it.expect["volume_mm3"] == pytest.approx(math.pi * 10**2 * 25 + math.pi * 15**2 * 35)
+    features = it.spec["features"]
+    assert [f["$op"] for f in features] == ["sketch.profile", "feature.revolve"]
+    assert features[0]["args"]["points"] == [[0.0, 0.0], [0.0, 10.0], [25.0, 10.0], [25.0, 15.0], [60.0, 15.0], [60.0, 0.0]]
+
+
+def test_single_view_stepped_shaft_with_diameter_dimensions(tmp_path):
+    p = turned_part_dxf(tmp_path / "stepped_1v.dxf", kind="stepped", end_view=False, dia_dims=True)
+    it = reconstruct(p)
+    assert it.executable, (it.missing, it.ambiguities)
+    assert it.expect["size_mm"] == [30, 30, 60]
+    assert it.expect["volume_mm3"] == pytest.approx(math.pi * 10**2 * 25 + math.pi * 15**2 * 35)
+
+
+def test_turned_part_with_chamfered_ends(tmp_path):
+    p = turned_part_dxf(tmp_path / "chamfered.dxf", kind="chamfered", chamfer=1.0, end_view=True)
+    it = reconstruct(p)
+    assert it.executable, (it.missing, it.ambiguities)
+    assert it.expect["size_mm"] == [20, 20, 50]
+    assert it.expect["volume_mm3"] == pytest.approx(math.pi * 10**2 * 50 - 2 * math.pi * 1**2 * (10 - 1/3))
+    pts = it.spec["features"][0]["args"]["points"]
+    assert pts == [[0.0, 0.0], [0.0, 9.0], [1.0, 10.0], [49.0, 10.0], [50.0, 9.0], [50.0, 0.0]]
+
+
+def test_hollow_bushing_with_hidden_lines(tmp_path):
+    p = turned_part_dxf(tmp_path / "bushing.dxf", kind="tube", end_view=True)
+    it = reconstruct(p)
+    assert it.executable, (it.missing, it.ambiguities)
+    assert it.expect["size_mm"] == [40, 40, 50]
+    assert it.expect["volume_mm3"] == pytest.approx(math.pi * (20**2 - 10**2) * 50)
+    pts = it.spec["features"][0]["args"]["points"]
+    assert pts == [[0.0, 10.0], [0.0, 20.0], [50.0, 20.0], [50.0, 10.0]]
+
+
+def test_single_view_without_diameter_proof_is_refused(tmp_path):
+    p = turned_part_dxf(tmp_path / "no_dia.dxf", kind="stepped", end_view=False, dia_dims=False)
+    it = reconstruct(p)
+    assert not it.executable
+    assert any("not assumed to be a shaft" in a for a in it.ambiguities)
+
+
+def test_asymmetric_turned_view_is_refused(tmp_path):
+    p = turned_part_dxf(tmp_path / "asymm.dxf", kind="stepped", asymmetric=True, end_view=True)
+    it = reconstruct(p)
+    assert not it.executable
+    assert any("not symmetric across its centreline" in a for a in it.ambiguities)
+
+
+def test_stepped_shaft_scale_comes_from_dimensions(tmp_path):
+    p = turned_part_dxf(tmp_path / "scaled.dxf", kind="stepped", s=0.5, end_view=True)
+    it = reconstruct(p)
+    assert it.executable, (it.missing, it.ambiguities)
+    assert it.fact("view_scale_factor") == pytest.approx(2.0)
+    assert it.expect["size_mm"] == [30, 30, 60]
+    assert it.expect["volume_mm3"] == pytest.approx(math.pi * 10**2 * 25 + math.pi * 15**2 * 35)
+

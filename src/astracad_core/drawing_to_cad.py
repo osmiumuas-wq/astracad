@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -97,9 +98,10 @@ def _style(e, doc) -> str:
             lt = (doc.layers.get(e.dxf.layer).dxf.linetype or "CONTINUOUS").upper()
         except Exception:                                    # noqa: BLE001 - unknown layer: continuous
             lt = "CONTINUOUS"
-    if any(c in lt for c in _CENTER):
+    layer = (e.dxf.get("layer", "") or "").upper()
+    if any(c in lt for c in _CENTER) or any(c in layer for c in _CENTER):
         return "center"
-    if any(c in lt for c in _HIDDEN):
+    if any(c in lt for c in _HIDDEN) or any(c in layer for c in _HIDDEN):
         return "hidden"
     return "visible"
 
@@ -204,10 +206,30 @@ def _views(edges: list[Edge], facts: list[Fact], dim_points: list[tuple[float, f
         ext = [(min(boxes[i][0] for i in g), min(boxes[i][1] for i in g), max(boxes[i][2] for i in g),
                 max(boxes[i][3] for i in g)) for g in gl]
         r2 = _union(ext, gap=0.004 * diag)
-        if len(set(r2)) < len(gl):
+        parent = list(range(len(gl)))
+
+        def find(i):
+            while parent[i] != i:
+                parent[i] = parent[parent[i]]
+                i = parent[i]
+            return i
+        for i in range(len(gl)):
+            parent[find(i)] = find(r2[i])
+        for i, a in enumerate(ext):
+            for j in range(i + 1, len(ext)):
+                b = ext[j]
+                c_edges = [edges[k] for k in gl[i] + gl[j] if edges[k].style == "center"]
+                if c_edges:
+                    x_ov = min(a[2], b[2]) - max(a[0], b[0])
+                    y_ov = min(a[3], b[3]) - max(a[1], b[1])
+                    if (x_ov > 0.8 * min(a[2] - a[0], b[2] - b[0]) and abs(a[1] - b[3]) < 0.3 * diag) or \
+                            (y_ov > 0.8 * min(a[3] - a[1], b[3] - b[1]) and abs(a[0] - b[2]) < 0.3 * diag):
+                        parent[find(i)] = find(j)
+        r3 = [find(i) for i in range(len(gl))]
+        if len(set(r3)) < len(gl):
             merged = True
             groups = {}
-            for g, r in zip(gl, r2):
+            for g, r in zip(gl, r3):
                 groups.setdefault(r, []).extend(g)
     views = []
     for idx in groups.values():
@@ -366,7 +388,8 @@ def _dims(doc, problems: list[str]) -> list[dict]:
                 shown = written
         pts = [e.dxf.get(a) for a in ("defpoint", "defpoint2", "defpoint3", "defpoint4", "defpoint5")]
         pts = [(p.x, p.y) for p in pts if p is not None]
-        out.append({"handle": e.dxf.handle, "k": shown / meas, "value": shown, "pts": pts})
+        out.append({"handle": e.dxf.handle, "k": shown / meas, "value": shown, "pts": pts,
+                    "text": text, "dimtype": e.dxf.get("dimtype", 0) & 15})
     return out
 
 
@@ -445,6 +468,262 @@ def _stated(texts: list[str]) -> tuple[set, set]:
         for m in re.finditer(r"\b(?:THK|THICKNESS|THICK)\b\.?\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(MM|IN|\")?", t, re.I):
             thick.add((m.group(0).strip(), float(m.group(1)), (m.group(2) or "").upper()))
     return scales, thick
+
+
+def _poly_area(pts: list[list[float]]) -> float:
+    return sum(pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1] for i in range(len(pts))) / 2.0
+
+
+def _poly_cy(pts: list[list[float]]) -> float:
+    a = _poly_area(pts)
+    if abs(a) < 1e-12:
+        return 0.0
+    return sum((pts[i][1] + pts[(i + 1) % len(pts)][1]) * (pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1]) for i in range(len(pts))) / (6.0 * a)
+
+
+def _reconstruct_turned(views: list[View], doc, it: Interpretation, dims: list[dict], to_mm: float,
+                        scale: float | None, through: bool, given_depth, path: Path,
+                        reasons: list[str]) -> Interpretation | None:
+    tol = 1e-5 * max(max(v.w, v.h) for v in views)
+    solutions = []
+
+    all_texts = _texts(doc)
+    text_blob = " ".join(all_texts).upper()
+    has_text_clue = bool(re.search(r"\b(SHAFT|ROD|PIN|SPINDLE|AXLE|BUSH(?:ING)?|SLEEVE|TUBE|CYLINDER)\b", text_blob)) or \
+        any(c in text_blob for c in ("Ø", "%%C", "\\U+2205", "DIA"))
+
+    for V in views:
+        vis_lines = [e for e in V.edges if e.style == "visible" and e.kind == "L"]
+        if len(vis_lines) < 4:
+            continue
+        if any(e.kind != "L" for e in V.edges if e.style == "visible"):
+            continue
+
+        candidate_axes = []
+        center_lines = [e for e in V.edges if e.style == "center" and e.kind == "L"]
+        for c in center_lines:
+            x1, y1, x2, y2 = c.v
+            if abs(y1 - y2) <= tol * 5:
+                candidate_axes.append(("H", (y1 + y2) / 2.0, "centerline"))
+            if abs(x1 - x2) <= tol * 5:
+                candidate_axes.append(("V", (x1 + x2) / 2.0, "centerline"))
+
+        if not candidate_axes:
+            if V.w >= V.h:
+                candidate_axes.append(("H", (V.bbox[1] + V.bbox[3]) / 2.0, "symmetry"))
+            if V.h >= V.w:
+                candidate_axes.append(("V", (V.bbox[0] + V.bbox[2]) / 2.0, "symmetry"))
+
+        for orient, axis_val, axis_src in candidate_axes:
+            if orient == "H":
+                u_fn = lambda x, y: x
+                v_fn = lambda x, y: y - axis_val
+            else:
+                u_fn = lambda x, y: y
+                v_fn = lambda x, y: x - axis_val
+
+            segs = []
+            for e in vis_lines:
+                x1, y1, x2, y2 = e.v
+                segs.append(((u_fn(x1, y1), v_fn(x1, y1)), (u_fn(x2, y2), v_fn(x2, y2))))
+
+            u_min = min(min(s[0][0], s[1][0]) for s in segs)
+            u_max = max(max(s[0][0], s[1][0]) for s in segs)
+            total_len = u_max - u_min
+            if total_len <= tol:
+                continue
+
+            norm_segs = []
+            for (u1, v1), (u2, v2) in segs:
+                norm_segs.append(((u1 - u_min, v1), (u2 - u_min, v2)))
+
+            # Check symmetry across v = 0
+            symmetric = True
+            for (u1, v1), (u2, v2) in norm_segs:
+                if v1 * v2 < -tol * tol:
+                    if abs(u1 - u2) > tol * 5 or abs(v1 + v2) > tol * 5:
+                        symmetric = False
+                        break
+                else:
+                    matched = False
+                    for (ru1, rv1), (ru2, rv2) in norm_segs:
+                        if (abs(u1 - ru1) <= tol * 5 and abs(v1 + rv1) <= tol * 5 and
+                            abs(u2 - ru2) <= tol * 5 and abs(v2 + rv2) <= tol * 5) or \
+                           (abs(u1 - ru2) <= tol * 5 and abs(v1 + rv2) <= tol * 5 and
+                            abs(u2 - ru1) <= tol * 5 and abs(v2 + rv1) <= tol * 5):
+                            matched = True
+                            break
+                    if not matched:
+                        symmetric = False
+                        break
+
+            if not symmetric:
+                reasons.append("the view is not symmetric across its centreline: not a revolved part")
+                continue
+
+            # Check for bore (hidden lines)
+            hidden_lines = [e for e in V.edges if e.style == "hidden" and e.kind == "L"]
+            r_inner = 0.0
+            if hidden_lines:
+                h_norm = []
+                for e in hidden_lines:
+                    x1, y1, x2, y2 = e.v
+                    h_norm.append(((u_fn(x1, y1) - u_min, v_fn(x1, y1)), (u_fn(x2, y2) - u_min, v_fn(x2, y2))))
+                par = [s for s in h_norm if abs(s[0][1] - s[1][1]) <= tol * 5 and abs(s[0][1]) > tol]
+                if par:
+                    pos_r = [s for s in par if s[0][1] > tol]
+                    neg_r = [s for s in par if s[0][1] < -tol]
+                    if pos_r and neg_r:
+                        r_cand = pos_r[0][0][1]
+                        spans = [s for s in pos_r if abs(s[0][1] - r_cand) <= tol * 5]
+                        lo = min(min(s[0][0], s[1][0]) for s in spans)
+                        hi = max(max(s[0][0], s[1][0]) for s in spans)
+                        if abs(lo - 0) <= tol * 5 and abs(hi - total_len) <= tol * 5:
+                            r_inner = r_cand
+                        else:
+                            reasons.append("hidden lines do not run the full length: blind bores are not rebuilt yet")
+                            continue
+
+            # Identify the outer step radii from the upper profile segments
+            step_radii = {round(max(v1, v2), 4) for (u1, v1), (u2, v2) in norm_segs if max(v1, v2) > tol}
+
+            # Check other views
+            other_views = [o for o in views if o is not V]
+            end_view = None
+            if other_views:
+                all_explained = True
+                for o in other_views:
+                    o_vis = [e for e in o.edges if e.style == "visible"]
+                    if o_vis and all(e.kind == "C" for e in o_vis):
+                        centers = {(round(e.v[0], 4), round(e.v[1], 4)) for e in o_vis}
+                        if len(centers) == 1:
+                            ocx, ocy = next(iter(centers))
+                            if orient == "H" and abs(ocy - axis_val) <= tol * 10:
+                                end_view = o
+                                o_radii = {round(e.v[2], 4) for e in o_vis}
+                                min_step_r = min(step_radii) if step_radii else 0.0
+                                bore_circles = [r for r in o_radii if r < min_step_r - tol]
+                                if bore_circles and r_inner == 0.0:
+                                    if not through and len(hidden_lines) == 0:
+                                        it.ambiguities.append("the drawing shows no hidden lines, so whether its inner bore goes through is not shown - confirm 'through' to rebuild")
+                                        return it
+                                    r_inner = min(bore_circles)
+                                continue
+                            elif orient == "V" and abs(ocx - axis_val) <= tol * 10:
+                                end_view = o
+                                continue
+                    all_explained = False
+                    break
+                if not all_explained:
+                    reasons.append(f"{len(other_views)} view(s) on the sheet are not explained by the turned part")
+                    continue
+
+            # If no other views, must be proven by diameter dimensions or text
+            if not end_view:
+                has_dia_dim = False
+                for d in V.dims:
+                    txt = d.get("text", "") or ""
+                    dt = d.get("dimtype", 0)
+                    if dt == 3 or any(c in txt for c in ("Ø", "%%c", "\\U+2205", "DIA", "dia")):
+                        has_dia_dim = True
+                        break
+                if not (has_dia_dim or has_text_clue):
+                    reasons.append("the drawing does not state whether this view is round (no diameter symbol 'Ø', no circular view, no round part note) - not assumed to be a shaft")
+                    continue
+
+            # Build half-profile in v >= r_inner
+            upper_segs = []
+            for (u1, v1), (u2, v2) in norm_segs:
+                if v1 * v2 < -tol * tol:
+                    v_top = max(v1, v2)
+                    upper_segs.append(((u1, r_inner), (u1, v_top)))
+                elif min(v1, v2) >= -tol:
+                    upper_segs.append(((u1, max(v1, r_inner)), (u2, max(v2, r_inner))))
+
+            upper_segs.append(((total_len, r_inner), (0.0, r_inner)))
+
+            nodes = []
+
+            def get_node(p):
+                for i, q in enumerate(nodes):
+                    if abs(p[0] - q[0]) <= tol * 5 and abs(p[1] - q[1]) <= tol * 5:
+                        return i
+                nodes.append(p)
+                return len(nodes) - 1
+
+            adj = {}
+            edge_list = []
+            for p1, p2 in upper_segs:
+                if math.hypot(p1[0] - p2[0], p1[1] - p2[1]) > tol:
+                    n1 = get_node(p1)
+                    n2 = get_node(p2)
+                    if n1 != n2:
+                        k = len(edge_list)
+                        edge_list.append((n1, n2))
+                        adj.setdefault(n1, []).append((n2, k))
+                        adj.setdefault(n2, []).append((n1, k))
+
+            start_cand = [i for i, n in enumerate(nodes) if abs(n[0] - 0) <= tol * 5 and abs(n[1] - r_inner) <= tol * 5]
+            if not start_cand:
+                reasons.append("could not form a closed half-profile at origin")
+                continue
+
+            curr = start_cand[0]
+            path_nodes = [curr]
+            used_edges = set()
+            while True:
+                nxt = None
+                for n, k in adj.get(curr, []):
+                    if k not in used_edges:
+                        used_edges.add(k)
+                        nxt = n
+                        break
+                if nxt is None or nxt == path_nodes[0]:
+                    break
+                path_nodes.append(nxt)
+                curr = nxt
+
+            poly = [nodes[i] for i in path_nodes]
+            if len(poly) < 3 or abs(_poly_area(poly)) <= tol:
+                reasons.append("half-profile encloses no area")
+                continue
+
+            solutions.append((V, orient, poly, total_len, r_inner, end_view))
+
+    if not solutions:
+        return None
+
+    V, orient, poly, total_len, r_inner, end_view = solutions[0]
+    k = V.k * to_mm
+    pts = [[round(p[0] * k, 9), round(p[1] * k, 9)] for p in poly]
+
+    W = round(total_len * k, 9)
+    D_max = round(2.0 * max(p[1] for p in pts), 9)
+    area = abs(_poly_area(pts))
+    cy = _poly_cy(pts)
+    vol = round(2.0 * math.pi * cy * area, 6)
+
+    it.expect = {"size_mm": [D_max, D_max, W], "volume_mm3": vol}
+    kind_str = "tube / bushing" if r_inner > 0 else "stepped shaft / cylinder"
+    it.facts += [
+        Fact("views", len(views), None, "CALCULATED", "edge groups separated by clear space"),
+        Fact("turned_part", f"{kind_str}, {W:g} mm long, max diameter {D_max:g} mm" + (f", bore {r_inner * 2 * k:g} mm" if r_inner > 0 else ""),
+             None, "CALCULATED", "symmetric profile revolved 360 deg around its centreline"),
+        Fact("view_scale_factor", V.k, None, "CALCULATED", f"from {len(V.dims)} dimension(s) in that view" if V.dims else "sheet scale factor"),
+        Fact("volume_mm3", vol, "mm^3", "CALCULATED", "Pappus: 2 * pi * centroid_radius * half_profile_area"),
+    ]
+    stem = "".join(c if c.isalnum() else "_" for c in path.stem)[:40]
+    it.spec = {
+        "name": f"from_{stem}",
+        "units": "mm",
+        "features": [
+            {"$op": "sketch.profile", "id": "profile", "sketched_on": "front", "args": {"points": pts}},
+            {"$op": "feature.revolve", "id": "body", "args": {"angle": 360}}
+        ],
+        "exports": [{"format": "step"}],
+        "notes": {"source_drawing": str(path), "source_sha256": _sha(path)}
+    }
+    return it
 
 
 def reconstruct(path: str | Path, *, through: bool = False, scale: float | None = None,
@@ -626,6 +905,9 @@ def reconstruct(path: str | Path, *, through: bool = False, scale: float | None 
         solutions.append((P, outer, inner, depths[0], through_seen, used_views))
 
     if not solutions:
+        res = _reconstruct_turned(views, doc, it, dims, to_mm, scale, through, given_depth, path, reasons)
+        if res is not None:
+            return res
         it.ambiguities.append("not rebuilt: " + ("; ".join(dict.fromkeys(reasons)) if reasons else
                                                 "no view closes into an outline"))
         return it

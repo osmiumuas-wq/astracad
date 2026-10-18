@@ -10,7 +10,7 @@ independent re-read of the exported STEP.
 
 ## What this version rebuilds, and how it proves it
 
-A part that is **one extrusion**: a constant section through a constant thickness, with openings that go all the
+1. A part that is **one extrusion**: a constant section through a constant thickness, with openings that go all the
 way through (plates, brackets cut from plate, flanges, gaskets, spacers with holes).
 
 | Step | Rule |
@@ -23,8 +23,21 @@ way through (plates, brackets cut from plate, flanges, gaskets, spacers with hol
 | Through | an opening is through only when hidden lines show it through the whole depth in the aligned views; a drawing without hidden lines needs the user's `--through` (recorded as stated by the user) |
 | Every view | every view on the sheet must be the section or an aligned view; a detail, section or auxiliary view stops the rebuild |
 
-Refused, with the reason: steps, bosses, blind holes or pockets, turned parts (revolve), splines and ellipses,
-unaligned views, a view without a scale, contradicting dimensions, more than one thickness or scale stated.
+2. A **turned part (revolve)**: an axisymmetric part seen from the side (stepped shaft, cylinder with chamfered ends, hollow tube or bushing with an inner bore).
+
+| Step | Rule |
+|---|---|
+| Axis | Centre lines in the view or the bounding-box midline; must be strictly horizontal or vertical |
+| Symmetry | Upper and lower halves must match symmetrically across the axis within drafting tolerance; asymmetric views are refused |
+| Proof of roundness | A single view must carry diameter dimensions ('Ø', '%%c', 'DIA') or a round part note; bare unannotated rectangles are refused to prevent guessing |
+| Aligned end view | If present, must consist of concentric circles centered on the shaft axis; outer circles match step radii, smaller circle confirms bore radius |
+| Inner bore / tube | Detected from full-span longitudinal hidden lines or concentric inner circles in the end view; through bore confirmed by hidden lines or explicit `--through` |
+| Profile & Revolve | Half-profile closed along the axis (or inner bore radius $r_{\text{inner}}$), scaled by view dimensions, and revolved 360° (`sketch.profile` + `feature.revolve`) |
+| Volume verification | Verified in closed form using Pappus's centroid theorem ($V = 2\pi \cdot \bar{y} \cdot A$) against analytic cylinder and step volumes |
+
+Refused, with the reason: steps, bosses, blind holes or pockets, splines and ellipses,
+unaligned views, a view without a scale, contradicting dimensions, more than one thickness or scale stated,
+turned views lacking proof of roundness, or asymmetric profiles across the axis.
 
 ## Evidence
 
@@ -45,6 +58,6 @@ thickness).
 
 ## Next
 
-Turned parts from a side view (revolve the half-profile about the centre line), several extrusions from
-three views (steps, bosses, blind features read from hidden-line depths), vector-PDF drawings (the geometry is in
-the PDF), and feature recognition of the rebuilt part (hole features instead of sketch circles).
+Several extrusions from three views (steps, bosses, blind features read from hidden-line depths),
+vector-PDF drawings (the geometry is in the PDF), and feature recognition of the rebuilt part (hole
+features instead of sketch circles).

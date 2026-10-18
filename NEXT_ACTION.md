@@ -1,5 +1,41 @@
 # NEXT ACTION
 
+## 2026-10-18 (Antigravity): Drawing → CAD for turned parts (stepped shafts, chamfered pins, hollow bushings)
+
+    py -m astracad_cad from-drawing <drawing.dxf> --out OUT --authorize KM [--through] [--thickness MM] [--scale K]
+    workspace: Projects -> a DXF drawing -> 3D (SVG preview for revolved profiles)
+
+Rebuilt axisymmetric parts seen from a side view (`astracad_core.drawing_to_cad`):
+- Supported shapes: stepped shafts, cylinders with chamfers, hollow bushings/tubes with internal through-bores.
+- Strict proof of roundness: refuses bare ambiguous rectangles lacking diameter dimensions ('Ø', '%%c', 'DIA'), circular end views, or round-part notes to prevent guessing.
+- Symmetry & axis detection: finds horizontal or vertical centreline (or midline); validates upper and lower half symmetry across the axis; refuses asymmetric views.
+- Inner bore detection: reads longitudinal hidden lines spanning the length or concentric circles in an aligned end view; refuses unconfirmed blind bores unless verified with hidden lines or explicit `--through`.
+- Half-profile & 360° revolve: chains the profile in r >= r_inner, applies per-view scale from dimensions, and generates `sketch.profile` + `feature.revolve`.
+- Analytic volume verification: predicts exact volume using Pappus's centroid theorem (V = 2 * pi * cy * area) against analytic cylinder/step volumes.
+- Web UI: added live revolve half-profile rendering (SVG profile with centerline, length, and diameter tags) on the 3D drawing preview.
+
+### What was changed:
+- `src/astracad_core/drawing_to_cad.py`: added layer checking for `_CENTER`/`_HIDDEN`, centerline span grouping for tube longitudinal halves in `_views`, polygon area and centroid helpers `_poly_area`/`_poly_cy`, `_reconstruct_turned` implementation, and unified refusal reporting.
+- `src/astracad_web/index.html`: updated `loopsPreview` to render revolved half-profiles with centerline and dimensional callouts.
+- `tests/test_drawing_to_cad.py`: added `turned_part_dxf` generator and 7 unit tests (stepped shaft 2-view, 1-view with diameter dims, chamfered cylinder, hollow bushing with hidden lines, refusal without roundness proof, refusal for asymmetric view, scale factor from dimensions).
+- `docs/engineering/drawing-to-cad.md` & `docs/competitive/parity-matrix.md`: documented turned part rules, Pappus verification, updated row C-34.
+- `CURRENT_STATE.md`: updated baseline to 600 tests passed.
+
+### What was verified and how:
+- `py -m pytest -q tests/test_drawing_to_cad.py`: 19/19 passed (12 existing + 7 new turned part tests).
+- `py -m pytest -q tests/test_web.py`: 14/14 passed (verifying web index.html syntax).
+- `py -m pytest -q --basetemp "$env:TEMP\pytest_astracad"`: full suite 600 passed, 0 failed in 222.71s.
+- `bin\Release\net10.0-windows\mac.exe selftest`: 50/50 passed.
+- Line ending audit: 100% byte-level consistency preserved across all modified files.
+
+### What could not be verified:
+- Live SOLIDWORKS CAD build for turned drawings was not run against the live SolidWorks instance in this step because the user's open food-processor assembly must never be modified or closed, and live CAD writes require explicit authorization (`--authorize`).
+
+Next:
+1. Several extrusions from three views (steps, bosses, blind features read from hidden-line depths).
+2. Vector-PDF drawings into the same reader (geometry extracted from PDF).
+3. Feature recognition on the rebuilt part.
+
 ## 2026-10-18 (Claude): Drawing → CAD, first version (MecAgent F-12 territory, clean room)
 
     py -m astracad_cad from-drawing <drawing.dxf> --out OUT --authorize KM [--through] [--thickness MM] [--scale K]

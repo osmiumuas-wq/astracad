@@ -1752,8 +1752,28 @@ async function viewMake() {
 }
 
 // ---------- Drawing -> 3D part ----------
-// The section a drawing proves (sketch.loops), drawn from the same spec SOLIDWORKS receives.
+// The section a drawing proves (sketch.loops) or revolved profile (sketch.profile), drawn from the same spec SOLIDWORKS receives.
 function loopsPreview(spec) {
+  const prof = (spec?.features || []).find(f => f.$op === "sketch.profile"), rev = (spec?.features || []).find(f => f.$op === "feature.revolve");
+  if (prof && rev) {
+    const pts = prof.args.points || [];
+    if (pts.length < 3) return null;
+    const x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0])), y0 = 0, y1 = Math.max(...pts.map(p => p[1]));
+    const path = "M " + pts.map(p => `${p[0]} ${p[1]}`).join(" L ") + " Z";
+    const span = Math.max(x1 - x0, y1 - y0), m = span * .16, fs = span * .052;
+    const kids = [
+      s("line", { x1: x0 - m * .4, y1: 0, x2: x1 + m * .4, y2: 0, stroke: "var(--accent)", "stroke-dasharray": "4 2", "stroke-width": 1.2 }),
+      s("path", { d: path, class: "pv-solid" })
+    ];
+    const labels = [
+      { x: (x0 + x1) / 2, y: y0 - fs * 1.4, t: g6(x1 - x0) + " length" },
+      { x: x1 + fs * .5, y: (y0 + y1) / 2, t: "Ø " + g6(y1 * 2), a: "start" }
+    ];
+    return h("figure", { class: "pv" }, s("svg", { viewBox: [x0 - m, -(y1 + m), (x1 - x0) + 2 * m, (y1 - y0) + 2 * m].join(" "), role: "img", "aria-label": "profile from the drawing" },
+        s("g", { transform: "scale(1,-1)" }, ...kids),
+        ...labels.map(l => s("text", { x: l.x, y: -l.y, "font-size": fs, class: "pv-dim", "text-anchor": l.a || "middle", "dominant-baseline": "middle" }, l.t))),
+      h("figcaption", {}, "Revolve profile read from the drawing · revolved 360° · sizes in mm"));
+  }
   const lp = (spec?.features || []).find(f => f.$op === "sketch.loops"), ext = (spec?.features || []).find(f => f.$op === "feature.extrude");
   if (!lp) return null;
   const loops = lp.args.loops, pts = [];
