@@ -9,16 +9,19 @@ request text, no tools, no proxy, other addresses refused. The answer is checked
 known operations, quotes re-checked, every number accounted for, the model's choices Proposed until accepted, the
 stored plan hash-checked and built as shown). docs/engineering/model-gateway.md.
 
-Verified: 31 tests (incl. a stand-in server); against Strata's own server with its scripted `mock` engine (request
-accepted, thinking kept apart from the answer, a non-JSON answer refused by Strata's check; CLI and workspace show the
-checked plan). NOT verified: a plan from the real Qwen model - Strata stopped at start-up four times on 2026-10-18
-because SOLIDWORKS held ~5 GB of the laptop's 8 GB VRAM ("no VRAM is left for the expert cache ... ~994 MiB more
-than this card has free"), also with a lighter test config (no MTP draft layer, no vision: still 907 MiB short).
-Next, with SOLIDWORKS closed: start Strata (run-coder-iq1_m.bat), then
-
-    py -m astracad_cad interpret "SolidWorks L-shaped bracket, 80 x 60 mm outline with 10 mm legs, 8 mm thick, export STEP" --planner local
-
-and judge the plan quality at IQ1_M (every number listed? quotes exact?); tune ASTRACAD_MODEL_THINKING (default low).
+Verified: 32 tests (incl. a stand-in server); against Strata's own server with its scripted `mock` engine. **Live with
+Qwen** (the user's config; SOLIDWORKS exited - minimized with no document it still held ~5 GB of the 8 GB GPU and
+Strata could not load next to it; with it exited the model loaded in ~24 s), exchanges in `_out/qwen_live_20261018/`:
+- L-bracket, first instructions (88 s): wrong part - the outline as a revolve-only `sketch.profile`, the upright leg
+  70 mm wide; its derived 70 was held as Proposed. Fixed: such a plan is now refused ("feature.extrude cannot use a
+  sketch.profile"), and the instructions say outlines are `sketch.loops` and to walk every edge against the request.
+- L-bracket again (78 s): correct, every number quoted and confirmed, ready to build.
+- Plate 100 x 50 x 6 with a 30 x 10 round-ended slot (183 s): correct lines and arcs; 7 derived values wait for
+  acceptance.
+- L-bracket without sizes (25 s): need_info with sensible questions.
+Strata was stopped again afterwards. Next: build the L-bracket plan in SOLIDWORKS (workspace: ask with Strata running,
+stop Strata, start SOLIDWORKS, press Build on the same page); a CLI way to build a stored plan (`build --plan <file>`)
+would make that workflow scriptable.
 
 **The other agent's pending loopsPreview change (index.html, uncommitted) throws.** Inside `loopsPreview(spec)` it
 reads `it.spec?.notes?.blind_pockets`, but `it` is not defined there: every loops preview without a rectangle cut

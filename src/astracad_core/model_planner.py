@@ -48,9 +48,10 @@ extrusions go +z). Use ONLY these, with ONLY these argument names:
 - {"$op":"sketch.circle","id":"s2","sketched_on":"front","args":{"radius":R,"x":CX,"y":CY}}
 - {"$op":"sketch.loops","id":"s3","sketched_on":"front","args":{"loops":[[SEG,...],...]}}  SEG: ["L",x1,y1,x2,y2] |
    ["A",cx,cy,sx,sy,ex,ey,1 or -1] (arc from s to e, 1 = counter-clockwise) | ["C",cx,cy,r]; first loop = outside,
-   further loops = openings through the part
+   further loops = openings through the part. The outline of a flat part that is not a plain rectangle or circle
+   (L, T, U shapes, slots, ...) is drawn with sketch.loops and then feature.extrude
 - {"$op":"sketch.profile","id":"s4","sketched_on":"front","args":{"points":[[x,y],...]}}  closed polygon, every y >= 0,
-   for a turned part: it is revolved about the x axis
+   ONLY for a turned part: it is revolved about the x axis by feature.revolve, never extruded
 - {"$op":"feature.extrude","id":"f1","args":{"depth":D}}        extrudes the sketch just before it
 - {"$op":"feature.cut","id":"f2","args":{"depth":D}}            cuts the rectangle sketch just before it, from the front face
 - {"$op":"feature.revolve","id":"f3","args":{}}                 revolves the profile just before it, 360 degrees
@@ -69,6 +70,8 @@ Rules:
   source "derived" (computed from request numbers; say how in "quote", e.g. "60 / 2"), or
   source "assumed" (your choice - also add a line to "assumptions").
 - Place an extruded rectangle with its corner at x = 0, y = 0 unless the request says otherwise.
+- Before answering, walk every outline edge by edge and check each length, and each leg or wall width, against
+  the request.
 """
 
 _OPS: dict[str, dict[str, Any]] = {
@@ -169,6 +172,9 @@ def validate_spec(spec: Any) -> list[str]:
                 errs.append(f"{where}: feature.revolve needs a sketch.profile just before it")
             elif op == "feature.cut" and pending != "sketch.rectangle":
                 errs.append(f"{where}: feature.cut needs a sketch.rectangle just before it")
+            elif op == "feature.extrude" and pending == "sketch.profile":   # the runtime only revolves a profile
+                errs.append(f"{where}: feature.extrude cannot use a sketch.profile (a profile is only revolved; "
+                            "a flat outline is drawn with sketch.loops)")
             pending = None
         elif pending is not None:
             errs.append(f"{where} ({op}) comes after a sketch nothing has used")

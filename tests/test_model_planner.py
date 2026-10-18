@@ -89,6 +89,26 @@ def test_only_known_operations_with_known_arguments_run(spec, why):
     assert not it.executable and it.spec is None and why in it.ambiguities[0]
 
 
+def test_what_qwen_wrote_live_is_refused_or_waits_for_review():
+    """2026-10-18, Qwen3.8-Flash-Next Coder IQ1_M via Strata, thinking low: the L-bracket outline as a profile (which
+    the runtime only revolves) extruded, with the upright leg 70 mm wide where the request says 10 mm legs."""
+    outline = [[0, 0], [80, 0], [80, 10], [70, 10], [70, 60], [0, 60]]
+    vals = L_VALUES + [{"name": "inner corner x", "value": 70, "unit": "mm", "source": "derived", "quote": "80 - 10"}]
+    live = {**PLAN, "values": vals, "spec": {"name": "L_bracket", "units": "mm", "features": [
+        {"$op": "sketch.profile", "id": "s1", "sketched_on": "front", "args": {"points": outline}},
+        {"$op": "feature.extrude", "id": "f1", "args": {"depth": 8}}]}}
+    it = interpret_reply(REQ, Reply(json.dumps(live), "local", "qwen3.8-flash-next-coder-iq1_m"))
+    assert not it.executable and it.spec is None
+    assert "feature.extrude cannot use a sketch.profile" in it.ambiguities[0]
+    # the same wrong outline drawn as loops is well-formed: its derived 70 waits for the user's review and acceptance
+    loops = [["L", *a, *b] for a, b in zip(outline, outline[1:] + outline[:1])]
+    as_loops = {**live, "spec": {**live["spec"], "features": [
+        {"$op": "sketch.loops", "id": "s1", "sketched_on": "front", "args": {"loops": [loops]}}, live["spec"]["features"][1]]}}
+    it = interpret_reply(REQ, Reply(json.dumps(as_loops), "local", "qwen3.8-flash-next-coder-iq1_m"))
+    assert not it.executable and it.ambiguities == [
+        "The model proposed 1 value(s) the request does not state: inner corner x = 70 - accept them to build"]
+
+
 def test_a_number_the_model_does_not_account_for_stops_the_plan():
     spec = {**L_SPEC, "features": [L_SPEC["features"][0], {"$op": "feature.extrude", "id": "f1", "args": {"depth": 12}}]}
     it = interpret_reply(REQ, reply(spec=spec))

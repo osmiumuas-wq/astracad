@@ -318,9 +318,11 @@ covered by a check that now fails if it regresses.
 - ASTraCAD checks the plan's form, operations, quotes and numbers - not whether a well-formed plan is the part the
   user meant; the preview and the Proposed values are there for that review, and the model's choices need acceptance.
 - The model can only use the operations the CAD runtime has; it cannot make threads, lofts, sweeps or assemblies.
-- Not yet run with the real model: on this laptop's 8 GB GPU, Strata could not load it while SOLIDWORKS was open.
-  Tested against a stand-in server and against Strata's own server with its scripted engine.
-- 8,192-token context (instructions ~1,100 tokens, thinking capped at 2,500); an answer that does not fit is refused.
+- Run live on 2026-10-18 (four requests, docs/engineering/model-gateway.md): with sharpened instructions an L-bracket
+  and a slotted plate came out right and a request without sizes got questions back; the first L-bracket (before
+  that) had a wrong leg width, held as a Proposed value. On this laptop's 8 GB GPU the model and SOLIDWORKS cannot
+  run at the same time: plan first, then build. A plan takes about 25 s to 3 min.
+- 8,192-token context (instructions ~1,200 tokens, thinking capped at 2,500); an answer that does not fit is refused.
 
 ## K. Drawing → CAD (2026-10-18)
 
