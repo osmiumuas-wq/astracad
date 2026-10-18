@@ -27,7 +27,7 @@ from ..step_check import read_step
 
 WORKSPACE = Path(__file__).resolve().parents[4]          # ...\New folder (4)
 MAC_PROJECT = WORKSPACE / "mecagent-alternative" / "src" / "Mac" / "Mac.csproj"
-MAC_KINDS = {"sketch.rectangle", "sketch.circle", "sketch.profile", "feature.extrude",
+MAC_KINDS = {"sketch.rectangle", "sketch.circle", "sketch.profile", "sketch.loops", "feature.extrude",
              "feature.cut", "feature.revolve", "feature.pattern.linear", "feature.pattern.circular",
              "feature.fillet", "feature.chamfer", "feature.hole", "feature.parameter",
              "doc.note"}                                   # = OperationRegistry Implemented set
@@ -377,6 +377,8 @@ class SolidWorksAdapter(Adapter):
         for opt in ("title", "drawing_number", "revision", "material", "tolerance"):
             if opt in params and params[opt]:
                 argv += [f"--{opt.replace('_', '-')}", str(params[opt])]
+        if params.get("hidden_lines"):
+            argv.append("--hidden-lines")
         try:
             cp = self.probe.run(argv, timeout=self.timeout_s)
         except Exception as ex:

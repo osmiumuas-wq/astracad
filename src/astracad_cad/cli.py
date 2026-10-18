@@ -66,6 +66,19 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("app", choices=sorted(ALL))
     i = sub.add_parser("interpret", help="parse a request; never executes")
     i.add_argument("request")
+    fd = sub.add_parser("from-drawing", help="rebuild a part from its 2D drawing (DXF) and verify it")
+    fd.add_argument("drawing")
+    fd.add_argument("--out", required=True)
+    fd.add_argument("--authorize", metavar="NAME", default=None,
+                    help="your name: authorises this one create run and writes under --out")
+    fd.add_argument("--through", action="store_true",
+                    help="you state that the openings go through (only for a drawing without hidden lines)")
+    fd.add_argument("--scale", type=float, default=None,
+                    help="view scale for views without any dimension, e.g. 0.5 for 1:2")
+    fd.add_argument("--thickness", type=float, default=None,
+                    help="thickness in mm, when no view shows it and the drawing has no 'THK' note")
+    fd.add_argument("--interpret-only", action="store_true", dest="interpret_only",
+                    help="print the reconstruction; build nothing")
     b = sub.add_parser("build", help="interpret a request and execute it if fully specified")
     b.add_argument("request")
     b.add_argument("--app", default=None)
@@ -98,6 +111,8 @@ def main(argv: list[str] | None = None) -> int:
     dr.add_argument("--authorize", metavar="NAME", default=None)
     for opt in ("title", "drawing-number", "revision", "material", "tolerance"):
         dr.add_argument(f"--{opt}", default=None)   # unstated revision / tolerance: reported missing
+    dr.add_argument("--hidden-lines", action="store_true", dest="hidden_lines",
+                    help="show hidden lines (dashed): hole depths become readable from the drawing")
     ins = sub.add_parser("inspect", help="read dimensions and mass of an existing .sldprt")
     ins.add_argument("path")
     r = sub.add_parser("reopen", help="independently re-read an exported STEP file")
@@ -158,7 +173,8 @@ def main(argv: list[str] | None = None) -> int:
             "solidworks", Op.CREATE_DRAWING,
             {"part_path": str(Path(a.part).resolve()), "name": a.name, "out_dir": out,
              "angle": a.angle, "title": a.title, "drawing_number": a.drawing_number,
-             "revision": a.revision, "material": a.material, "tolerance": a.tolerance},
+             "revision": a.revision, "material": a.material, "tolerance": a.tolerance,
+             "hidden_lines": a.hidden_lines},
             summary=f"drawing of {a.part}"), auth)
         print(f"TASK {tid}")
         if res is None:
@@ -198,6 +214,28 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"bad --set {kv}")
                 return 2
         return _run_edit(a, a.source, sets, a.name, f"edit {a.source} {sets}")
+    if a.cmd == "from-drawing":
+        from astracad_core.drawing_to_cad import reconstruct
+        it = reconstruct(a.drawing, through=a.through, scale=a.scale, thickness=a.thickness)
+        _print({"interpretation": it.to_dict()})
+        if not it.executable:
+            print("NOT EXECUTED: the drawing does not describe a part this version rebuilds (see missing/ambiguities)")
+            return 2
+        if a.interpret_only:
+            return 0
+        out = str(Path(a.out).resolve())
+        auth = (Authorization(a.authorize, frozenset({Op.CREATE_FEATURE}), (out,),
+                              note="granted on the command line for one rebuild from a drawing")
+                if a.authorize else None)
+        tid, res = _orch(a.db).submit(CadRequest(it.application, Op.CREATE_FEATURE,
+                                                 {"spec": it.spec, "out_dir": out, "expect": dict(it.expect)},
+                                                 summary=f"from drawing {Path(a.drawing).name}"), auth)
+        print(f"TASK {tid}")
+        if res is None:
+            return 1
+        _print(res.to_dict())
+        return {OpStatus.SUCCEEDED: 0, OpStatus.EXECUTED_UNVERIFIED: 3,
+                OpStatus.REQUIRES_AUTHORIZATION: 3}.get(res.status, 1)
     if a.cmd == "build":
         it = interpret(a.request, default_app=a.app)
         _print({"interpretation": it.to_dict()})

@@ -308,6 +308,19 @@ covered by a check that now fails if it regresses.
 
 
 
+## K. Drawing → CAD (2026-10-18)
+
+- One extrusion only: a constant section through a constant thickness with through openings. Steps, bosses, blind
+  features, turned parts, chamfered or filleted edges seen in the side views, splines and ellipses are refused with
+  the reason (docs/engineering/drawing-to-cad.md).
+- DXF only (a vector PDF holds the same geometry but is not read for this yet; a scan has no geometry).
+- Views must be aligned orthographic views; a detail, section or auxiliary view stops the rebuild instead of being
+  ignored. The section is rebuilt as sketch geometry: holes are openings in the sketch, not Hole features.
+- The sheet's written scale is used only for views without a dimension and only when no dimension contradicts it;
+  a view drawn at its own scale without a dimension would be taken at the sheet scale.
+- A drawing without hidden lines cannot show whether an opening goes through: the user must state it (recorded
+  as USER_SPECIFIED); a single-view drawing likewise needs its "THK" note or a stated thickness.
+
 ## J. Found while verifying (2026-10-18)
 
 - `mac drawing` (resolved 2026-10-18): the 0-dimension drawings of the 01:30 unattended run were reproduced by

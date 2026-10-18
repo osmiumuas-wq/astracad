@@ -112,6 +112,12 @@ class Workspace:
         if it.intent != "create_part":
             raise ValueError("the workspace builds new parts; edits of existing parts run from "
                              "the command line (astracad_cad build / edit), which never writes the source")
+        return self._create(it, who)
+
+    def _create(self, it, who: str) -> dict:
+        """One authorised CREATE_FEATURE run of an executable interpretation, into a fresh folder."""
+        from astracad_cad.contract import Authorization, Op
+        from astracad_cad.orchestrator import CadRequest
         if not self._cad_lock.acquire(blocking=False):
             raise PermissionError("another CAD build is running; wait for it to finish")
         try:
@@ -139,6 +145,53 @@ class Workspace:
                 "checks": r.get("checks") or [], "errors": r.get("errors") or [],
                 "files": files, "folder": self.key_for(out), "authorized_by": who,
                 "expect": it.expect, "spec": it.spec}
+
+    def _dxf_source(self, body: dict) -> Path:
+        """A project's preserved drawing - its hash re-checked first, as for an inspection."""
+        src = self._need_projects().source_path(str(body.get("project", "")), str(body.get("source", "")), verify=True)
+        if src.suffix.lower() != ".dxf":
+            raise ValueError("only DXF drawings are rebuilt as 3D parts so far (a PDF or a scan: not yet)")
+        return src
+
+    @staticmethod
+    def _drawing_options(body: dict) -> dict:
+        scale = body.get("scale")
+        try:
+            scale = float(scale) if scale not in (None, "") else None
+        except (TypeError, ValueError):
+            raise ValueError("scale must be a number, e.g. 0.5 for 1:2") from None
+        if scale is not None and not (0 < scale < 1000):
+            raise ValueError("scale must be between 0 and 1000")
+        thickness = body.get("thickness")
+        try:
+            thickness = float(thickness) if thickness not in (None, "") else None
+        except (TypeError, ValueError):
+            raise ValueError("thickness must be a number of millimetres") from None
+        if thickness is not None and not (0 < thickness < 10000):
+            raise ValueError("thickness must be between 0 and 10000 mm")
+        return {"through": body.get("through") is True, "scale": scale, "thickness": thickness}
+
+    def drawing_interpret(self, body: dict) -> dict:
+        """What the drawing's views prove about the part. Never executes."""
+        from astracad_core.drawing_to_cad import reconstruct
+        it = reconstruct(self._dxf_source(body), **self._drawing_options(body))
+        d = it.to_dict()
+        d["cad_enabled"] = self._orch_factory is not None
+        return d
+
+    def drawing_build(self, body: dict) -> dict:
+        from astracad_core.drawing_to_cad import reconstruct
+        who = re.sub(r"\s+", " ", str(body.get("authorize") or "")).strip()
+        if not who:
+            raise PermissionError("type your name to authorise this build")
+        if len(who) > 80:
+            raise ValueError("authoriser name is limited to 80 characters")
+        if self._orch_factory is None:
+            raise PermissionError("CAD is switched off in this workspace (started with --no-cad-status)")
+        it = reconstruct(self._dxf_source(body), **self._drawing_options(body))
+        if not it.executable:
+            raise ValueError("not rebuildable: " + "; ".join(it.missing + it.ambiguities))
+        return self._create(it, who)
 
     def task(self, task_id: str) -> dict:
         t = TaskStore(self.db).get(task_id)
@@ -1183,6 +1236,10 @@ def make_handler(ws: Workspace):
                     return self._json(ws.cad_interpret(body.get("request", "")))
                 if u.path == "/api/cad/build":
                     return self._json(ws.cad_build(body.get("request", ""), body.get("authorize", "")))
+                if u.path == "/api/drawing_cad/interpret":
+                    return self._json(ws.drawing_interpret(body))
+                if u.path == "/api/drawing_cad/build":
+                    return self._json(ws.drawing_build(body))
                 if u.path == "/api/dossier":
                     return self._json(ws.dossier(str(body.get("key", "")), body.get("sample")))
                 if u.path == "/api/project_dossier":

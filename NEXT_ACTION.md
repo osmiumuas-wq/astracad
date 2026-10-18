@@ -1,5 +1,38 @@
 # NEXT ACTION
 
+## 2026-10-18 (Claude): Drawing → CAD, first version (MecAgent F-12 territory, clean room)
+
+    py -m astracad_cad from-drawing <drawing.dxf> --out OUT --authorize KM [--through] [--thickness MM] [--scale K]
+    workspace: Projects -> a DXF drawing -> 3D
+
+The user asked for MecAgent-like "drawing to CAD and all kinds of CAD". MecAgent 2.0.7 and the Adam Connector
+0.1.2227 are installed on this PC; their application code was NOT unpacked or read (licence + charter: no
+proprietary code). Their features were taken from the earlier clean-room record (reverse_engineering/,
+public surface only); F-12 (Drawing-to-CAD) was listed "not reproduced" with its behaviour login-gated.
+
+Built: a one-extrusion part (constant section, constant thickness, through openings) is rebuilt from its DXF as a
+real feature model - section copied exactly (new `mac` op `sketch.loops`: lines / arcs / circles, exact area by
+Green's theorem), thickness from aligned views, scale from each view's dimensions, openings through only when
+hidden lines show it, every view on the sheet explained - and verified like every build. `mac drawing
+--hidden-lines` makes our own drawings carry hole depths.
+
+Evidence (docs/engineering/drawing-to-cad.md): 4 round trips part -> drawing -> part on SOLIDWORKS 2026 with kernel
+volumes equal to 6 decimals (plate with R5 corners and holes, holed block from a drawing without hidden lines
+plus `--through`, bolt-circle flange, chamfered block), once from the workspace (task T-b5cdd4cf96fa); a blind
+pocket refused with the reason; SOLIDWORKS's 27 sample drawings: 0 rebuilt wrongly. Found and fixed on the way: a
+hole drawn inside an outline became its own "view" and the solid block was marked buildable without it; a
+one-view drawing's outline was taken for a sheet frame (only the hole was left). Both have regression tests.
+
+Tests: **593 passed**; `mac selftest` 50/50.
+
+Next for "all kinds of CAD" (in order of value):
+1. Turned parts from a side view (revolve the half profile about the centre line) - shafts, pins, bushes.
+2. Several features from three views: steps / bosses / blind holes and pockets read from hidden-line depths.
+3. Vector-PDF drawings into the same reader (the geometry is in the PDF).
+4. Feature recognition on the rebuilt part (Hole features, patterns) and STEP -> feature tree (F-22).
+5. Free text beyond the fixed phrasings needs a language model that emits typed specs (never code), opt-in per
+   project because the request leaves the PC - a decision for the user, not built.
+
 ## 2026-10-18 (Claude): signed quality dossiers (HANDOFF §7 item 7, second half)
 
     py -m astracad_web ... --keys %USERPROFILE%\.astracad\keys   ->  Signing keys (make a key), then Quality dossier -> Sign

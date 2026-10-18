@@ -440,8 +440,12 @@ dialog.dsg::backdrop { background: rgba(8, 10, 14, .45); backdrop-filter: blur(2
 .dsg-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; align-items: end; }
 .dsg-form .wide { grid-column: 1 / -1; }
 .dsg-stmt { margin: 0; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; font-size: 13px; }
+.mk-kpis b { overflow-wrap: anywhere; }
+@media (max-width: 640px) { .dsg .mk-kpis { grid-template-columns: 1fr; } }
+.dsg-opt { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); }
+.dsg-opt input { margin-top: 3px; }
 .dsg-go { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12.5px; }
-.dsg-ft { display: flex; gap: 8px; justify-content: flex-end; padding-top: 6px; border-top: 1px solid var(--line); margin-top: 4px; }
+.dsg-ft { display: flex; gap: 8px; justify-content: flex-end; align-items: flex-end; flex-wrap: wrap; padding-top: 6px; border-top: 1px solid var(--line); margin-top: 4px; }
 .sgn-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 14px; align-items: end; }
 .sgn-rev { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .sgn-rev .input { width: 150px; }
@@ -1747,6 +1751,103 @@ async function viewMake() {
   gate();
 }
 
+// ---------- Drawing -> 3D part ----------
+// The section a drawing proves (sketch.loops), drawn from the same spec SOLIDWORKS receives.
+function loopsPreview(spec) {
+  const lp = (spec?.features || []).find(f => f.$op === "sketch.loops"), ext = (spec?.features || []).find(f => f.$op === "feature.extrude");
+  if (!lp) return null;
+  const loops = lp.args.loops, pts = [];
+  const sweep = sg => { let d = Math.atan2(sg[6] - sg[2], sg[5] - sg[1]) - Math.atan2(sg[4] - sg[2], sg[3] - sg[1]);
+    if (sg[7] > 0) { while (d <= 0) d += 2 * Math.PI; } else { while (d >= 0) d -= 2 * Math.PI; } return d; };
+  for (const sg of loops.flat()) {
+    if (sg[0] === "L") pts.push([sg[1], sg[2]], [sg[3], sg[4]]);
+    else if (sg[0] === "C") pts.push([sg[1] - sg[3], sg[2] - sg[3]], [sg[1] + sg[3], sg[2] + sg[3]]);
+    else { const r = Math.hypot(sg[3] - sg[1], sg[4] - sg[2]), a0 = Math.atan2(sg[4] - sg[2], sg[3] - sg[1]), d = sweep(sg);
+      for (let k = 0; k <= 16; k++) pts.push([sg[1] + r * Math.cos(a0 + d * k / 16), sg[2] + r * Math.sin(a0 + d * k / 16)]); }
+  }
+  const x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0])), y0 = Math.min(...pts.map(p => p[1])), y1 = Math.max(...pts.map(p => p[1]));
+  const path = loop => loop.map((sg, i) => {
+    if (sg[0] === "C") { const [, cx, cy, r] = sg; return `M ${cx + r} ${cy} A ${r} ${r} 0 1 1 ${cx - r} ${cy} A ${r} ${r} 0 1 1 ${cx + r} ${cy}`; }
+    const head = i === 0 ? `M ${sg[0] === "L" ? sg[1] : sg[3]} ${sg[0] === "L" ? sg[2] : sg[4]} ` : "";
+    if (sg[0] === "L") return head + `L ${sg[3]} ${sg[4]}`;
+    const r = Math.hypot(sg[3] - sg[1], sg[4] - sg[2]), d = sweep(sg);
+    return head + `A ${r} ${r} 0 ${Math.abs(d) > Math.PI ? 1 : 0} ${sg[7] > 0 ? 1 : 0} ${sg[5]} ${sg[6]}`;
+  }).join(" ") + " Z";
+  const span = Math.max(x1 - x0, y1 - y0), m = span * .16, fs = span * .052;
+  const kids = [s("path", { d: path(loops[0]), class: "pv-solid" }), ...loops.slice(1).map(l => s("path", { d: path(l), class: "pv-hole" }))];
+  const labels = [{ x: (x0 + x1) / 2, y: y0 - fs * 1.4, t: g6(x1 - x0) }, { x: x1 + fs * .5, y: (y0 + y1) / 2, t: g6(y1 - y0), a: "start" }];
+  if (loops.length > 1) labels.push({ x: x1, y: y1 + fs * .9, t: `${loops.length - 1} opening(s)`, a: "end", tag: true });
+  return h("figure", { class: "pv" }, s("svg", { viewBox: [x0 - m, -(y1 + m), (x1 - x0) + 2 * m, (y1 - y0) + 2 * m].join(" "), role: "img", "aria-label": "section from the drawing" },
+      s("g", { transform: "scale(1,-1)" }, ...kids),
+      ...labels.map(l => s("text", { x: l.x, y: -l.y, "font-size": fs, class: "pv-dim" + (l.tag ? " pv-tag" : ""), "text-anchor": l.a || "middle", "dominant-baseline": "middle" }, l.t))),
+    h("figcaption", {}, "Section read from the drawing", ext ? ` · extruded ${g6(ext.args.depth)}` : "", " · sizes in mm"));
+}
+
+async function drawingCadDialog(pid, src) {
+  const dlg = h("dialog", { class: "dsg", "aria-label": "Drawing to 3D part" });
+  document.body.append(dlg);
+  dlg.addEventListener("close", () => dlg.remove());
+  dlg.addEventListener("click", e => { if (e.target === dlg) dlg.close(); });
+  const opt = { through: false, thickness: "", scale: "" };
+  let result = null;
+  const F = (label, el, cls = "") => h("label", { class: "field " + cls }, h("span", {}, label), el);
+  async function draw() {
+    let it;
+    try { it = await post("/api/drawing_cad/interpret", { project: pid, source: src.sha256, through: opt.through, thickness: opt.thickness || null, scale: opt.scale || null }); }
+    catch (e) { dlg.replaceChildren(h("div", { class: "dsg-bd" }, empty("alert", "Drawing not read", e.message))); return; }
+    const amb = it.ambiguities || [], miss = it.missing || [], all = [...miss, ...amb].join(" ");
+    const askThrough = opt.through || /no hidden lines/.test(all), askThick = !!opt.thickness || /thickness/.test(all), askScale = !!opt.scale || /scale/.test(all);
+    const ready = it.executable;
+    const state = h("div", { class: `mk-state t-${ready ? "ok" : askThrough || askThick || askScale ? "warn" : "na"}` }, ic(ready ? "check" : "alert"),
+      h("div", {}, h("b", {}, ready ? "Ready to build" : askThrough || askThick || askScale ? "Needs your decision" : "Not rebuildable by this version"),
+        h("div", {}, ready ? "Every value comes from the drawing's views and dimensions, or from what you stated below." : [...miss, ...amb][0] || "")));
+    const opts = [];
+    if (askThrough) { const cb = h("input", { type: "checkbox", checked: opt.through, onchange: () => { opt.through = cb.checked; draw(); } });
+      opts.push(h("label", { class: "dsg-opt" }, cb, h("span", {}, "The openings go through the whole part (this drawing has no hidden lines to show it).")));}
+    if (askThick) { const t = h("input", { class: "input sm", type: "number", min: 0, step: "any", value: opt.thickness, style: "width:120px", onchange: () => { opt.thickness = t.value; draw(); } });
+      opts.push(F("Thickness, mm (no view shows it)", t)); }
+    if (askScale) { const t = h("input", { class: "input sm", type: "number", min: 0, step: "any", value: opt.scale, style: "width:120px", placeholder: "0.5 = 1:2", onchange: () => { opt.scale = t.value; draw(); } });
+      opts.push(F("View scale (no dimension gives it)", t)); }
+    const exp = it.expect || {};
+    const facts = (it.facts || []).filter(f => f.name !== "drawing");
+    const who = h("input", { class: "input", value: store.get("astracad.reviewer"), autocomplete: "name", maxlength: 80 });
+    const go = h("button", { class: "btn primary", disabled: !(ready && it.cad_enabled) }, ic("play"), "Build in SolidWorks");
+    go.title = !it.cad_enabled ? "CAD is switched off in this workspace" : ready ? "runs once, in a new folder, then re-measures the result" : "the drawing does not prove a part yet";
+    go.addEventListener("click", async () => {
+      if (!who.value.trim()) { toast("Type your name to authorise the build", "warn"); who.focus(); return; }
+      go.disabled = true; go.replaceChildren(h("span", { class: "spin" }), " Building in SolidWorks…");
+      try { result = await post("/api/drawing_cad/build", { project: pid, source: src.sha256, through: opt.through, thickness: opt.thickness || null, scale: opt.scale || null, authorize: who.value.trim() });
+        store.set("astracad.reviewer", who.value.trim()); toast(`${result.status === "SUCCEEDED" ? "Built and verified" : "Built, NOT verified"} · task ${result.task_id}`, result.status === "SUCCEEDED" ? "ok" : "warn"); draw(); }
+      catch (e) { toast("Not built: " + e.message.replace(/^\w+Error: /, ""), "bad"); go.disabled = false; go.replaceChildren(ic("play"), "Build in SolidWorks"); }
+    });
+    const outc = { passed: ["ok", "check"], failed: ["bad", "x"], not_verifiable: ["na", "info"] };
+    const res = result ? h("div", { class: "dsg-sigs" }, h("li", { style: "list-style:none" },
+      h("div", { class: "dsg-sig-top" }, h("b", {}, result.status === "SUCCEEDED" ? "Built and verified" : "Built, not verified"), h("span", { class: "muted" }, `task ${result.task_id} · ${String(result.evidence || "").toLowerCase().replace(/_/g, " ")}`),
+        h("span", { style: "margin-left:auto;display:flex;gap:6px;flex-wrap:wrap" }, result.files.map(f => h("a", { class: "btn sm", href: "/file?key=" + encodeURIComponent(f.key), download: f.name }, ic("file"), f.name.split(".").pop().toUpperCase())))),
+      h("ul", { class: "dsg-checks" }, result.checks.filter(c => /volume|size|solid/.test(c.name)).map(c => { const o = outc[c.outcome] || ["na", null];
+        return h("li", {}, pill(o[0], o[1], c.name.replace(/^step:[^:]+:/, "STEP re-read: ").replace(/^kernel:/, "SolidWorks: ")), h("span", { class: "muted mono" }, `${c.expected} → ${c.actual}`)); })))) : null;
+    dlg.replaceChildren(
+      h("div", { class: "dsg-hd" }, h("span", { class: "ic" }, ic("cube", "i lg")), h("div", { style: "min-width:0" }, h("b", { class: "ellip" }, src.filename), h("div", { class: "muted" }, "Drawing → 3D part · SOLIDWORKS")),
+        h("button", { class: "btn sm ghost", "aria-label": "Close", onclick: () => dlg.close() }, ic("x"))),
+      h("div", { class: "dsg-bd" }, state,
+        [...miss, ...amb].length > 1 ? h("ul", { class: "mk-todo" }, [...miss, ...amb].slice(1).map(m => h("li", { class: "t-warn" }, ic("info"), h("span", {}, m)))) : null,
+        opts.length ? h("div", { class: "dsg-form" }, ...opts.map(o => h("div", { class: "wide" }, o))) : null,
+        it.spec ? h("div", { class: "mk-grid" }, loopsPreview(it.spec),
+          h("div", { class: "mk-facts" }, h("div", { class: "mk-kpis" },
+            h("div", {}, h("span", {}, "Envelope"), h("b", { class: "mono" }, (exp.size_mm || []).map(g6).join(" × "), h("small", {}, " mm"))),
+            h("div", {}, h("span", {}, "Volume"), h("b", { class: "mono" }, (+exp.volume_mm3).toLocaleString(undefined, { maximumFractionDigits: 3 }), h("small", {}, " mm³")))))) : null,
+        facts.length ? dataTable([
+          { k: "name", label: "Read", render: f => h("span", { class: "mono" }, human(f.name)) },
+          { k: "value", label: "Value", render: f => h("span", { class: "mono" }, g6(f.value), f.unit ? " " + f.unit : "") },
+          { k: "provenance", label: "Source", render: f => { const p = PROV[f.provenance] || ["na", null, f.provenance]; return h("span", { title: f.source_text || "" }, pill(p[0], p[1], p[2])); } },
+        ], facts, {}) : null,
+        res,
+        h("div", { class: "dsg-ft" }, h("label", { class: "field", style: "min-width:200px;flex:1" }, h("span", {}, "Authorised by"), who), go)));
+  }
+  await draw();
+  dlg.showModal();
+}
+
 // ---------- Dossier signatures ----------
 // A signature is a named person's Ed25519 signature over the dossier's manifest (every file by
 // SHA-256). "valid" = genuine and bound to this exact package; "trusted" = also made by a key in this
@@ -1975,6 +2076,7 @@ async function viewProject(pid) {
     { k: "runs", label: "Runs", num: true, sort: s => d.runs.filter(r => (r.document || "").includes(s.sha256)).length,
       render: s => String(d.runs.filter(r => (r.document || "").includes(s.sha256)).length) },
     { k: "dl", label: "", nosort: true, render: s => h("a", { class: "btn sm ghost", href: "/file?key=" + encodeURIComponent(s.key), download: s.filename, title: "Download the preserved original" }, ic("ext"), "Original") },
+    { k: "cad", label: "", nosort: true, render: s => /\.dxf$/i.test(s.filename) ? h("button", { class: "btn sm ghost", title: "Rebuild this drawing as a 3D part in SOLIDWORKS", onclick: () => drawingCadDialog(pid, s) }, ic("cube"), "3D") : null },
     { k: "go", label: "", nosort: true, render: inspectRow },
   ], d.sources, { initial: { k: "added_utc", dir: -1 } }) : empty("file", "No drawings yet", "Add the drawings for this project above. They are kept exactly as received.");
   const dossierBtn = h("button", { class: "btn sm primary", title: "Everything recorded for this project (all runs, serials, NCRs, checklists), with verified hashes", onclick: async ev => {

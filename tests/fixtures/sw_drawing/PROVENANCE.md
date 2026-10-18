@@ -26,4 +26,15 @@ independent DXF check must reject.
 centred"`). SOLIDWORKS wrote each title-block line and the tolerance note as a block (SW_NOTE_n)
 inserted on the sheet, which the title-block reader did not look into. In that session SOLIDWORKS
 inserted no model dimensions (`InsertModelAnnotations3` returned 0 with the pre-handoff mac too), so
-the file is used for its title block and notes only.
+the file is used for its title block and notes only. (Cause found later that day: the SOLIDWORKS window was
+minimized during that unattended run; `mac drawing` now restores it for the drawing.)
+
+`plate_r5_hlv.dxf` was produced 2026-10-18 on the same SOLIDWORKS 2026 SP04.1 by
+
+    astracad_cad drawing _out/text2cad_edges/block_100x60x10_r5_4x6_p20.SLDPRT --name plate_r5_hlv --hidden-lines
+        --authorize KM
+
+from the part built by `astracad_cad build "SolidWorks 100 x 60 x 10 mm plate with R5 corners and 4 x 6 mm holes
+at 20 mm pitch along the width, centred"`, whose SOLIDWORKS kernel volume was 58654.424808 mm^3 (task
+END_TO_END_VERIFIED). Views with hidden lines visible. Used by the drawing-to-CAD tests: rebuilding the part
+from this drawing alone must predict exactly that volume (and the live rebuild measured exactly that).
