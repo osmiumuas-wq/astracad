@@ -7,7 +7,7 @@
 Most tools answer *does this source support the claim?* This one answers *does the part support the claim?* —
 and when two independent sources disagree about the part, it withholds the ruling instead of averaging them.
 
-Live page: **https://osmiumuas-wq.github.io/astracad/** · Built for **SNH'26**, AI track (Registration `SNH-9Z7SG3BQ`).
+Live page: **https://osmiumuas-wq.github.io/astracad/** · Built for **SNH'26**, AI track.
 
 ---
 

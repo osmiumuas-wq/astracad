@@ -5,7 +5,7 @@ makes broken links the participant's problem, not SpectoV's.
 
 | Field | Value |
 | --- | --- |
-| Registration ID | `SNH-9Z7SG3BQ` |
+| Registration ID | `<from your confirmation email — kept out of this public repo>` |
 | Participant | Hemanth Prasanth KM |
 | Track | Artificial Intelligence |
 | Project title | ASTraCAD Ω — Self-Auditing Decision Engine |
@@ -90,6 +90,6 @@ required to reproduce any result in the submission.
 - [ ] Repo public, README renders, default branch `main`.
 - [ ] Pages URL returns 200 in a private/incognito window.
 - [ ] Video link opens without a login (unlisted is fine).
-- [ ] Registration ID correct: `SNH-9Z7SG3BQ`.
+- [ ] Registration ID matches the confirmation exactly.
 - [ ] No `localhost`, no `file:///`, no permission-gated Drive links anywhere in the form.
 - [ ] Everything still opens on 14 December, not just on 6 December.
