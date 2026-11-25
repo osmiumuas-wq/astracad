@@ -56,7 +56,10 @@ CSS = """
 *,*::before,*::after{box-sizing:border-box}
 body{margin:0;font-family:var(--font-sans,system-ui,sans-serif);color:var(--foreground,#eee);
 font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
-.wrap{display:flex;flex-direction:column;gap:30px;padding-bottom:6px}
+.wrap{display:flex;flex-direction:column;gap:30px;padding:34px 26px 46px;max-width:1120px;margin:0 auto}
+footer.credit{margin-top:6px;padding-top:14px;border-top:1px solid var(--muted-foreground,#2a2a2a);
+color:var(--muted-foreground,#8a8a8a);font-family:var(--font-mono,monospace);font-size:10.5px;
+letter-spacing:.14em;text-transform:uppercase}
 code,.hash,.id{font-family:var(--font-mono,ui-monospace,monospace);font-variant-ligatures:none}
 .eyebrow{font-family:var(--font-mono,monospace);font-size:10.5px;letter-spacing:.18em;
 text-transform:uppercase;color:var(--muted-foreground,#8a8a8a)}
@@ -275,6 +278,8 @@ def build_page(d1: dict, d2: dict, kinds: list[dict], summary: dict, plan_path: 
                  " Reproduction: <code>py -m astracad_decide decide " + esc(plan_path)
                  + " --actor NAME</code></p></div>")
 
+    parts.append("<footer class='credit'>ASTraCAD \u03a9 \u00b7 decision layer \u00b7 "
+                 "github.com/osmiumuas-wq/astracad</footer>")
     parts.append("</div></body></html>")
     return "".join(parts)
 
