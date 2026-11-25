@@ -10,3 +10,4 @@ _sources/
 _win/
 *.sqlite3
 *.db
+tmp_pytest*/

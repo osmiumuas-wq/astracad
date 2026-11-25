@@ -110,6 +110,44 @@ def test_a_fit_class_bore_drawn_outside_its_band_is_a_finding(tmp_path):
     assert c.is_blocking
 
 
+def _bore_printed_to(tmp_path, radius, text):
+    """A bore drawn at `radius`, called out with text the drawing prints to three decimals."""
+    import ezdxf
+
+    doc = ezdxf.new("R2010", setup=True)
+    doc.header["$INSUNITS"] = 4
+    msp = doc.modelspace()
+    msp.add_circle((50, 50), radius)
+    msp.add_diameter_dim(center=(50, 50), radius=radius, angle=90, text=text,
+                         dimstyle="EZ_RADIUS", override={"dimlfac": 1.0}).render()
+    path = tmp_path / "boundary.dxf"
+    with open(path, "w", encoding="utf-8") as fh:
+        doc.write(fh)
+    from astracad_inspect.ingest.dxf import read_dxf
+    bundle = read_dxf(path)
+    return next(c for c in bundle.characteristics if c.raw_callout)
+
+
+def test_a_value_exactly_on_the_printed_boundary_is_zero_margin_not_a_disagreement(tmp_path):
+    """20.000 printed to three decimals means 20.000 +/- 0.0005, so a drawn 19.9995 sits
+    exactly on the edge. In binary floats the difference is 4.4e-19 wider than the band, which
+    once withheld a sheet on arithmetic noise. The comparison belongs on the decimal grid the
+    value was printed on, and equality is a zero-margin warning, not a blocking finding."""
+    c = _bore_printed_to(tmp_path, 9.99975, "%%c20.000")
+    check = next(k for k in c.checks if k.name == "geometry_cross_check")
+    assert check.outcome is CheckOutcome.PASSED, check.why
+    assert any(i.code == "zero_margin" and i.severity == "warning" for i in c.issues)
+    assert not c.is_blocking
+
+
+def test_a_value_past_the_printed_boundary_is_still_a_finding(tmp_path):
+    c = _bore_printed_to(tmp_path, 9.9997, "%%c20.000")
+    check = next(k for k in c.checks if k.name == "geometry_cross_check")
+    assert check.outcome is CheckOutcome.FAILED
+    assert any(i.code == "geometry_callout_disagreement" for i in c.issues)
+    assert c.is_blocking
+
+
 def test_a_resolved_fit_class_is_shown_with_its_limits_in_the_table(plate_plan):
     row = next(r for r in plate_plan.rows if "H7" in r.raw_callout)
     assert row.minimum == 20.0 and row.maximum == 20.021

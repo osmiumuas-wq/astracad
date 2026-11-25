@@ -1,5 +1,43 @@
 # NEXT ACTION
 
+**The order of operations now lives in `docs/snh26/ULTIMATE-PLAN.md`.** Read that first: pre-window items (register,
+fill `<NAME>`, commit the base), then 1-6 December day by day with one exit criterion each, the five-minute beat
+sheet, the cut line, and the eight gates. This file is the history; that file is the plan.
+
+## 2026-11-25: SNH'26 - SNH-AI-05 TrustChain AI chosen, and built (astracad_decide)
+
+User request: "do a deep research and choose the best problem statement for my project ... and implement it to the
+top level". The 15 SNH'26 statements were scored against this repository (reports/snh26-problem-statement-choice.html):
+**SNH-AI-05 TrustChain AI - Self-Auditing AI Decision Engine** won at 4.70/5 (runner-ups: SNH-WD-05 WebIntentOS 3.90,
+SNH-AI-03 MemoryMesh 3.65); SNH-AI-01 CausalTwin was the one to avoid (2.55, crowded by DoWhy/causRCA/Databricks).
+The reason it wins here is not the score: ASTraCAD already owns the hard half (provenance, SHA-256 evidence tags,
+hash-chained records, a release gate that refuses) and the statement's remaining three elements are small next to
+what is already there.
+
+Built this session: `src/astracad_decide/` - an evidence model with a per-callout truth table (a value with no
+limit is never a pass), a plan ruling (`RELEASE`/`HOLD`/`REJECT`/`NOT_EVALUABLE`), conflict detection that keeps both
+sides (`VALUE_VS_GEOMETRY`), missing-information enumeration, two confidence numbers that are never collapsed
+(floor = weakest decisive weight; calibrated Beta frequency, withheld below 5 outcomes), an outcome ledger that
+charges one evidence kind per overturn and moves the next floor, a hash-chained append-only store with a `verify`
+that names the defect, markdown + JSON + HTML report surfaces, and a CLI (`decide`/`verify`/`outcome`/`reliability`).
+Tools: `py tools/decide_demo.py <plan.plan.json>` rehearses the loop and writes reports/decision-record-demo.html.
+Docs: docs/engineering/decision-records.md. Tests: 33 (suite 736 passed).
+
+Run on the real sheet (7550-021): `HOLD`, 12 callouts (1 accept / 1 hold / 10 not judgeable), **1 geometry
+contradiction found** (R0.09 stated vs 9.697655 measured), 14 absences listed, floor 0.70, calibrated withheld.
+`CH-006` (0.188 stated vs 0.187500 measured) turned out to sit exactly on the printed boundary and was being
+withheld by a 4.4e-19 float artifact; the comparison now runs on the decimal grid and reports `zero_margin` as a
+warning. The audit that found it, and the arithmetic, are in docs/engineering/decision-engine-review.md.
+
+Next, in order:
+1. **Register** (250 seats, first-come; the site counter contradicted itself - 215/250 vs 0/250), then re-read the
+   Official Rules for the disclosure clause (§08 disqualifies undisclosed prior work; §17 allows verification).
+2. December increment, dated in git: (a) a Decisions surface in the workspace (read-only list + record page),
+   (b) real labelled outcomes from the test fixtures so calibration is not `withheld` in the demo, (c) the
+   `AI_PROPOSED` local-Qwen adjudication path on contradictions - it must stay a proposal next to the evidence.
+3. Demo script for the 6th: one drawing, one contradiction, one person arbitrating, one outcome recorded, floor moves.
+4. Do **not** put SOLIDWORKS or scan OCR in the judged path (Windows + licence, Windows-only OCR).
+
 ## 2026-10-18 (Claude): "build anything" - plan approved, M0 done: OpenCascade is the second kernel
 
 User request: "make the cad automation able to create anything ... from bicycle to v6 engine". Approved plan (four
@@ -62,6 +100,40 @@ pocket build is offset:** drawing_to_cad.py passes the pocket's centre as `sketc
   `sketch.profile` in `mac`, insert centre lines in `mac drawing`, then re-run these round trips.
 - The other agent's blind-pocket work (drawing_to_cad.py, index.html, tests, docs, mac selftest) is uncommitted in the
   working trees; left as it is.
+
+## 2026-10-18 (Antigravity): Drawing → CAD: Blind pockets recognized from aligned view wall and floor hidden lines
+
+    py -m astracad_cad from-drawing <drawing.dxf> --out OUT --authorize KM --features
+    workspace: Projects -> a DXF drawing -> 3D (checkbox: "Recognize features (holes & patterns)")
+    py -m pytest -q tests/test_drawing_to_cad.py
+
+Drawing → CAD now supports recognizing blind rectangular pockets from partial-depth hidden wall lines and floor lines in aligned views:
+- Aligned view floor and wall line tracking (`src/astracad_core/drawing_to_cad.py`):
+  - In aligned orthographic views, hidden lines perpendicular to the depth direction (horizontal in vertical views, vertical in horizontal views) that span an inner loop's extent at depth $d < T$ are recognized as feature floors rather than being refused as non-depth lines.
+  - Partial-depth hidden wall lines touching an outer face are paired with the floor lines, validating depth consistency ($d < T$) across all aligned projections.
+  - Refusal rule preserved: without `--features`, drawings with blind pockets continue to be refused (`"a line in an aligned view does not run the full depth (a step or a blind feature) - not one constant extrusion"`), ensuring no through-extrusion errors occur.
+  - Base extrusion invariance: recognized blind pockets are excluded from `sketch.loops` (which only extrudes through the full body thickness) and emitted as `sketch.rectangle` + `feature.cut` with the measured depth and center coordinates.
+  - Analytic volume derivation: net part volume accounts for pocket volume removal ($W \cdot H \cdot d$), verified in closed form against CAD expectations.
+- Web UI Part Preview: in `src/astracad_web/index.html` `loopsPreview`, blind pockets render with dashed pocket styling (`pv-pocket`) and dimension callouts with depth annotations (`width × height ↧depth`).
+- CAD runtime verification: in `mac` (C# / .NET 10), added selftest case validating `loops_pocket` analytically derived volume ($45000\text{ mm}^3$ on a $60 \times 40 \times 20$ block with a $30 \times 20 \times 5$ pocket); `mac selftest` passes **54/54 checks**.
+
+### What was changed:
+- `src/astracad_core/drawing_to_cad.py`: added floor hidden line detection in aligned views, `_is_rectangular_loop_segs` helper, collected `blind_pockets` in `notes_dict`, updated `recognize_features` to emit `sketch.rectangle` + `feature.cut`, and updated facts logging.
+- `src/astracad_web/index.html`: updated `loopsPreview` to render pockets with `pv-pocket` dashed stroke, pocket bounding rects, and `↧` depth callouts.
+- `tests/test_drawing_to_cad.py`: added `pocket_block_dxf` generator, `test_blind_pocket_refused_without_features`, `test_blind_pocket_rebuilt_with_feature_recognition`, and `test_mixed_blind_holes_and_pocket` (28/28 passing).
+- `mecagent-alternative/src/Mac/Program.cs`: added `loops with pocket volume derived analytically` check to selftest (54/54 passing).
+- `docs/engineering/drawing-to-cad.md` & `docs/competitive/parity-matrix.md`: documented blind pocket recognition and updated row C-34.
+- `CURRENT_STATE.md`: updated test baseline to 614 passed Python tests and 54/54 `mac selftest`.
+
+### What was verified and how:
+- `py -m pytest -q tests/test_drawing_to_cad.py`: 28/28 passed (including 3 new blind pocket tests).
+- `py -m pytest -q tests/test_web.py`: 14/14 passed (verifying JavaScript syntax with Node).
+- `dotnet run --project src/Mac -- selftest`: 54/54 checks passed (including loops with pocket volume exact derivation).
+- `py -m pytest -q`: full suite 614 passed, 0 failed.
+- Line ending audit: 100% byte-level consistency preserved across all modified files.
+
+### What could not be verified:
+- Live SOLIDWORKS CAD build was not executed against the active session in this step to prevent touching user's open documents (food-processor assembly) and because CAD writes require explicit `--authorize`.
 
 ## 2026-10-18 (Antigravity): Drawing → CAD: Blind holes recognized from aligned view hidden lines
 

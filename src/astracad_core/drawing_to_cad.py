@@ -865,6 +865,24 @@ def reconstruct(path: str | Path, *, through: bool = False, scale: float | None 
                 at, a, b = (x1, min(y1, y2), max(y1, y2)) if vert else (y1, min(x1, x2), max(x1, x2))
                 along = abs(x1 - x2) <= tol if vert else abs(y1 - y2) <= tol
                 if not along:
+                    perp = abs(y1 - y2) <= tol * 10 if vert else abs(x1 - x2) <= tol * 10
+                    if features and e.style == "hidden" and perp:
+                        pos = y1 if vert else x1
+                        d_lo = abs(pos - lo)
+                        d_hi = abs(pos - hi)
+                        floor_depth = min(d_lo, d_hi) * V.k
+                        span_a = min(x1, x2) if vert else min(y1, y2)
+                        span_b = max(x1, x2) if vert else max(y1, y2)
+                        matching = []
+                        for lp in inner:
+                            bx = _loop_bbox(lp)
+                            c0, c1 = (bx[0], bx[2]) if vert else (bx[1], bx[3])
+                            if abs(span_a - c0) <= tol * 10 and abs(span_b - c1) <= tol * 10:
+                                matching.append(lp)
+                        if matching and floor_depth > tol * 10 and floor_depth < (hi - lo) * V.k - tol * 10:
+                            for mlp in matching:
+                                blind_seen[id(mlp)].append(floor_depth)
+                            continue
                     why = "a line across an aligned view is not along the depth direction: not one constant extrusion"
                     break
                 is_full = abs(a - lo) <= tol * 10 and abs(b - hi) <= tol * 10
@@ -1021,12 +1039,23 @@ def reconstruct(path: str | Path, *, through: bool = False, scale: float | None 
     notes_dict = {"source_drawing": str(path), "source_sha256": _sha(path)}
     if blind_inner:
         b_holes = []
+        b_pockets = []
         for lp, bd in blind_inner:
-            circ = _is_circular_loop_segs(emit(lp))
+            segs = emit(lp)
+            circ = _is_circular_loop_segs(segs)
             if circ is not None:
                 cx, cy, r = circ
                 b_holes.append({"x": cx, "y": cy, "d": round(2 * r, 9), "depth": round(bd * to_mm if from_views else bd, 9)})
-        notes_dict["blind_holes"] = b_holes
+            else:
+                rect = _is_rectangular_loop_segs(segs)
+                if rect is not None:
+                    cx, cy, pw, ph = rect
+                    b_pockets.append({"x": cx, "y": cy, "width": round(pw, 9), "height": round(ph, 9),
+                                      "depth": round(bd * to_mm if from_views else bd, 9)})
+        if b_holes:
+            notes_dict["blind_holes"] = b_holes
+        if b_pockets:
+            notes_dict["blind_pockets"] = b_pockets
     it.spec = {"name": f"from_{stem}", "units": "mm",
                "features": [{"$op": "sketch.loops", "id": "section", "sketched_on": "front", "args": {"loops": loops}},
                             {"$op": "feature.extrude", "id": "body", "args": {"depth": depth}}],
@@ -1035,6 +1064,36 @@ def reconstruct(path: str | Path, *, through: bool = False, scale: float | None 
     if features:
         it = recognize_features(it)
     return it
+
+
+def _is_rectangular_loop_segs(lp: list) -> tuple[float, float, float, float] | None:
+    """Return (cx, cy, width, height) if loop segments form an axis-aligned rectangle."""
+    if len(lp) < 4:
+        return None
+    if any(s[0] != "L" for s in lp):
+        return None
+    xs = []
+    ys = []
+    for s in lp:
+        _, x1, y1, x2, y2 = s
+        is_horz = abs(y1 - y2) < 1e-5
+        is_vert = abs(x1 - x2) < 1e-5
+        if not (is_horz or is_vert):
+            return None
+        xs.extend([x1, x2])
+        ys.extend([y1, y2])
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    w = max_x - min_x
+    h = max_y - min_y
+    if w < 1e-5 or h < 1e-5:
+        return None
+    perim = sum(math.hypot(s[3] - s[1], s[4] - s[2]) for s in lp)
+    if abs(perim - 2 * (w + h)) > 1e-4:
+        return None
+    cx = (min_x + max_x) / 2.0
+    cy = (min_y + max_y) / 2.0
+    return (round(cx, 9), round(cy, 9), round(w, 9), round(h, 9))
 
 
 def _is_circular_loop_segs(lp: list) -> tuple[float, float, float] | None:
@@ -1176,7 +1235,8 @@ def recognize_features(it: Interpretation) -> Interpretation:
         return it
     loops = feats[loops_idx]["args"].get("loops", [])
     blind_holes = it.spec.get("notes", {}).get("blind_holes", [])
-    if len(loops) <= 1 and not blind_holes:
+    blind_pockets = it.spec.get("notes", {}).get("blind_pockets", [])
+    if len(loops) <= 1 and not blind_holes and not blind_pockets:
         return it
     outer = loops[0]
     inner = loops[1:] if len(loops) > 1 else []
@@ -1195,41 +1255,61 @@ def recognize_features(it: Interpretation) -> Interpretation:
     for bh in blind_holes:
         circular_holes.append({"x": round(bh["x"], 9), "y": round(bh["y"], 9), "d": round(bh["d"], 9), "depth": round(bh["depth"], 9)})
 
-    if not circular_holes:
-        return it
-
-    by_dia_depth: dict[tuple[float, float], list[dict]] = {}
-    for h in circular_holes:
-        by_dia_depth.setdefault((round(h["d"], 6), round(h["depth"], 6)), []).append(h)
-
     new_feats = []
     hole_id = 1
     pat_id = 1
     total_recognized = 0
 
-    for (dia, h_depth), group in sorted(by_dia_depth.items()):
-        c_feats, rem_c, hole_id, pat_id = _find_circular_patterns(group, h_depth, hole_id, pat_id)
-        if c_feats:
-            new_feats.extend(c_feats)
-            total_recognized += len(group)
-            continue
-        l_feats, rem_l, hole_id, pat_id = _find_linear_patterns(group, h_depth, hole_id, pat_id)
-        new_feats.extend(l_feats)
-        total_recognized += len(group) - len(rem_l)
-        for h in rem_l:
-            new_feats.append({
-                "$op": "feature.hole", "id": f"hole{hole_id}", "sketched_on": "front",
-                "args": {"diameter": h["d"], "depth": h_depth, "center": [h["x"], h["y"]]}
-            })
-            hole_id += 1
-            total_recognized += 1
+    if circular_holes:
+        by_dia_depth: dict[tuple[float, float], list[dict]] = {}
+        for h in circular_holes:
+            by_dia_depth.setdefault((round(h["d"], 6), round(h["depth"], 6)), []).append(h)
+
+        for (dia, h_depth), group in sorted(by_dia_depth.items()):
+            c_feats, rem_c, hole_id, pat_id = _find_circular_patterns(group, h_depth, hole_id, pat_id)
+            if c_feats:
+                new_feats.extend(c_feats)
+                total_recognized += len(group)
+                continue
+            l_feats, rem_l, hole_id, pat_id = _find_linear_patterns(group, h_depth, hole_id, pat_id)
+            new_feats.extend(l_feats)
+            total_recognized += len(group) - len(rem_l)
+            for h in rem_l:
+                new_feats.append({
+                    "$op": "feature.hole", "id": f"hole{hole_id}", "sketched_on": "front",
+                    "args": {"diameter": h["d"], "depth": h_depth, "center": [h["x"], h["y"]]}
+                })
+                hole_id += 1
+                total_recognized += 1
+
+    pocket_count = 0
+    for i, bp in enumerate(blind_pockets, start=1):
+        new_feats.extend([
+            {
+                "$op": "sketch.rectangle", "id": f"pocket{i}_sk", "sketched_on": "front",
+                "args": {"x": bp["x"], "y": bp["y"], "width": bp["width"], "height": bp["height"]}
+            },
+            {
+                "$op": "feature.cut", "id": f"pocket{i}",
+                "args": {"depth": bp["depth"]}
+            }
+        ])
+        pocket_count += 1
+
+    if not new_feats:
+        return it
 
     feats[loops_idx]["args"]["loops"] = [outer] + other_inner
     feats[ext_idx + 1:ext_idx + 1] = new_feats
+    parts_desc = []
+    if total_recognized:
+        parts_desc.append(f"{total_recognized} hole(s)")
+    if pocket_count:
+        parts_desc.append(f"{pocket_count} pocket(s)")
     it.facts.append(Fact("recognized_features",
-                         f"{total_recognized} hole(s) recognized into {len(new_feats)} feature(s)",
+                         f"{' and '.join(parts_desc)} recognized into {len(new_feats)} feature(s)",
                          None, "CALCULATED",
-                         "circular inner loops converted to feature.hole and patterns"))
+                         "inner loops and blind openings converted to parametric features"))
     return it
 
 

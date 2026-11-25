@@ -15,6 +15,7 @@ import hashlib
 import math
 import re
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import ezdxf
@@ -252,7 +253,26 @@ def _cross_check(c: Characteristic, parsed: CalloutParse, geometry: float | None
     # tolerance band. Outside it, the text and the picture disagree and that is a finding.
     slack = max(band, abs(parsed.nominal) * 1e-9 + 1e-6)
     delta = geometry - parsed.nominal
-    ok = abs(delta) <= slack
+    # The comparison belongs on the decimal grid both numbers were printed on. In binary floats a
+    # value exactly on the band edge measures 4.4e-19 past it (0.1875 against 0.188 printed to
+    # three decimals), which once withheld a sheet on arithmetic noise. Decimal(str(x)) reads the
+    # number the drawing states, not its nearest double, so equality is equality and the edge is
+    # reported as zero margin rather than as a disagreement.
+    def on_grid(value: float) -> Decimal:
+        # A drawing states decimal numbers; the pipeline carries them through binary floats
+        # (a measurement times a scale factor lands on 19.999500000000002). Twelve decimal places
+        # is four orders of magnitude below any inspection tolerance and far above that noise, so
+        # it recovers the number the drawing states without inventing an epsilon.
+        return Decimal(str(round(float(value), 12)))
+
+    try:
+        gap = abs(on_grid(geometry) - on_grid(parsed.nominal))
+        edge = on_grid(slack)
+        ok = gap <= edge
+        at_limit = gap == edge
+    except (InvalidOperation, ValueError):
+        ok = abs(delta) <= slack
+        at_limit = False
     c.checks.append(Check(
         "geometry_cross_check",
         CheckOutcome.PASSED if ok else CheckOutcome.FAILED,
@@ -262,6 +282,11 @@ def _cross_check(c: Characteristic, parsed: CalloutParse, geometry: float | None
             f"the drawn geometry is outside the {bound}; either the drawing was "
             "not modelled to this dimension or the callout is stale"),
         delta))
+    if ok and at_limit:
+        c.fail("zero_margin", (
+            f"the drawn geometry sits exactly on the {bound}: {geometry:.6f} against "
+            f"{parsed.nominal:.6f} +/- {slack:.6f}. Zero margin is worth a look and is not a "
+            "disagreement, so the check passes and the record says why"), "warning")
     if not ok:
         c.fail("geometry_callout_disagreement",
                f"callout says {parsed.nominal} but the geometry measures {geometry:.6f} "

@@ -1903,13 +1903,33 @@ function loopsPreview(spec) {
     const isBlind = ext && c.depth != null && c.depth < ext.args.depth;
     kids.push(s("circle", { cx: c.x, cy: c.y, r: c.d / 2, class: isBlind ? "pv-pocket" : "pv-hole" }));
   }
+  const extraPockets = [];
+  for (const c of by("feature.cut")) {
+    const idx = F.indexOf(c);
+    if (idx > 0 && F[idx - 1].$op === "sketch.rectangle") {
+      const r = F[idx - 1];
+      extraPockets.push({ x: r.args.x - r.args.width / 2, y: r.args.y - r.args.height / 2, width: r.args.width, height: r.args.height, depth: c.args.depth });
+    }
+  }
+  if (!extraPockets.length && spec?.notes?.blind_pockets) {
+    for (const p of spec.notes.blind_pockets) {
+      extraPockets.push({ x: p.x - p.width / 2, y: p.y - p.height / 2, width: p.width, height: p.height, depth: p.depth });
+    }
+  }
+  for (const p of extraPockets) {
+    kids.push(s("rect", { x: p.x, y: p.y, width: p.width, height: p.height, class: "pv-pocket" }));
+  }
   const labels = [{ x: (x0 + x1) / 2, y: y0 - fs * 1.4, t: g6(x1 - x0) }, { x: x1 + fs * .5, y: (y0 + y1) / 2, t: g6(y1 - y0), a: "start" }];
-  const totalOpenings = (loops.length - 1) + extraHoles.length;
+  const totalOpenings = (loops.length - 1) + extraHoles.length + extraPockets.length;
   if (totalOpenings > 0) labels.push({ x: x1, y: y1 + fs * .9, t: `${totalOpenings} opening(s)`, a: "end", tag: true });
   if (extraHoles.length) {
     const h0 = extraHoles[0];
     const isBlind = ext && h0.depth != null && h0.depth < ext.args.depth;
     labels.push({ x: h0.x, y: h0.y + h0.d / 2, t: `${extraHoles.length > 1 ? extraHoles.length + "× " : ""}Ø${g6(h0.d)}${isBlind ? " ↧" + g6(h0.depth) : ""}`, a: "middle", tag: true });
+  }
+  for (const p of extraPockets) {
+    const isBlind = ext && p.depth != null && p.depth < ext.args.depth;
+    labels.push({ x: p.x + p.width / 2, y: p.y + p.height / 2, t: `${g6(p.width)}×${g6(p.height)}${isBlind ? " ↧" + g6(p.depth) : ""}`, a: "middle", tag: true });
   }
   return h("figure", { class: "pv" }, s("svg", { viewBox: [x0 - m, -(y1 + m), (x1 - x0) + 2 * m, (y1 - y0) + 2 * m].join(" "), role: "img", "aria-label": "section from the drawing" },
       s("g", { transform: "scale(1,-1)" }, ...kids),

@@ -436,3 +436,131 @@ def test_blind_holes_rebuilt_with_feature_recognition(tmp_path):
     assert it.expect["volume_mm3"] == pytest.approx(want_v)
 
 
+def pocket_block_dxf(path: Path, *, pw: float = 30.0, ph: float = 20.0, pd: float = 5.0) -> Path:
+    """Third-angle views of a 60 x 40 x 20 block with a centered blind pocket pw x ph x pd."""
+    doc = ezdxf.new("R2010", setup=True)
+    doc.header["$INSUNITS"] = 4
+    m = doc.modelspace()
+    L = lambda x1, y1, x2, y2, lt="CONTINUOUS": m.add_line((x1, y1), (x2, y2), dxfattribs={"linetype": lt})
+
+    # front view (P): outline 60 x 40, pocket (cx, cy) = (30, 20)
+    L(0, 0, 60, 0); L(60, 0, 60, 40); L(60, 40, 0, 40); L(0, 40, 0, 0)
+    px0 = 30 - pw / 2
+    px1 = 30 + pw / 2
+    py0 = 20 - ph / 2
+    py1 = 20 + ph / 2
+    L(px0, py0, px1, py0); L(px1, py0, px1, py1); L(px1, py1, px0, py1); L(px0, py1, px0, py0)
+
+    # top view (above): x shared [0, 60], depth 20 upwards [80, 100]
+    y0 = 80
+    L(0, y0, 60, y0); L(60, y0, 60, y0 + 20); L(60, y0 + 20, 0, y0 + 20); L(0, y0 + 20, 0, y0)
+    # pocket hidden walls: depth pd down from face y0 + 20
+    floor_y = y0 + 20 - pd
+    L(px0, floor_y, px0, y0 + 20, "HIDDEN")
+    L(px1, floor_y, px1, y0 + 20, "HIDDEN")
+    L(px0, floor_y, px1, floor_y, "HIDDEN")
+
+    # side view (right): y shared [0, 40], depth 20 rightwards [100, 120]
+    x0 = 100
+    L(x0, 0, x0 + 20, 0); L(x0 + 20, 0, x0 + 20, 40); L(x0 + 20, 40, x0, 40); L(x0, 40, x0, 0)
+    floor_x = x0 + 20 - pd
+    L(floor_x, py0, x0 + 20, py0, "HIDDEN")
+    L(floor_x, py1, x0 + 20, py1, "HIDDEN")
+    L(floor_x, py0, floor_x, py1, "HIDDEN")
+
+    # dimensions
+    m.add_linear_dim(base=(30, -15), p1=(0, 0), p2=(60, 0), override={"dimlfac": 1.0}).render()
+    m.add_linear_dim(base=(-15, 20), p1=(0, 0), p2=(0, 40), angle=90, override={"dimlfac": 1.0}).render()
+    m.add_linear_dim(base=(30, 110), p1=(0, 80), p2=(0, 100), angle=90, override={"dimlfac": 1.0}).render()
+    m.add_linear_dim(base=(110, -15), p1=(100, 0), p2=(120, 0), override={"dimlfac": 1.0}).render()
+
+    doc.saveas(path)
+    return path
+
+
+def test_blind_pocket_refused_without_features(tmp_path):
+    p = pocket_block_dxf(tmp_path / "pocket_block.dxf")
+    it = reconstruct(p)
+    assert not it.executable
+    assert any("not one constant extrusion" in a for a in it.ambiguities)
+
+
+def test_blind_pocket_rebuilt_with_feature_recognition(tmp_path):
+    p = pocket_block_dxf(tmp_path / "pocket_block.dxf", pw=30, ph=20, pd=5)
+    it = reconstruct(p, features=True)
+    assert it.executable, (it.missing, it.ambiguities)
+    assert [f["$op"] for f in it.spec["features"]] == [
+        "sketch.loops", "feature.extrude", "sketch.rectangle", "feature.cut"
+    ]
+    # base outline only in sketch.loops
+    assert len(it.spec["features"][0]["args"]["loops"]) == 1
+    # base extrude depth
+    assert it.spec["features"][1]["args"]["depth"] == pytest.approx(20.0)
+    # pocket sketch and cut
+    rect = it.spec["features"][2]["args"]
+    assert rect["x"] == pytest.approx(30.0) and rect["y"] == pytest.approx(20.0)
+    assert rect["width"] == pytest.approx(30.0) and rect["height"] == pytest.approx(20.0)
+    cut = it.spec["features"][3]["args"]
+    assert cut["depth"] == pytest.approx(5.0)
+    # exact volume: 60 * 40 * 20 - 30 * 20 * 5 = 45000 mm3
+    assert it.expect["volume_mm3"] == pytest.approx(45000.0)
+    assert it.expect["size_mm"] == [60.0, 40.0, 20.0]
+    rf = next(f for f in it.facts if f.name == "recognized_features")
+    assert "1 pocket(s)" in rf.value
+
+
+def test_mixed_blind_holes_and_pocket(tmp_path):
+    """Plate with both a blind pocket and blind holes: both recognized."""
+    doc = ezdxf.new("R2010", setup=True)
+    doc.header["$INSUNITS"] = 4
+    m = doc.modelspace()
+    L = lambda x1, y1, x2, y2, lt="CONTINUOUS": m.add_line((x1, y1), (x2, y2), dxfattribs={"linetype": lt})
+
+    # front view (P): 120 x 60 plate, pocket 30 x 20 at center (60, 30), holes at (20, 30) and (100, 30) dia 6
+    L(0, 0, 120, 0); L(120, 0, 120, 60); L(120, 60, 0, 60); L(0, 60, 0, 0)
+    # pocket 30 x 20 centered at (60, 30) -> [45, 75] x [20, 40]
+    L(45, 20, 75, 20); L(75, 20, 75, 40); L(75, 40, 45, 40); L(45, 40, 45, 20)
+    m.add_circle((20, 30), 3)
+    m.add_circle((100, 30), 3)
+
+    # top view (above): [0, 120] x [80, 100], depth 20 upwards
+    y0 = 80
+    L(0, y0, 120, y0); L(120, y0, 120, y0 + 20); L(120, y0 + 20, 0, y0 + 20); L(0, y0 + 20, 0, y0)
+    # pocket hidden walls and floor: depth 6 mm from top face (y0 + 20 = 100) -> floor at 94
+    L(45, 94, 45, 100, "HIDDEN")
+    L(75, 94, 75, 100, "HIDDEN")
+    L(45, 94, 75, 94, "HIDDEN")
+    # holes: depth 10 mm from top face (y0 + 20 = 100) -> floor at 90
+    for cx in (20, 100):
+        L(cx - 3, 90, cx - 3, 100, "HIDDEN")
+        L(cx + 3, 90, cx + 3, 100, "HIDDEN")
+
+    # side view (right): [140, 160] x [0, 60], depth 20 rightwards
+    x0 = 140
+    L(x0, 0, x0 + 20, 0); L(x0 + 20, 0, x0 + 20, 60); L(x0 + 20, 60, x0, 60); L(x0, 60, x0, 0)
+    # pocket in side view: py in [20, 40], depth 6 from right face (x0 + 20 = 160) -> floor at 154
+    L(154, 20, 160, 20, "HIDDEN")
+    L(154, 40, 160, 40, "HIDDEN")
+    L(154, 20, 154, 40, "HIDDEN")
+    # holes in side view: at y = 30, depth 10 from right face -> floor at 150
+    L(150, 27, 160, 27, "HIDDEN")
+    L(150, 33, 160, 33, "HIDDEN")
+
+    m.add_linear_dim(base=(60, -15), p1=(0, 0), p2=(120, 0), override={"dimlfac": 1.0}).render()
+    m.add_linear_dim(base=(-15, 30), p1=(0, 0), p2=(0, 60), angle=90, override={"dimlfac": 1.0}).render()
+    m.add_linear_dim(base=(60, 110), p1=(0, 80), p2=(0, 100), angle=90, override={"dimlfac": 1.0}).render()
+    m.add_linear_dim(base=(150, -15), p1=(140, 0), p2=(160, 0), override={"dimlfac": 1.0}).render()
+
+    p = tmp_path / "mixed_blind.dxf"
+    doc.saveas(p)
+
+    it = reconstruct(p, features=True)
+    assert it.executable, (it.missing, it.ambiguities)
+    ops = [f["$op"] for f in it.spec["features"]]
+    assert "sketch.loops" in ops and "feature.extrude" in ops
+    assert "feature.hole" in ops
+    assert "sketch.rectangle" in ops and "feature.cut" in ops
+    want_v = (120 * 60 * 20) - (30 * 20 * 6) - (2 * math.pi * 9 * 10)
+    assert it.expect["volume_mm3"] == pytest.approx(want_v)
+
+
