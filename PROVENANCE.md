@@ -7,8 +7,8 @@ should not need to be trusted about its own history.
 
 ## Who wrote it
 
-Every line of code in `src/`, `tests/`, `tools/`, `docs/` and `mecagent-alternative/` was written by the entrant
-(GitHub: `@osmiumuas-wq`) on their own PC. No other person contributed code. No part of it was generated from the judges' samples,
+Every line of code in `src/`, `tests/`, `tools/`, `docs/` and `mecagent-alternative/` was written by the entrant,
+Hemanth Prasanth KM (GitHub: `@osmiumuas-wq`), on their own PC. No other person contributed code. No part of it was generated from the judges' samples,
 the other entrants' work, or a template the entrant did not write.
 
 ## Timeline, as git records it
@@ -16,7 +16,7 @@ the other entrants' work, or a template the entrant did not write.
 | Date | Commit | What it is |
 |---|---|---|
 | 2026-10-18 23:26 +0530 | `96a7fb5` | last commit before the event window: two-kernel verification, Drawing to CAD, local model planner, signed dossiers, NCR, costing |
-| 2026-11-25 | (this session) | `astracad_decide`: decision records, outcome ledger, learned reliability, `tools/decide_demo.py` |
+| 2026-11-25 17:50 +0530 | `b3a9b77` | `astracad_decide`: decision records, outcome ledger, learned reliability, `tools/decide_demo.py`, and the printed-boundary fix |
 | 2026-12-01 .. 06 | (to be filled in) | the SNH'26 increment, listed below |
 
 The pre-event history is not squashed, re-dated or rewritten. `git log` shows what it shows, and the entrant will
