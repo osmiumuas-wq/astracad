@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ASTraCAD Ω — Decision Engine · SNH'26</title>
+<meta name="description" content="A self-auditing decision engine for engineering inspection plans: AI proposes, evidence decides, a person approves.">
+<style>
+:root{--paper:#f6f2e8;--ink:#14161a;--muted:#5c6068;--rule:#d7d1c2;--accent:#c8452a;--card:#fffdf7;--ok:#1f7a4d;--hold:#a4690a;--bad:#a3231b;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+@media (prefers-color-scheme:dark){:root{--paper:#0f1115;--ink:#eceae4;--muted:#9a9c9f;--rule:#2a2e35;--accent:#e2704f;--card:#15181d}}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 17px/1.6 var(--sans);letter-spacing:-.006em}
+.wrap{max-width:860px;margin:0 auto;padding:56px 24px 80px}
+.eyebrow{font:700 11px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+h1{font-size:clamp(34px,6.2vw,62px);line-height:1.02;letter-spacing:-.04em;font-weight:800;margin:14px 0 0}
+h1 em{font-style:normal;color:var(--accent)}
+.lede{font-size:clamp(17px,2.2vw,21px);line-height:1.5;color:var(--ink);margin:22px 0 0;max-width:62ch}
+.lede b{font-weight:650}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin:32px 0 0}
+.btn{display:inline-block;padding:14px 20px;border:2px solid var(--ink);background:var(--ink);color:var(--paper);text-decoration:none;font:700 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase}
+.btn.ghost{background:transparent;color:var(--ink)}
+.btn:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+section{margin:64px 0 0;padding:32px 0 0;border-top:1px solid var(--rule)}
+h2{font:700 12px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin:0 0 22px}
+ol.steps{list-style:none;counter-reset:s;margin:0;padding:0;display:grid;gap:20px}
+ol.steps li{counter-increment:s;display:grid;grid-template-columns:44px 1fr;gap:16px;align-items:start}
+ol.steps li::before{content:counter(s,decimal-leading-zero);font:700 12px/28px var(--mono);color:var(--accent);border:1px solid var(--rule);border-radius:2px;text-align:center;background:var(--card)}
+ol.steps strong{display:block;font-weight:700;margin-bottom:2px}
+ol.steps span{color:var(--muted);font-size:15.5px}
+.grid{display:grid;gap:14px}
+@media (min-width:700px){.grid.two{grid-template-columns:1fr 1fr}}
+.card{border:1px solid var(--rule);background:var(--card);padding:20px 20px 18px;border-radius:3px}
+.card h3{margin:0 0 8px;font-size:15px;letter-spacing:-.01em;font-weight:700}
+.card p{margin:0;color:var(--muted);font-size:15px;line-height:1.55}
+code,.mono{font-family:var(--mono);font-size:.88em;font-variant-ligatures:none}
+pre{margin:18px 0 0;padding:16px 18px;background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--accent);overflow-x:auto;font:400 13.5px/1.7 var(--mono)}
+pre b{color:var(--accent);font-weight:700}
+table{width:100%;border-collapse:collapse;margin:18px 0 0;font-size:15px}
+th,td{text-align:left;padding:10px 12px 10px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font:700 10.5px/1.4 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.tag{display:inline-block;padding:2px 7px;border:1px solid currentColor;border-radius:2px;font:700 10.5px/1.6 var(--mono);letter-spacing:.12em}
+.tag.ok{color:var(--ok)}.tag.hold{color:var(--hold)}.tag.bad{color:var(--bad)}
+.limits{border-left:3px solid var(--accent);padding:2px 0 2px 20px;color:var(--muted);font-size:15.5px}
+.limits ul{margin:10px 0 0;padding-left:18px;display:grid;gap:8px}
+footer{margin:72px 0 0;padding-top:24px;border-top:1px solid var(--rule);display:flex;flex-wrap:wrap;gap:10px 26px;justify-content:space-between;color:var(--muted);font:400 12.5px/1.6 var(--mono)}
+a{color:inherit;text-decoration-color:var(--accent);text-underline-offset:3px}
+a:hover{color:var(--accent)}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="eyebrow">SNH'26 · AI track · SNH-9Z7SG3BQ</p>
+  <h1>AI proposes.<br>Evidence decides.<br><em>A person approves.</em></h1>
+  <p class="lede">ASTraCAD Ω is a <b>self-auditing decision engine</b> for engineering inspection plans. It does not only ask whether a <i>source</i> supports a claim. It asks whether the <b>part</b> supports it — and when two sources disagree, it refuses to average them.</p>
+  <div class="cta">
+    <a class="btn" href="record.html">Open the live decision record →</a>
+    <a class="btn ghost" href="https://github.com/osmiumuas-wq/astracad">Source on GitHub</a>
+  </div>
+
+  <section>
+    <h2>What the record shows</h2>
+    <ol class="steps">
+      <li><div><strong>A ruling, not a score</strong><span>Each characteristic resolves to ACCEPT, HOLD, REJECT or NOT_JUDGEABLE, with the reason written next to it — including "no definite limits, so a measurement could be recorded but never judged".</span></div></li>
+      <li><div><strong>Two sources, one arbitration</strong><span>When the drawing and an independent parse disagree, the decision is HOLD and a human arbitrates. Nothing is silently merged; the disagreement is the output.</span></div></li>
+      <li><div><strong>Confidence from the weakest link</strong><span>The record's confidence floor is the weakest fact, not the average of the strong ones. One unsupported premise drags the whole decision down.</span></div></li>
+      <li><div><strong>What is missing is reported missing</strong><span>Missing limits, missing revision, missing calibration — absence is a first-class finding, never blank space.</span></div></li>
+      <li><div><strong>A chain that fails when tampered</strong><span>Every fact carries a SHA-256 provenance hash in an append-only log; edit a line and the verifier exits non-zero.</span></div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Why this is not a wrapper around a model</h2>
+    <div class="grid two">
+      <div class="card"><h3>A model may propose; it may never approve</h3><p>Model output enters as <code>AI_PROPOSED</code>. The states that carry weight — <code>EXTRACTED</code>, <code>CALCULATED</code>, <code>VERIFIED</code>, <code>HUMAN_APPROVED</code> — are written by evidence and people, not by the model.</p></div>
+      <div class="card"><h3>Two people to release</h3><p>A release is a signed act under a two-person rule. The engine records who stated it, when, and on what evidence — and refuses the ruling when the evidence is not there.</p></div>
+      <div class="card"><h3>It learns which source lied last time</h3><p>Each source's weight is a calibrated Beta posterior over recorded outcomes. It stays at its stated prior until five outcomes exist, and three per kind — the engine will not pretend to be calibrated on n=1.</p></div>
+      <div class="card"><h3>Refusal is a designed outcome</h3><p>A broken chain exits 4. An unsupported release exits 2. The failure modes are enumerated and tested, not discovered in production.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Run it yourself</h2>
+    <pre><b>git clone</b> https://github.com/osmiumuas-wq/astracad &amp;&amp; cd astracad
+<b>set</b> PYTHONPATH=src        # PowerShell: $env:PYTHONPATH="src"
+<b>py</b> tools/decide_demo.py examples/acad.plan.json
+<b>start</b> _out/decide_demo/index.html</pre>
+    <p class="limits" style="margin-top:22px">Python 3.14, standard library only — no pip install, no model API key, no network. The page above is the exact artefact that command writes.</p>
+  </section>
+
+  <section>
+    <h2>Honest limits</h2>
+    <div class="limits">
+      <p>Stated plainly, because a judge should not have to find them:</p>
+      <ul>
+        <li>The five outcomes visible in the record are a <b>rehearsal</b> — labelled as such on the page — made to show the learning loop move, not measurements of a real part.</li>
+        <li>The repository is a prototype: verified end-to-end on synthetic drawings and a SOLIDWORKS corpus, not on a production drawing office.</li>
+        <li>The Windows COM path to SOLIDWORKS is kept off the judged path; the decision engine runs with no CAD application installed.</li>
+        <li>Nothing here claims a win, a benchmark crown or a client. It claims a traceable ruling, and it shows its work.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    <span>ASTraCAD Ω · Hemanth Prasanth KM</span>
+    <span><a href="https://github.com/osmiumuas-wq/astracad">github.com/osmiumuas-wq/astracad</a></span>
+    <span>Built for SNH'26 · AI track</span>
+  </footer>
+</main>
+</body>
+</html>

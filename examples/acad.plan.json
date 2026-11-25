@@ -1,0 +1,1733 @@
+{
+  "source_document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+  "source_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+  "revision": "A",
+  "unit": "in",
+  "page_count": 1,
+  "extents": [
+    -0.0478603501,
+    -0.9512256737657572,
+    12.883825916400681,
+    8.3558611373
+  ],
+  "content_extents": [
+    0.6818427637000002,
+    2.1607111052296046,
+    12.418580151162756,
+    8.1811126378
+  ],
+  "characteristics": [
+    {
+      "cid": "CH-001",
+      "kind": "diameter",
+      "raw_callout": "⌀ 4.00",
+      "unit": "in",
+      "nominal": 4.0,
+      "tolerance": {
+        "kind": "none"
+      },
+      "count": 1,
+      "state": "parsed",
+      "review": "detected",
+      "source": {
+        "document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+        "document_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+        "revision": "A",
+        "page": 1,
+        "entity_handle": "2ED",
+        "entity_type": "DIMENSION",
+        "layer": "DIMS",
+        "anchor_x": 1.7253703919,
+        "anchor_y": 3.6087528331,
+        "definition_points": [
+          [
+            1.7253703919,
+            3.6087528331
+          ],
+          [
+            0.0,
+            0.0
+          ]
+        ],
+        "zone": "",
+        "text_box": [
+          0.0204588794,
+          7.458474057929604,
+          0.7483222511135061,
+          7.6884467728
+        ]
+      },
+      "geometry_value": 3.9999999999565543,
+      "limits": null,
+      "balloon_no": 8,
+      "checks": [
+        {
+          "name": "geometry_cross_check",
+          "outcome": "passed",
+          "expected": "4.000000 +/- 0.005000",
+          "actual": "4.000000",
+          "why": null,
+          "delta": -4.3445691488841476e-11
+        }
+      ],
+      "issues": [
+        {
+          "code": "no_limits",
+          "severity": "warning",
+          "message": "no definite upper/lower limits could be derived from the stated tolerance; inspection cannot pass/fail this characteristic"
+        }
+      ],
+      "history": [
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "extractor",
+          "action": "extracted",
+          "detail": "DIMENSION handle 2ED on layer DIMS"
+        },
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "parser",
+          "action": "noted",
+          "detail": "callout read from the dimension's rendered text in block _D"
+        }
+      ]
+    },
+    {
+      "cid": "CH-002",
+      "kind": "diameter",
+      "raw_callout": "⌀ 2.00",
+      "unit": "in",
+      "nominal": 2.0,
+      "tolerance": {
+        "kind": "none"
+      },
+      "count": 1,
+      "state": "parsed",
+      "review": "detected",
+      "source": {
+        "document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+        "document_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+        "revision": "A",
+        "page": 1,
+        "entity_handle": "2FD",
+        "entity_type": "DIMENSION",
+        "layer": "DIMS",
+        "anchor_x": 0.862685196,
+        "anchor_y": 1.8043764166,
+        "definition_points": [
+          [
+            0.862685196,
+            1.8043764166
+          ],
+          [
+            0.0,
+            0.0
+          ]
+        ],
+        "zone": "",
+        "text_box": [
+          -0.0478603501,
+          3.968701311729604,
+          0.6800030217135061,
+          4.1986740266
+        ]
+      },
+      "geometry_value": 2.000000000044954,
+      "limits": null,
+      "balloon_no": 7,
+      "checks": [
+        {
+          "name": "geometry_cross_check",
+          "outcome": "passed",
+          "expected": "2.000000 +/- 0.005000",
+          "actual": "2.000000",
+          "why": null,
+          "delta": 4.495381844549229e-11
+        }
+      ],
+      "issues": [
+        {
+          "code": "no_limits",
+          "severity": "warning",
+          "message": "no definite upper/lower limits could be derived from the stated tolerance; inspection cannot pass/fail this characteristic"
+        }
+      ],
+      "history": [
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "extractor",
+          "action": "extracted",
+          "detail": "DIMENSION handle 2FD on layer DIMS"
+        },
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "parser",
+          "action": "noted",
+          "detail": "callout read from the dimension's rendered text in block _D_1"
+        }
+      ]
+    },
+    {
+      "cid": "CH-003",
+      "kind": "linear",
+      "raw_callout": "1.953",
+      "unit": "in",
+      "nominal": 1.953,
+      "tolerance": {
+        "kind": "none"
+      },
+      "count": 1,
+      "state": "parsed",
+      "review": "detected",
+      "source": {
+        "document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+        "document_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+        "revision": "A",
+        "page": 1,
+        "entity_handle": "308",
+        "entity_type": "DIMENSION",
+        "layer": "DIMS",
+        "anchor_x": 9.790463094833333,
+        "anchor_y": 4.230301751733333,
+        "definition_points": [
+          [
+            10.4414628938,
+            3.1472547917
+          ],
+          [
+            8.4884634969,
+            4.9343576897
+          ],
+          [
+            10.4414628938,
+            4.6092927738
+          ]
+        ],
+        "zone": "",
+        "text_box": [
+          9.1050112249,
+          3.0593142608296047,
+          9.734274526400682,
+          3.2892869757
+        ]
+      },
+      "geometry_value": 1.952999396900001,
+      "limits": null,
+      "balloon_no": 4,
+      "checks": [
+        {
+          "name": "geometry_cross_check",
+          "outcome": "passed",
+          "expected": "1.953000 +/- 0.000500",
+          "actual": "1.952999",
+          "why": null,
+          "delta": -6.030999990525032e-07
+        }
+      ],
+      "issues": [
+        {
+          "code": "no_limits",
+          "severity": "warning",
+          "message": "no definite upper/lower limits could be derived from the stated tolerance; inspection cannot pass/fail this characteristic"
+        }
+      ],
+      "history": [
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "extractor",
+          "action": "extracted",
+          "detail": "DIMENSION handle 308 on layer DIMS"
+        },
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "parser",
+          "action": "noted",
+          "detail": "callout read from the dimension's rendered text in block _D_2"
+        }
+      ]
+    },
+    {
+      "cid": "CH-004",
+      "kind": "linear",
+      "raw_callout": "1.345",
+      "unit": "in",
+      "nominal": 1.345,
+      "tolerance": {
+        "kind": "none"
+      },
+      "count": 1,
+      "state": "parsed",
+      "review": "detected",
+      "source": {
+        "document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+        "document_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+        "revision": "A",
+        "page": 1,
+        "entity_handle": "314",
+        "entity_type": "DIMENSION",
+        "layer": "DIMS",
+        "anchor_x": 9.9930921716,
+        "anchor_y": 6.7225856315,
+        "definition_points": [
+          [
+            10.4414628938,
+            7.080353706
+          ],
+          [
+            9.0963507272,
+            6.4781104147
+          ],
+          [
+            10.4414628938,
+            6.6092927738
+          ]
+        ],
+        "zone": "",
+        "text_box": [
+          9.4089548401,
+          6.992413175129604,
+          10.038218141600682,
+          7.22238589
+        ]
+      },
+      "geometry_value": 1.3451121665999999,
+      "limits": null,
+      "balloon_no": null,
+      "checks": [
+        {
+          "name": "geometry_cross_check",
+          "outcome": "passed",
+          "expected": "1.345000 +/- 0.000500",
+          "actual": "1.345112",
+          "why": null,
+          "delta": 0.00011216659999990775
+        }
+      ],
+      "issues": [
+        {
+          "code": "no_limits",
+          "severity": "warning",
+          "message": "no definite upper/lower limits could be derived from the stated tolerance; inspection cannot pass/fail this characteristic"
+        }
+      ],
+      "history": [
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "extractor",
+          "action": "extracted",
+          "detail": "DIMENSION handle 314 on layer DIMS"
+        },
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "parser",
+          "action": "noted",
+          "detail": "callout read from the dimension's rendered text in block _D_3"
+        }
+      ]
+    },
+    {
+      "cid": "CH-005",
+      "kind": "linear",
+      "raw_callout": "0.21",
+      "unit": "in",
+      "nominal": 0.21,
+      "tolerance": {
+        "kind": "none"
+      },
+      "count": 1,
+      "state": "parsed",
+      "review": "detected",
+      "source": {
+        "document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+        "document_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+        "revision": "A",
+        "page": 1,
+        "entity_handle": "31F",
+        "entity_type": "DIMENSION",
+        "layer": "DIMS",
+        "anchor_x": 10.372482778466667,
+        "anchor_y": 4.4732651434,
+        "definition_points": [
+          [
+            10.4414628938,
+            4.1475805307
+          ],
+          [
+            10.2345225478,
+            4.6629221257
+          ],
+          [
+            10.4414628938,
+            4.6092927738
+          ]
+        ],
+        "zone": "",
+        "text_box": [
+          9.3045853557,
+          4.059639999829604,
+          9.793998725413507,
+          4.2896127147
+        ]
+      },
+      "geometry_value": 0.20694034600000144,
+      "limits": null,
+      "balloon_no": 1,
+      "checks": [
+        {
+          "name": "geometry_cross_check",
+          "outcome": "passed",
+          "expected": "0.210000 +/- 0.005000",
+          "actual": "0.206940",
+          "why": null,
+          "delta": -0.0030596539999985517
+        }
+      ],
+      "issues": [
+        {
+          "code": "no_limits",
+          "severity": "warning",
+          "message": "no definite upper/lower limits could be derived from the stated tolerance; inspection cannot pass/fail this characteristic"
+        }
+      ],
+      "history": [
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "extractor",
+          "action": "extracted",
+          "detail": "DIMENSION handle 31F on layer DIMS"
+        },
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "parser",
+          "action": "noted",
+          "detail": "callout read from the dimension's rendered text in block _D_4"
+        }
+      ]
+    },
+    {
+      "cid": "CH-006",
+      "kind": "linear",
+      "raw_callout": "0.188",
+      "unit": "in",
+      "nominal": 0.188,
+      "tolerance": {
+        "kind": "none"
+      },
+      "count": 1,
+      "state": "parsed",
+      "review": "detected",
+      "source": {
+        "document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+        "document_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+        "revision": "A",
+        "page": 1,
+        "entity_handle": "32B",
+        "entity_type": "DIMENSION",
+        "layer": "DIMS",
+        "anchor_x": 8.3634634969,
+        "anchor_y": 7.664479022266666,
+        "definition_points": [
+          [
+            8.3009634969,
+            7.8373515192
+          ],
+          [
+            8.4884634969,
+            7.5780427738
+          ],
+          [
+            8.3009634969,
+            7.5780427738
+          ]
+        ],
+        "zone": "",
+        "text_box": [
+          8.9085383122,
+          7.749410988329604,
+          9.537801613700681,
+          7.9793837032
+        ]
+      },
+      "geometry_value": 0.1875,
+      "limits": null,
+      "balloon_no": null,
+      "checks": [
+        {
+          "name": "geometry_cross_check",
+          "outcome": "passed",
+          "expected": "0.188000 +/- 0.000500",
+          "actual": "0.187500",
+          "why": null,
+          "delta": -0.0005000000000000004
+        }
+      ],
+      "issues": [
+        {
+          "code": "no_limits",
+          "severity": "warning",
+          "message": "no definite upper/lower limits could be derived from the stated tolerance; inspection cannot pass/fail this characteristic"
+        },
+        {
+          "code": "zero_margin",
+          "severity": "warning",
+          "message": "the drawn geometry sits exactly on the printed resolution: 0.187500 against 0.188000 +/- 0.000500. Zero margin is worth a look and is not a disagreement, so the check passes and the record says why"
+        }
+      ],
+      "history": [
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "extractor",
+          "action": "extracted",
+          "detail": "DIMENSION handle 32B on layer DIMS"
+        },
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "parser",
+          "action": "noted",
+          "detail": "callout read from the dimension's rendered text in block _D_5"
+        }
+      ]
+    },
+    {
+      "cid": "CH-007",
+      "kind": "radius",
+      "raw_callout": "R0.09",
+      "unit": "in",
+      "nominal": 0.09,
+      "tolerance": {
+        "kind": "none"
+      },
+      "count": 1,
+      "state": "parsed",
+      "review": "detected",
+      "source": {
+        "document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+        "document_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+        "revision": "A",
+        "page": 1,
+        "entity_handle": "337",
+        "entity_type": "DIMENSION",
+        "layer": "DIMS",
+        "anchor_x": 8.5822134969,
+        "anchor_y": 4.5155427738,
+        "definition_points": [
+          [
+            8.5822134969,
+            4.5155427738
+          ],
+          [
+            0.0,
+            0.0
+          ]
+        ],
+        "zone": "",
+        "text_box": [
+          9.0901841254,
+          3.5367424419296043,
+          9.761193675195361,
+          3.7667151568
+        ]
+      },
+      "geometry_value": 9.697655131442339,
+      "limits": null,
+      "balloon_no": 5,
+      "checks": [
+        {
+          "name": "geometry_cross_check",
+          "outcome": "failed",
+          "expected": "0.090000 +/- 0.005000",
+          "actual": "9.697655",
+          "why": "the drawn geometry is outside the printed resolution; either the drawing was not modelled to this dimension or the callout is stale",
+          "delta": 9.607655131442339
+        }
+      ],
+      "issues": [
+        {
+          "code": "no_limits",
+          "severity": "warning",
+          "message": "no definite upper/lower limits could be derived from the stated tolerance; inspection cannot pass/fail this characteristic"
+        },
+        {
+          "code": "geometry_callout_disagreement",
+          "severity": "blocking",
+          "message": "callout says 0.09 but the geometry measures 9.697655 (+9.607655 outside the band)"
+        }
+      ],
+      "history": [
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "extractor",
+          "action": "extracted",
+          "detail": "DIMENSION handle 337 on layer DIMS"
+        },
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "parser",
+          "action": "noted",
+          "detail": "callout read from the dimension's rendered text in block _D_6"
+        }
+      ]
+    },
+    {
+      "cid": "CH-008",
+      "kind": "diameter",
+      "raw_callout": "⌀ 1.350",
+      "unit": "in",
+      "nominal": 1.35,
+      "tolerance": {
+        "kind": "none"
+      },
+      "count": 1,
+      "state": "parsed",
+      "review": "detected",
+      "source": {
+        "document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+        "document_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+        "revision": "A",
+        "page": 1,
+        "entity_handle": "340",
+        "entity_type": "DIMENSION",
+        "layer": "DIMS",
+        "anchor_x": 9.856883148533333,
+        "anchor_y": 5.8342711351666665,
+        "definition_points": [
+          [
+            11.3779479912,
+            6.2842278579
+          ],
+          [
+            9.0963507272,
+            4.9343576897
+          ],
+          [
+            9.0963507272,
+            6.2842278579
+          ]
+        ],
+        "zone": "",
+        "text_box": [
+          10.9129812424,
+          5.521352261329604,
+          11.780694546000682,
+          5.7513249762
+        ]
+      },
+      "geometry_value": 1.3498701682000007,
+      "limits": null,
+      "balloon_no": 2,
+      "checks": [
+        {
+          "name": "geometry_cross_check",
+          "outcome": "passed",
+          "expected": "1.350000 +/- 0.000500",
+          "actual": "1.349870",
+          "why": null,
+          "delta": -0.00012983179999936922
+        }
+      ],
+      "issues": [
+        {
+          "code": "no_limits",
+          "severity": "warning",
+          "message": "no definite upper/lower limits could be derived from the stated tolerance; inspection cannot pass/fail this characteristic"
+        }
+      ],
+      "history": [
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "extractor",
+          "action": "extracted",
+          "detail": "DIMENSION handle 340 on layer DIMS"
+        },
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "parser",
+          "action": "noted",
+          "detail": "callout read from the dimension's rendered text in block _D_7"
+        }
+      ]
+    },
+    {
+      "cid": "CH-009",
+      "kind": "diameter",
+      "raw_callout": "⌀ 1.738",
+      "unit": "in",
+      "nominal": 1.738,
+      "tolerance": {
+        "kind": "none"
+      },
+      "count": 1,
+      "state": "parsed",
+      "review": "detected",
+      "source": {
+        "document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+        "document_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+        "revision": "A",
+        "page": 1,
+        "entity_handle": "34D",
+        "entity_type": "DIMENSION",
+        "layer": "DIMS",
+        "anchor_x": 10.988383747666667,
+        "anchor_y": 5.898898654133333,
+        "definition_points": [
+          [
+            12.4961061474,
+            6.4781104147
+          ],
+          [
+            10.2345225478,
+            4.740475133
+          ],
+          [
+            10.2345225478,
+            6.4781104147
+          ]
+        ],
+        "zone": "",
+        "text_box": [
+          12.0161126129,
+          5.521352261329604,
+          12.883825916400681,
+          5.7513249762
+        ]
+      },
+      "geometry_value": 1.7376352816999994,
+      "limits": null,
+      "balloon_no": 3,
+      "checks": [
+        {
+          "name": "geometry_cross_check",
+          "outcome": "passed",
+          "expected": "1.738000 +/- 0.000500",
+          "actual": "1.737635",
+          "why": null,
+          "delta": -0.00036471830000062155
+        }
+      ],
+      "issues": [
+        {
+          "code": "no_limits",
+          "severity": "warning",
+          "message": "no definite upper/lower limits could be derived from the stated tolerance; inspection cannot pass/fail this characteristic"
+        }
+      ],
+      "history": [
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "extractor",
+          "action": "extracted",
+          "detail": "DIMENSION handle 34D on layer DIMS"
+        },
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "parser",
+          "action": "noted",
+          "detail": "callout read from the dimension's rendered text in block _D_8"
+        }
+      ]
+    },
+    {
+      "cid": "CH-010",
+      "kind": "diameter",
+      "raw_callout": "⌀ 0.988 +0.000 -0.005",
+      "unit": "in",
+      "nominal": 0.988,
+      "tolerance": {
+        "upper": 0.0,
+        "lower": -0.005,
+        "kind": "deviations"
+      },
+      "count": 1,
+      "state": "parsed",
+      "review": "detected",
+      "source": {
+        "document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+        "document_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+        "revision": "A",
+        "page": 1,
+        "entity_handle": "359",
+        "entity_type": "DIMENSION",
+        "layer": "DIMS",
+        "anchor_x": 8.0503918576,
+        "anchor_y": 5.773952126666667,
+        "definition_points": [
+          [
+            7.174248579,
+            6.1032708324
+          ],
+          [
+            8.4884634969,
+            5.1153147152
+          ],
+          [
+            8.4884634969,
+            6.1032708324
+          ]
+        ],
+        "zone": "",
+        "text_box": [
+          6.2443150815,
+          5.393852242929604,
+          8.010467590931379,
+          5.8713249578
+        ]
+      },
+      "geometry_value": 0.9879561171999995,
+      "limits": [
+        0.983,
+        0.988
+      ],
+      "balloon_no": null,
+      "checks": [
+        {
+          "name": "geometry_cross_check",
+          "outcome": "passed",
+          "expected": "0.988000 +/- 0.005000",
+          "actual": "0.987956",
+          "why": null,
+          "delta": -4.388280000044986e-05
+        }
+      ],
+      "issues": [],
+      "history": [
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "extractor",
+          "action": "extracted",
+          "detail": "DIMENSION handle 359 on layer DIMS"
+        },
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "parser",
+          "action": "noted",
+          "detail": "deviations read as +0.000 / -0.005"
+        },
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "parser",
+          "action": "noted",
+          "detail": "callout read from the dimension's rendered text in block _D_9"
+        }
+      ]
+    },
+    {
+      "cid": "CH-011",
+      "kind": "angular",
+      "raw_callout": "88°",
+      "unit": "in",
+      "nominal": 88.0,
+      "tolerance": {
+        "kind": "none"
+      },
+      "count": 1,
+      "state": "unresolved",
+      "review": "needs_review",
+      "source": {
+        "document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+        "document_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+        "revision": "A",
+        "page": 1,
+        "entity_handle": "368",
+        "entity_type": "DIMENSION",
+        "layer": "DIMS",
+        "anchor_x": 7.961239270359999,
+        "anchor_y": 5.73741184126,
+        "definition_points": [
+          [
+            8.4884634969,
+            5.1153147152
+          ],
+          [
+            8.3009634969,
+            6.2842278579
+          ],
+          [
+            8.4884634969,
+            6.1032708324
+          ],
+          [
+            8.3009634969,
+            4.9343576897
+          ],
+          [
+            6.2273423642,
+            6.2498881111
+          ]
+        ],
+        "zone": "",
+        "text_box": [
+          6.0554971725,
+          4.636358580129604,
+          6.435756381231242,
+          4.866331295
+        ]
+      },
+      "geometry_value": null,
+      "limits": null,
+      "balloon_no": 6,
+      "checks": [
+        {
+          "name": "geometry_cross_check",
+          "outcome": "not_verifiable",
+          "expected": "callout matches drawn geometry",
+          "actual": "-",
+          "why": "the dimension carries no usable definition points, so there is no second source to check the written value against",
+          "delta": null
+        }
+      ],
+      "issues": [
+        {
+          "code": "unresolved_callout",
+          "severity": "blocking",
+          "message": "angular callout does not match any reading of the drawn angle (87.9653); confirm which angle the author meant"
+        }
+      ],
+      "history": [
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "extractor",
+          "action": "extracted",
+          "detail": "DIMENSION handle 368 on layer DIMS"
+        },
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "parser",
+          "action": "noted",
+          "detail": "callout read from the dimension's rendered text in block _D_10"
+        },
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "parser",
+          "action": "noted",
+          "detail": "angular dimension convention check: the drawn angle is 87.9653 deg, not 88.0; recorded as an unresolved orientation question rather than silently converted"
+        }
+      ]
+    },
+    {
+      "cid": "CH-012",
+      "kind": "linear",
+      "raw_callout": "2.140",
+      "unit": "in",
+      "nominal": 2.14,
+      "tolerance": {
+        "kind": "none"
+      },
+      "count": 1,
+      "state": "parsed",
+      "review": "detected",
+      "source": {
+        "document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+        "document_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+        "revision": "A",
+        "page": 1,
+        "entity_handle": "374",
+        "entity_type": "DIMENSION",
+        "layer": "DIMS",
+        "anchor_x": 9.014463295866667,
+        "anchor_y": 7.454398894966666,
+        "definition_points": [
+          [
+            8.3009634969,
+            8.1758611373
+          ],
+          [
+            10.4414628938,
+            6.6092927738
+          ],
+          [
+            8.3009634969,
+            7.5780427738
+          ]
+        ],
+        "zone": "",
+        "text_box": [
+          9.0262880106,
+          8.087920606429604,
+          9.655551312100682,
+          8.3178933213
+        ]
+      },
+      "geometry_value": 2.140499396900001,
+      "limits": null,
+      "balloon_no": null,
+      "checks": [
+        {
+          "name": "geometry_cross_check",
+          "outcome": "passed",
+          "expected": "2.140000 +/- 0.000500",
+          "actual": "2.140499",
+          "why": null,
+          "delta": 0.0004993969000008924
+        }
+      ],
+      "issues": [
+        {
+          "code": "no_limits",
+          "severity": "warning",
+          "message": "no definite upper/lower limits could be derived from the stated tolerance; inspection cannot pass/fail this characteristic"
+        }
+      ],
+      "history": [
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "extractor",
+          "action": "extracted",
+          "detail": "DIMENSION handle 374 on layer DIMS"
+        },
+        {
+          "at": "2026-11-25T11:52:49+00:00",
+          "actor": "parser",
+          "action": "noted",
+          "detail": "callout read from the dimension's rendered text in block _D_11"
+        }
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "balloon_no": 1,
+      "cid": "CH-005",
+      "kind": "linear",
+      "raw_callout": "0.21",
+      "callout": "0.21",
+      "nominal": 0.21,
+      "unit": "in",
+      "tolerance_text": "none stated",
+      "minimum": null,
+      "maximum": null,
+      "count": 1,
+      "method": "direct linear measurement",
+      "method_basis": "caliper, micrometer, or CMM distance between two faces",
+      "status": "detected",
+      "provenance": "parsed",
+      "blocking": false,
+      "issues": [
+        "warning:no_limits"
+      ],
+      "source_document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+      "source_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+      "entity_handle": "31F",
+      "entity_type": "DIMENSION",
+      "layer": "DIMS",
+      "page": 1,
+      "zone": ""
+    },
+    {
+      "balloon_no": 2,
+      "cid": "CH-008",
+      "kind": "diameter",
+      "raw_callout": "⌀ 1.350",
+      "callout": "⌀ 1.350",
+      "nominal": 1.35,
+      "unit": "in",
+      "tolerance_text": "none stated",
+      "minimum": null,
+      "maximum": null,
+      "count": 1,
+      "method": "diameter / bore measurement",
+      "method_basis": "bore gauge, three-wire, or CMM circle fit",
+      "status": "detected",
+      "provenance": "parsed",
+      "blocking": false,
+      "issues": [
+        "warning:no_limits"
+      ],
+      "source_document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+      "source_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+      "entity_handle": "340",
+      "entity_type": "DIMENSION",
+      "layer": "DIMS",
+      "page": 1,
+      "zone": ""
+    },
+    {
+      "balloon_no": 3,
+      "cid": "CH-009",
+      "kind": "diameter",
+      "raw_callout": "⌀ 1.738",
+      "callout": "⌀ 1.738",
+      "nominal": 1.738,
+      "unit": "in",
+      "tolerance_text": "none stated",
+      "minimum": null,
+      "maximum": null,
+      "count": 1,
+      "method": "diameter / bore measurement",
+      "method_basis": "bore gauge, three-wire, or CMM circle fit",
+      "status": "detected",
+      "provenance": "parsed",
+      "blocking": false,
+      "issues": [
+        "warning:no_limits"
+      ],
+      "source_document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+      "source_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+      "entity_handle": "34D",
+      "entity_type": "DIMENSION",
+      "layer": "DIMS",
+      "page": 1,
+      "zone": ""
+    },
+    {
+      "balloon_no": 4,
+      "cid": "CH-003",
+      "kind": "linear",
+      "raw_callout": "1.953",
+      "callout": "1.953",
+      "nominal": 1.953,
+      "unit": "in",
+      "tolerance_text": "none stated",
+      "minimum": null,
+      "maximum": null,
+      "count": 1,
+      "method": "direct linear measurement",
+      "method_basis": "caliper, micrometer, or CMM distance between two faces",
+      "status": "detected",
+      "provenance": "parsed",
+      "blocking": false,
+      "issues": [
+        "warning:no_limits"
+      ],
+      "source_document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+      "source_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+      "entity_handle": "308",
+      "entity_type": "DIMENSION",
+      "layer": "DIMS",
+      "page": 1,
+      "zone": ""
+    },
+    {
+      "balloon_no": 5,
+      "cid": "CH-007",
+      "kind": "radius",
+      "raw_callout": "R0.09",
+      "callout": "R0.09",
+      "nominal": 0.09,
+      "unit": "in",
+      "tolerance_text": "none stated",
+      "minimum": null,
+      "maximum": null,
+      "count": 1,
+      "method": "profile radius",
+      "method_basis": "radius gauge or CMM profile of the arc",
+      "status": "detected",
+      "provenance": "parsed",
+      "blocking": true,
+      "issues": [
+        "warning:no_limits",
+        "blocking:geometry_callout_disagreement"
+      ],
+      "source_document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+      "source_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+      "entity_handle": "337",
+      "entity_type": "DIMENSION",
+      "layer": "DIMS",
+      "page": 1,
+      "zone": ""
+    },
+    {
+      "balloon_no": 6,
+      "cid": "CH-011",
+      "kind": "angular",
+      "raw_callout": "88°",
+      "callout": "88°",
+      "nominal": 88.0,
+      "unit": "in",
+      "tolerance_text": "none stated",
+      "minimum": null,
+      "maximum": null,
+      "count": 1,
+      "method": "included angle",
+      "method_basis": "bevel protractor or CMM two-plane angle",
+      "status": "needs_review",
+      "provenance": "unresolved",
+      "blocking": true,
+      "issues": [
+        "blocking:unresolved_callout"
+      ],
+      "source_document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+      "source_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+      "entity_handle": "368",
+      "entity_type": "DIMENSION",
+      "layer": "DIMS",
+      "page": 1,
+      "zone": ""
+    },
+    {
+      "balloon_no": 7,
+      "cid": "CH-002",
+      "kind": "diameter",
+      "raw_callout": "⌀ 2.00",
+      "callout": "⌀ 2.00",
+      "nominal": 2.0,
+      "unit": "in",
+      "tolerance_text": "none stated",
+      "minimum": null,
+      "maximum": null,
+      "count": 1,
+      "method": "diameter / bore measurement",
+      "method_basis": "bore gauge, three-wire, or CMM circle fit",
+      "status": "detected",
+      "provenance": "parsed",
+      "blocking": false,
+      "issues": [
+        "warning:no_limits"
+      ],
+      "source_document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+      "source_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+      "entity_handle": "2FD",
+      "entity_type": "DIMENSION",
+      "layer": "DIMS",
+      "page": 1,
+      "zone": ""
+    },
+    {
+      "balloon_no": 8,
+      "cid": "CH-001",
+      "kind": "diameter",
+      "raw_callout": "⌀ 4.00",
+      "callout": "⌀ 4.00",
+      "nominal": 4.0,
+      "unit": "in",
+      "tolerance_text": "none stated",
+      "minimum": null,
+      "maximum": null,
+      "count": 1,
+      "method": "diameter / bore measurement",
+      "method_basis": "bore gauge, three-wire, or CMM circle fit",
+      "status": "detected",
+      "provenance": "parsed",
+      "blocking": false,
+      "issues": [
+        "warning:no_limits"
+      ],
+      "source_document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+      "source_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+      "entity_handle": "2ED",
+      "entity_type": "DIMENSION",
+      "layer": "DIMS",
+      "page": 1,
+      "zone": ""
+    },
+    {
+      "balloon_no": null,
+      "cid": "CH-004",
+      "kind": "linear",
+      "raw_callout": "1.345",
+      "callout": "1.345",
+      "nominal": 1.345,
+      "unit": "in",
+      "tolerance_text": "none stated",
+      "minimum": null,
+      "maximum": null,
+      "count": 1,
+      "method": "direct linear measurement",
+      "method_basis": "caliper, micrometer, or CMM distance between two faces",
+      "status": "detected",
+      "provenance": "parsed",
+      "blocking": false,
+      "issues": [
+        "warning:no_limits"
+      ],
+      "source_document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+      "source_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+      "entity_handle": "314",
+      "entity_type": "DIMENSION",
+      "layer": "DIMS",
+      "page": 1,
+      "zone": ""
+    },
+    {
+      "balloon_no": null,
+      "cid": "CH-006",
+      "kind": "linear",
+      "raw_callout": "0.188",
+      "callout": "0.188",
+      "nominal": 0.188,
+      "unit": "in",
+      "tolerance_text": "none stated",
+      "minimum": null,
+      "maximum": null,
+      "count": 1,
+      "method": "direct linear measurement",
+      "method_basis": "caliper, micrometer, or CMM distance between two faces",
+      "status": "detected",
+      "provenance": "parsed",
+      "blocking": false,
+      "issues": [
+        "warning:no_limits",
+        "warning:zero_margin"
+      ],
+      "source_document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+      "source_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+      "entity_handle": "32B",
+      "entity_type": "DIMENSION",
+      "layer": "DIMS",
+      "page": 1,
+      "zone": ""
+    },
+    {
+      "balloon_no": null,
+      "cid": "CH-010",
+      "kind": "diameter",
+      "raw_callout": "⌀ 0.988 +0.000 -0.005",
+      "callout": "⌀ 0.988 +0.000 -0.005",
+      "nominal": 0.988,
+      "unit": "in",
+      "tolerance_text": "+0/-0.005",
+      "minimum": 0.983,
+      "maximum": 0.988,
+      "count": 1,
+      "method": "diameter / bore measurement",
+      "method_basis": "bore gauge, three-wire, or CMM circle fit",
+      "status": "detected",
+      "provenance": "parsed",
+      "blocking": false,
+      "issues": [],
+      "source_document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+      "source_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+      "entity_handle": "359",
+      "entity_type": "DIMENSION",
+      "layer": "DIMS",
+      "page": 1,
+      "zone": ""
+    },
+    {
+      "balloon_no": null,
+      "cid": "CH-012",
+      "kind": "linear",
+      "raw_callout": "2.140",
+      "callout": "2.140",
+      "nominal": 2.14,
+      "unit": "in",
+      "tolerance_text": "none stated",
+      "minimum": null,
+      "maximum": null,
+      "count": 1,
+      "method": "direct linear measurement",
+      "method_basis": "caliper, micrometer, or CMM distance between two faces",
+      "status": "detected",
+      "provenance": "parsed",
+      "blocking": false,
+      "issues": [
+        "warning:no_limits"
+      ],
+      "source_document": "_sources\\corpus_sw\\acad_7550_021_s1.dxf",
+      "source_sha256": "e64923a3825449a0d6919ba03c071190c543f350e4199bb720e089e95e24a254",
+      "entity_handle": "374",
+      "entity_type": "DIMENSION",
+      "layer": "DIMS",
+      "page": 1,
+      "zone": ""
+    }
+  ],
+  "layout": {
+    "page": [
+      -13.3181572363,
+      -11.839288894770394,
+      26.418580151162757,
+      22.1811126378
+    ],
+    "slot_pitch": 10.0,
+    "ring_offset": 14.0,
+    "unplaced": [
+      "CH-004",
+      "CH-006",
+      "CH-010",
+      "CH-012"
+    ],
+    "method": "ring of slots around the content; leaders uncrossed; numbered clockwise",
+    "pages": {
+      "1": [
+        -13.3181572363,
+        -11.839288894770394,
+        26.418580151162757,
+        22.1811126378
+      ]
+    },
+    "balloons": [
+      {
+        "number": 1,
+        "cid": "CH-005",
+        "page": 1,
+        "style": "ring",
+        "centre": [
+          1.681843,
+          17.181113
+        ],
+        "radius": 4.0,
+        "leader": [
+          [
+            9.3045853557,
+            4.2896127147
+          ],
+          [
+            3.7177574216420126,
+            13.737996320630845
+          ]
+        ],
+        "zone": ""
+      },
+      {
+        "number": 2,
+        "cid": "CH-008",
+        "page": 1,
+        "style": "ring",
+        "centre": [
+          11.681843,
+          17.181113
+        ],
+        "radius": 4.0,
+        "leader": [
+          [
+            11.681843,
+            5.7513249762
+          ],
+          [
+            11.681843,
+            13.181113
+          ]
+        ],
+        "zone": ""
+      },
+      {
+        "number": 3,
+        "cid": "CH-009",
+        "page": 1,
+        "style": "ring",
+        "centre": [
+          21.41858,
+          3.160711
+        ],
+        "radius": 4.0,
+        "leader": [
+          [
+            12.883825916400681,
+            5.521352261329604
+          ],
+          [
+            17.56333141039993,
+            4.227040363933428
+          ]
+        ],
+        "zone": ""
+      },
+      {
+        "number": 4,
+        "cid": "CH-003",
+        "page": 1,
+        "style": "ring",
+        "centre": [
+          11.681843,
+          -6.839289
+        ],
+        "radius": 4.0,
+        "leader": [
+          [
+            9.734274526400682,
+            3.0593142608296047
+          ],
+          [
+            10.909640180064143,
+            -2.9145338732585735
+          ]
+        ],
+        "zone": ""
+      },
+      {
+        "number": 5,
+        "cid": "CH-007",
+        "page": 1,
+        "style": "ring",
+        "centre": [
+          1.681843,
+          -6.839289
+        ],
+        "radius": 4.0,
+        "leader": [
+          [
+            9.0901841254,
+            3.5367424419296043
+          ],
+          [
+            4.006149652681794,
+            -3.5838936961545276
+          ]
+        ],
+        "zone": ""
+      },
+      {
+        "number": 6,
+        "cid": "CH-011",
+        "page": 1,
+        "style": "ring",
+        "centre": [
+          -8.318157,
+          -6.839289
+        ],
+        "radius": 4.0,
+        "leader": [
+          [
+            6.0554971725,
+            4.636358580129604
+          ],
+          [
+            -5.192214044289493,
+            -4.343596583526395
+          ]
+        ],
+        "zone": ""
+      },
+      {
+        "number": 7,
+        "cid": "CH-002",
+        "page": 1,
+        "style": "ring",
+        "centre": [
+          -8.318157,
+          3.160711
+        ],
+        "radius": 4.0,
+        "leader": [
+          [
+            -0.0478603501,
+            3.968701311729604
+          ],
+          [
+            -4.337111166084917,
+            3.5496506717581813
+          ]
+        ],
+        "zone": ""
+      },
+      {
+        "number": 8,
+        "cid": "CH-001",
+        "page": 1,
+        "style": "ring",
+        "centre": [
+          -8.318157,
+          17.181113
+        ],
+        "radius": 4.0,
+        "leader": [
+          [
+            0.0204588794,
+            7.6884467728
+          ],
+          [
+            -5.6783102789346405,
+            14.175915953335593
+          ]
+        ],
+        "zone": ""
+      }
+    ]
+  },
+  "checks": [
+    {
+      "name": "balloon_numbers_unique",
+      "outcome": "passed",
+      "expected": "8 distinct numbers",
+      "actual": "8 distinct",
+      "why": null,
+      "delta": null
+    },
+    {
+      "name": "every_characteristic_ballooned",
+      "outcome": "failed",
+      "expected": "12 placed",
+      "actual": "8 placed",
+      "why": "these characteristics have no balloon, so an inspector reading the drawing would never find them: CH-004, CH-006, CH-010, CH-012",
+      "delta": null
+    },
+    {
+      "name": "balloons_do_not_overlap",
+      "outcome": "passed",
+      "expected": "0 intersecting pairs",
+      "actual": "0 intersecting pairs",
+      "why": null,
+      "delta": null
+    },
+    {
+      "name": "balloons_clear_of_part",
+      "outcome": "passed",
+      "expected": "0 balloons on the part outline",
+      "actual": "0 on the outline",
+      "why": null,
+      "delta": null
+    },
+    {
+      "name": "leaders_do_not_cross",
+      "outcome": "passed",
+      "expected": "0 crossing leader pairs",
+      "actual": "0 crossing pairs",
+      "why": null,
+      "delta": null
+    },
+    {
+      "name": "rows_link_to_source_drawing",
+      "outcome": "passed",
+      "expected": "12 extracted rows carry this drawing's SHA-256",
+      "actual": "0 do not",
+      "why": null,
+      "delta": null
+    },
+    {
+      "name": "limits_independently_recomputed",
+      "outcome": "passed",
+      "expected": "every row's limits re-derive consistently",
+      "actual": "no mismatches",
+      "why": null,
+      "delta": null
+    },
+    {
+      "name": "geometry_cross_check_coverage",
+      "outcome": "failed",
+      "expected": "11 checked, 0 in disagreement",
+      "actual": "11 checked, 1 in disagreement",
+      "why": "the written callout and the drawn geometry disagree on: CH-007",
+      "delta": null
+    },
+    {
+      "name": "census_reconciled",
+      "outcome": "passed",
+      "expected": "12 dimension entities",
+      "actual": "12 characteristics from the drawing",
+      "why": null,
+      "delta": null
+    },
+    {
+      "name": "annotations_fully_interpreted",
+      "outcome": "passed",
+      "expected": "0 uninterpreted annotations",
+      "actual": "0 escalated",
+      "why": null,
+      "delta": null
+    },
+    {
+      "name": "release_gate_blocking_findings",
+      "outcome": "failed",
+      "expected": "0 blocked characteristics",
+      "actual": "2 blocked",
+      "why": "these must be resolved or explicitly approved before the plan is issued: CH-007(parsed), CH-011(unresolved)",
+      "delta": null
+    }
+  ],
+  "issues": [
+    {
+      "code": "geometry_callout_disagreement",
+      "severity": "blocking",
+      "message": "CH-007: callout says 0.09 but the geometry measures 9.697655 (+9.607655 outside the band)"
+    },
+    {
+      "code": "unresolved_callout",
+      "severity": "blocking",
+      "message": "CH-011: angular callout does not match any reading of the drawn angle (87.9653); confirm which angle the author meant"
+    }
+  ],
+  "uninterpreted": [],
+  "coverage": {
+    "dimensions_in_source": 12,
+    "characteristics_extracted": 12,
+    "resolved": 11,
+    "unresolved": 1,
+    "blocking": 2,
+    "geometry_cross_checked": 11,
+    "geometry_cross_check_passed": 10,
+    "balloon_assigned": 8,
+    "balloon_unplaced": 4,
+    "annotations_escalated": 0,
+    "extraction_rate": 1.0
+  },
+  "title_block": {
+    "_note": "no title-block drawing number recognised; recorded as absent"
+  },
+  "notes": [],
+  "revision_source": "default - the drawing states no revision; confirm before issuing",
+  "warnings": [
+    "revision defaults to A: no revision value was recognised in the drawing"
+  ],
+  "feature_support": {
+    "dimension.linear": "supported",
+    "dimension.diameter": "supported",
+    "dimension.radius": "supported",
+    "dimension.angular": "supported, with orientation convention checks",
+    "dimension.ordinate": "partial - kind mapped, measurement not cross-checked",
+    "tolerance.symmetric_deviations": "supported",
+    "tolerance.limit_pair": "supported",
+    "tolerance.iso_fit_class": "partial - resolved from the loaded ISO 286-2 subset: 37 hole and 37 shaft classes over 3-400 mm in 11 standard size steps; every cell is stated identically by two independent published tables and its band equals the IT value ISO 286-2 Table 1 prints for that step, and an unconfirmed class stays unresolved",
+    "tolerance.thread_designation": "NOT supported - left unresolved",
+    "gdt.feature_control_frame": "supported for TOLERANCE entities: symbol, zone (⌀), MMC/LMC/RFS, datums; one row per frame row; MMC/LMC bonus not computed",
+    "gdt.datum_reference": "datum letters read from frames; datum feature symbols (triangles) not linked",
+    "surface_finish_symbol": "NOT supported in this milestone",
+    "raster_ocr": "NOT used by this route (vector DXF)"
+  },
+  "census": [
+    {
+      "dxftype": "ARC",
+      "total": 4,
+      "used_for_characteristics": 0,
+      "note": ""
+    },
+    {
+      "dxftype": "CIRCLE",
+      "total": 8,
+      "used_for_characteristics": 0,
+      "note": ""
+    },
+    {
+      "dxftype": "DIMENSION",
+      "total": 12,
+      "used_for_characteristics": 12,
+      "note": ""
+    },
+    {
+      "dxftype": "INSERT",
+      "total": 15,
+      "used_for_characteristics": 0,
+      "note": ""
+    },
+    {
+      "dxftype": "LINE",
+      "total": 396,
+      "used_for_characteristics": 0,
+      "note": ""
+    },
+    {
+      "dxftype": "MTEXT",
+      "total": 4,
+      "used_for_characteristics": 0,
+      "note": ""
+    }
+  ],
+  "approvable": false,
+  "gate": "NOT releasable — 2 characteristic(s) blocked; 4 balloon(s) unplaced; check(s) not passed: every_characteristic_ballooned, geometry_cross_check_coverage, release_gate_blocking_findings",
+  "accepted_exceptions": [],
+  "open_gaps": [
+    {
+      "name": "every_characteristic_ballooned",
+      "outcome": "failed",
+      "expected": "12 placed",
+      "actual": "8 placed",
+      "why": "these characteristics have no balloon, so an inspector reading the drawing would never find them: CH-004, CH-006, CH-010, CH-012",
+      "delta": null
+    },
+    {
+      "name": "geometry_cross_check_coverage",
+      "outcome": "failed",
+      "expected": "11 checked, 0 in disagreement",
+      "actual": "11 checked, 1 in disagreement",
+      "why": "the written callout and the drawn geometry disagree on: CH-007",
+      "delta": null
+    },
+    {
+      "name": "release_gate_blocking_findings",
+      "outcome": "failed",
+      "expected": "0 blocked characteristics",
+      "actual": "2 blocked",
+      "why": "these must be resolved or explicitly approved before the plan is issued: CH-007(parsed), CH-011(unresolved)",
+      "delta": null
+    }
+  ]
+}
